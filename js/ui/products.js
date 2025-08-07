@@ -12,10 +12,10 @@ export function renderProductsPage() {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Bild</th>
                     <th>Namn</th>
-                    <th>Typ</th>
-                    <th>Pris</th>
+                    <th>Inköpspris</th>
+                    <th>Pris Företag (exkl. moms)</th>
+                    <th>Pris Privat</th>
                     <th>Lager</th>
                     <th>Åtgärder</th>
                 </tr>
@@ -23,10 +23,10 @@ export function renderProductsPage() {
             <tbody>
                 ${allProducts.map(p => `
                     <tr>
-                        <td><img src="${p.imageUrl || 'https://placehold.co/40x56/eee/ccc?text=?'}" alt="${p.name}" style="width: 40px; height: 56px; object-fit: cover; border-radius: 4px;"></td>
                         <td><strong>${p.name}</strong></td>
-                        <td>${p.type || 'Okänd'}</td>
-                        <td>${p.price ? p.price + ' kr' : 'Ej satt'}</td>
+                        <td>${p.purchasePrice ? p.purchasePrice.toLocaleString('sv-SE') + ' kr' : '-'}</td>
+                        <td>${p.sellingPriceBusiness ? p.sellingPriceBusiness.toLocaleString('sv-SE') + ' kr' : '-'}</td>
+                        <td>${p.sellingPricePrivate ? p.sellingPricePrivate.toLocaleString('sv-SE') + ' kr' : '-'}</td>
                         <td>${p.stock || 0}</td>
                         <td>
                             <button class="btn btn-sm btn-secondary" onclick="attachProductPageEventListeners.renderProductForm('${p.id}')">Redigera</button>
@@ -35,7 +35,7 @@ export function renderProductsPage() {
                     </tr>`).join('')}
             </tbody>
         </table>` : 
-        `<div class="empty-state"><h3>Inga produkter ännu</h3><p>Lägg till din första produkt.</p></div>`;
+        `<div class="empty-state"><h3>Inga produkter ännu</h3><p>Lägg till din första produkt genom att klicka på "Ny Produkt".</p></div>`;
 
     mainView.innerHTML = `
         <div class="card">
@@ -53,11 +53,35 @@ function renderProductForm(productId = null) {
             <div class="modal-content" onclick="event.stopPropagation()">
                 <h3>${isEdit ? 'Redigera Produkt' : 'Ny Produkt'}</h3>
                 <form id="product-form">
-                    <div class="input-group"><label>Produktnamn</label><input id="product-name" value="${product?.name || ''}" required></div>
-                    <div class="input-group"><label>Typ</label><input id="product-type" value="${product?.type || ''}"></div>
-                    <div class="input-group"><label>Pris (kr)</label><input id="product-price" type="number" value="${product?.price || ''}"></div>
-                    <div class="input-group"><label>Lager</label><input id="product-stock" type="number" value="${product?.stock || 0}"></div>
-                    <div class="input-group"><label>Bild-URL</label><input id="product-image-url" value="${product?.imageUrl || ''}"></div>
+                    <div class="input-group">
+                        <label>Produktnamn *</label>
+                        <input id="product-name" value="${product?.name || ''}" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Bild-URL (valfritt)</label>
+                        <input id="product-image-url" value="${product?.imageUrl || ''}" placeholder="https://...">
+                    </div>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label>Inköpspris</label>
+                            <input id="product-purchase-price" type="number" step="0.01" value="${product?.purchasePrice || ''}" placeholder="0.00">
+                        </div>
+                        <div class="input-group">
+                            <label>Lagerantal</label>
+                            <input id="product-stock" type="number" value="${product?.stock || 0}">
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label>Försäljningspris Företag (exkl. moms)</label>
+                            <input id="product-selling-business" type="number" step="0.01" value="${product?.sellingPriceBusiness || ''}" placeholder="0.00">
+                        </div>
+                        <div class="input-group">
+                            <label>Försäljningspris Privat</label>
+                            <input id="product-selling-private" type="number" step="0.01" value="${product?.sellingPricePrivate || ''}" placeholder="0.00">
+                        </div>
+                    </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
                         <button type="submit" class="btn btn-primary">${isEdit ? 'Uppdatera' : 'Skapa'}</button>
@@ -77,11 +101,18 @@ function renderProductForm(productId = null) {
 async function saveProductHandler(productId = null) {
     const productData = {
         name: document.getElementById('product-name').value,
-        type: document.getElementById('product-type').value,
-        price: parseFloat(document.getElementById('product-price').value) || null,
-        stock: parseInt(document.getElementById('product-stock').value) || 0,
         imageUrl: document.getElementById('product-image-url').value,
+        purchasePrice: parseFloat(document.getElementById('product-purchase-price').value) || 0,
+        stock: parseInt(document.getElementById('product-stock').value) || 0,
+        sellingPriceBusiness: parseFloat(document.getElementById('product-selling-business').value) || 0,
+        sellingPricePrivate: parseFloat(document.getElementById('product-selling-private').value) || 0,
     };
+
+    if (!productData.name) {
+        showToast("Produktnamn är obligatoriskt.", "warning");
+        return;
+    }
+
     try {
         await saveDocument('products', productData, productId);
         showToast(`Produkten har ${productId ? 'uppdaterats' : 'skapats'}!`, 'success');
@@ -89,6 +120,7 @@ async function saveProductHandler(productId = null) {
         await fetchAllCompanyData();
         renderProductsPage();
     } catch (error) {
+        console.error("Kunde inte spara produkt:", error);
         showToast('Kunde inte spara produkten.', 'error');
     }
 }
