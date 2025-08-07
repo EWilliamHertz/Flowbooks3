@@ -351,3 +351,34 @@ tr.corrected td { font-style: italic; }
     font-size: 0.9rem;
     color: var(--text-color-light);
 }
+
+/* =================================================================
+   13. Visuell Dashboard & Diagram
+   ================================================================= */
+
+.dashboard-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.dashboard-charts {
+    display: grid;
+    grid-template-columns: 2fr 1fr; /* Stapeldiagrammet tar mer plats */
+    gap: 1.5rem;
+    align-items: stretch;
+}
+
+.chart-container {
+    position: relative;
+    height: 400px; /* Ge en fast höjd för att diagrammen ska ritas korrekt */
+    padding: 1.5rem;
+}
+
+/* Gör layouten responsiv på mindre skärmar */
+@media (max-width: 992px) {
+    .dashboard-charts {
+        grid-template-columns: 1fr; /* Stapla diagrammen på varandra */
+    }
+}
