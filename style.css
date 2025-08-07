@@ -429,3 +429,25 @@ tr.corrected td { font-style: italic; }
     position: sticky;
     bottom: 0;
 }
+/* =================================================================
+   15. Återkommande Transaktioner - Historik Modal
+   ================================================================= */
+
+.history-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.history-item:last-child {
+    border-bottom: none;
+}
