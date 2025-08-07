@@ -16,7 +16,11 @@ export function renderSettingsPage() {
                     <label>Företagsnamn</label>
                     <input id="setting-company" value="${currentCompany.name || ''}">
                 </div>
-                <button id="save-company" class="btn btn-primary">Spara Namn</button>
+                <div class="input-group">
+                    <label>Organisationsnummer</label>
+                    <input id="setting-org-number" value="${currentCompany.orgNumber || ''}" placeholder="T.ex. 556677-8899">
+                </div>
+                <button id="save-company" class="btn btn-primary">Spara Företagsinfo</button>
             </div>
             <div class="card">
                 <h3>Företagslogotyp</h3>
@@ -43,6 +47,7 @@ export function renderSettingsPage() {
     document.getElementById('delete-account').addEventListener('click', deleteAccount);
 }
 
+// ... saveCompanyLogo är oförändrad ...
 async function saveCompanyLogo() {
     const fileInput = document.getElementById('logo-upload');
     const urlInput = document.getElementById('logo-url');
@@ -54,16 +59,12 @@ async function saveCompanyLogo() {
 
     try {
         if (file) {
-            // Prioritera filuppladdning
             const storageRef = ref(storage, `company_logos/${currentCompany.id}/${file.name}`);
             await uploadBytes(storageRef, file);
             logoUrl = await getDownloadURL(storageRef);
         } else if (url) {
-            // Använd länken om ingen fil valts
-            // Enkel validering för att se om det är en bildlänk
             if (!url.match(/\.(jpeg|jpg|gif|png)$/)) {
                 showToast("Ange en direktlänk till en bild (jpg, png, etc).", "error");
-                // Försök konvertera Imgur-länk
                 if (url.includes('imgur.com') && !url.includes('i.imgur.com')) {
                     const parts = url.split('/');
                     const imgurId = parts[parts.length - 1];
@@ -74,7 +75,6 @@ async function saveCompanyLogo() {
             }
             logoUrl = url;
         } else {
-            // Om båda är tomma, rensa logotypen
             logoUrl = '';
         }
 
@@ -88,21 +88,37 @@ async function saveCompanyLogo() {
     }
 }
 
-// ... (resten av filen är oförändrad) ...
+
+// UPPDATERAD FUNKTION
 async function saveCompanyInfo() {
     const { currentUser, currentCompany } = getState();
     const newName = document.getElementById('setting-company').value;
-    if (!newName) return;
+    const newOrgNumber = document.getElementById('setting-org-number').value; // Hämta värdet från det nya fältet
+
+    if (!newName) {
+        showToast("Företagsnamn kan inte vara tomt.", "warning");
+        return;
+    };
 
     try {
-        await updateDoc(doc(db, 'companies', currentCompany.id), { name: newName });
+        // Skapa ett objekt med de fält som ska uppdateras
+        const dataToUpdate = {
+            name: newName,
+            orgNumber: newOrgNumber
+        };
+
+        // Uppdatera i Firestore
+        await updateDoc(doc(db, 'companies', currentCompany.id), dataToUpdate);
         await updateDoc(doc(db, 'users', currentUser.uid), { companyName: newName });
         
+        // Uppdatera state lokalt
         setState({ 
-            currentCompany: { ...currentCompany, name: newName },
+            currentCompany: { ...currentCompany, name: newName, orgNumber: newOrgNumber },
             userData: { ...getState().userData, companyName: newName }
         });
-        document.dispatchEvent(new Event('stateUpdated')); // Notify UI to update
+
+        // Meddela UI att uppdatera sig, t.ex. företagsväljaren
+        document.dispatchEvent(new Event('stateUpdated'));
         showToast('Företagsinformationen är sparad!', 'success');
     } catch (error) {
         console.error("Fel vid sparning:", error);
@@ -110,6 +126,8 @@ async function saveCompanyInfo() {
     }
 }
 
+
+// ... deleteAccount är oförändrad ...
 async function deleteAccount() {
     if (prompt("Är du helt säker? Skriv 'RADERA' för att bekräfta.") === 'RADERA') {
         try {
