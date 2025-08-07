@@ -1,11 +1,12 @@
 // js/ui/import.js
+// KOMPLETT OCH KORREKT VERSION: Använder den smarta, lärande AI-funktionen för alla transaktioner.
 import { writeBatch, doc, collection } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 import { getState } from '../state.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, renderSpinner } from './utils.js';
 import { navigateTo } from './navigation.js';
-import { getCategorySuggestion } from '../services/ai.js';
+import { getLearnedCategorySuggestion } from '../services/ai.js'; // Använder den smarta funktionen
 
 export function renderImportPage() {
     const mainView = document.getElementById('main-view');
@@ -13,7 +14,7 @@ export function renderImportPage() {
         <div class="card">
             <h3>Importera Transaktioner</h3>
             <p>Ladda upp en CSV-fil. Kolumner: <strong>Datum, Typ, Beskrivning, Motpart, Summa (SEK)</strong>.</p>
-            <p>Vår AI-assistent kommer automatiskt att föreslå en kategori för dina utgifter.</p>
+            <p>Vår AI lär sig av din historik för att föreslå rätt kategori.</p>
             <hr style="margin: 1rem 0;">
             <h4>Ladda upp fil</h4>
             <input type="file" id="csv-file-input" accept=".csv" style="display: block; margin-top: 1rem;">
@@ -31,26 +32,19 @@ function handleFileSelect(event) {
 
 async function processFileContent(text) {
     const modalContainer = document.getElementById('modal-container');
-    modalContainer.innerHTML = `
-        <div class="modal-overlay">
-            <div class="modal-content">
-                <h3>Bearbetar fil och hämtar AI-förslag...</h3>
-                ${renderSpinner()}
-            </div>
-        </div>`;
+    modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Analyserar fil och lär av din historik...</h3>${renderSpinner()}</div></div>`;
 
     try {
-        const transactions = parseCSV(text);
+        const newTransactions = parseCSV(text);
+        const { allTransactions } = getState(); // Hämta din befintliga historik
 
-        // Hämta AI-förslag endast för utgifter, eftersom AI:n är tränad för det.
-        for (const t of transactions) {
-            if (t.type.toLowerCase() === 'utgift') {
-                t.suggestedCategoryId = await getCategorySuggestion(t);
-            }
+        for (const t of newTransactions) {
+            // Skicka med historiken till AI:n för smartare förslag för ALLA rader
+            t.suggestedCategoryId = await getLearnedCategorySuggestion(t, allTransactions);
         }
         
-        if (transactions.length > 0) {
-            showImportConfirmationModal(transactions);
+        if (newTransactions.length > 0) {
+            showImportConfirmationModal(newTransactions);
         } else {
             closeModal();
             showToast("Inga giltiga transaktioner hittades i filen.", "warning");
@@ -104,7 +98,7 @@ function showImportConfirmationModal(transactions) {
     const { categories } = getState();
     
     const transactionRows = transactions.map((t, index) => {
-        // Skapa kategoriväljaren
+        // Skapa kategoriväljaren för varje rad
         const categorySelector = `
             <select class="form-input import-category" data-transaction-index="${index}">
                 <option value="">Välj kategori...</option>
@@ -127,7 +121,7 @@ function showImportConfirmationModal(transactions) {
         <div class="modal-overlay">
             <div class="modal-content" style="max-width: 1000px;">
                 <h3>Granska och bekräfta import</h3>
-                <p>Bocka ur de rader du inte vill importera. Vår AI har föreslagit kategorier för utgifter.</p>
+                <p>AI har föreslagit kategorier baserat på din historik.</p>
                 <div style="max-height: 500px; overflow-y: auto;">
                     <table class="data-table">
                         <thead><tr><th><input type="checkbox" id="select-all-checkbox" checked></th><th>Datum</th><th>Beskrivning</th><th>Motpart</th><th>Typ</th><th class="text-right">Summa</th><th>Kategori</th></tr></thead>
@@ -148,7 +142,6 @@ function showImportConfirmationModal(transactions) {
     });
     document.getElementById('modal-confirm-import').addEventListener('click', () => handleImportConfirm(transactions));
 }
-
 
 async function handleImportConfirm(transactions) {
     const { currentUser, currentCompany } = getState();
@@ -184,7 +177,6 @@ async function handleImportConfirm(transactions) {
                 companyId: currentCompany.id,
                 createdAt: new Date(),
                 isCorrection: false,
-                // Lägg bara till categoryId om ett val har gjorts
                 ...(t.categoryId && { categoryId: t.categoryId })
             };
             batch.set(docRef, data);
