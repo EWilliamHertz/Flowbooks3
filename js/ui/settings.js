@@ -11,52 +11,84 @@ export function renderSettingsPage() {
     mainView.innerHTML = `
         <div class="settings-grid">
             <div class="card">
-                <h3>Profilbild</h3>
-                <p>Ladda upp en profilbild eller logotyp.</p>
-                <input type="file" id="profile-pic-upload" accept="image/*" style="margin-top: 1rem; margin-bottom: 1rem;">
-                <button id="save-pic" class="btn btn-primary">Spara Bild</button>
-            </div>
-            <div class="card">
                 <h3>Företagsinformation</h3>
                 <div class="input-group">
                     <label>Företagsnamn</label>
                     <input id="setting-company" value="${currentCompany.name || ''}">
                 </div>
-                <button id="save-company" class="btn btn-primary">Spara</button>
+                <button id="save-company" class="btn btn-primary">Spara Namn</button>
+            </div>
+            <div class="card">
+                <h3>Företagslogotyp</h3>
+                <p>Används på fakturor. Ladda upp en fil eller klistra in en direktlänk till en bild (t.ex. från Imgur).</p>
+                <div class="input-group">
+                    <label>Ladda upp fil</label>
+                    <input type="file" id="logo-upload" accept="image/*">
+                </div>
+                 <div class="input-group">
+                    <label>Eller klistra in bildlänk</label>
+                    <input id="logo-url" placeholder="https://i.imgur.com/..." value="${currentCompany.logoUrl || ''}">
+                </div>
+                <button id="save-logo" class="btn btn-primary">Spara Logotyp</button>
             </div>
             <div class="card card-danger">
                 <h3>Ta bort konto</h3>
-                <p>All din data raderas permanent.</p>
-                <button id="delete-account" class="btn btn-danger">Ta bort kontot permanent</button>
+                <p>Din användare raderas permanent. Företagsdata påverkas inte.</p>
+                <button id="delete-account" class="btn btn-danger">Ta bort mitt konto</button>
             </div>
         </div>`;
 
-    document.getElementById('save-pic').addEventListener('click', saveProfileImage);
     document.getElementById('save-company').addEventListener('click', saveCompanyInfo);
+    document.getElementById('save-logo').addEventListener('click', saveCompanyLogo);
     document.getElementById('delete-account').addEventListener('click', deleteAccount);
 }
 
-async function saveProfileImage() {
-    const { currentUser } = getState();
-    const fileInput = document.getElementById('profile-pic-upload');
+async function saveCompanyLogo() {
+    const fileInput = document.getElementById('logo-upload');
+    const urlInput = document.getElementById('logo-url');
     const file = fileInput.files[0];
-    if (!file) return;
+    const url = urlInput.value.trim();
+    const { currentCompany } = getState();
 
-    const storageRef = ref(storage, `profile_images/${currentUser.uid}/${file.name}`);
+    let logoUrl = '';
+
     try {
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        await updateDoc(doc(db, 'users', currentUser.uid), { profileImageURL: url });
-        
-        setState({ userData: { ...getState().userData, profileImageURL: url } });
-        document.dispatchEvent(new Event('stateUpdated')); // Notify UI to update
-        showToast('Profilbilden är uppdaterad!', 'success');
+        if (file) {
+            // Prioritera filuppladdning
+            const storageRef = ref(storage, `company_logos/${currentCompany.id}/${file.name}`);
+            await uploadBytes(storageRef, file);
+            logoUrl = await getDownloadURL(storageRef);
+        } else if (url) {
+            // Använd länken om ingen fil valts
+            // Enkel validering för att se om det är en bildlänk
+            if (!url.match(/\.(jpeg|jpg|gif|png)$/)) {
+                showToast("Ange en direktlänk till en bild (jpg, png, etc).", "error");
+                // Försök konvertera Imgur-länk
+                if (url.includes('imgur.com') && !url.includes('i.imgur.com')) {
+                    const parts = url.split('/');
+                    const imgurId = parts[parts.length - 1];
+                    urlInput.value = `https://i.imgur.com/${imgurId}.png`;
+                    showToast("Försökte korrigera Imgur-länk. Vänligen verifiera och spara igen.", "info");
+                }
+                return;
+            }
+            logoUrl = url;
+        } else {
+            // Om båda är tomma, rensa logotypen
+            logoUrl = '';
+        }
+
+        await updateDoc(doc(db, 'companies', currentCompany.id), { logoUrl: logoUrl });
+        setState({ currentCompany: { ...currentCompany, logoUrl: logoUrl } });
+        showToast('Logotypen har sparats!', 'success');
+
     } catch (error) {
-        console.error("Fel vid uppladdning:", error);
-        showToast("Kunde inte spara profilbilden.", "error");
+        console.error("Kunde inte spara logotyp:", error);
+        showToast("Kunde inte spara logotypen.", "error");
     }
 }
 
+// ... (resten av filen är oförändrad) ...
 async function saveCompanyInfo() {
     const { currentUser, currentCompany } = getState();
     const newName = document.getElementById('setting-company').value;
@@ -83,8 +115,6 @@ async function deleteAccount() {
         try {
             const { currentUser } = getState();
             await deleteDoc(doc(db, 'users', currentUser.uid));
-            // Note: This does not delete company data, only the user.
-            // More complex logic is needed to handle company deletion.
             await auth.currentUser.delete();
             showToast("Ditt konto har tagits bort.", "info");
             window.location.href = 'login.html';
