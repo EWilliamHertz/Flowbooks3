@@ -1,17 +1,25 @@
 // js/ui/products.js
-// Kombinerad version med all funktionalitet: thumbnails, Pris Privat, och Google Sheets-import.
-import { getState } from '../state.js';
+// KOMPLETT VERSION: Innehåller all befintlig funktionalitet (inkl. Google Import) PLUS det nya prognosverktyget.
+import { getState, setState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
-import { pickAndParseSheet } from '../services/google.js'; // Importerar vår nya tjänst
-import { writeBatch, doc, collection } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { pickAndParseSheet } from '../services/google.js';
+import { writeBatch, doc, collection, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
+let inventoryChartInstance = null; // Diagraminstans för denna sida
+
 export function renderProductsPage() {
+    // Förstör gammalt diagram om det finns för att undvika dubbletter
+    if (inventoryChartInstance) {
+        inventoryChartInstance.destroy();
+        inventoryChartInstance = null;
+    }
+
     const { allProducts } = getState();
     const mainView = document.getElementById('main-view');
 
-    // Sätter upp knapparna för denna sida
+    // Sätter upp ALLA knappar för denna sida
     const newItemBtn = document.getElementById('new-item-btn');
     newItemBtn.innerHTML = `
         <button id="add-new-product-btn" class="btn btn-primary">Ny Produkt</button>
@@ -41,9 +49,124 @@ export function renderProductsPage() {
         </table>` : 
         `<div class="empty-state"><h3>Inga produkter ännu</h3><p>Lägg till din första produkt via knapparna ovan.</p></div>`;
 
-    mainView.innerHTML = `<div class="card"><div id="table-container">${productsHtml}</div></div>`;
+    mainView.innerHTML = `
+        <div id="inventory-projection-container" class="card" style="margin-bottom: 1.5rem;"></div>
+        <div class="card">
+            <h3 class="card-title">Produktregister</h3>
+            <div id="table-container">${productsHtml}</div>
+        </div>`;
+
+    renderInventoryProjection(); // Anropa funktionen som ritar upp prognosverktyget
 }
 
+
+/**
+ * Renderar prognosverktyget för inventariets potential på produktsidan.
+ */
+function renderInventoryProjection() {
+    const { allProducts, currentCompany } = getState();
+    const container = document.getElementById('inventory-projection-container');
+    
+    const savedPrivateSplit = currentCompany.inventoryProjectionSplit || 60; // Standard 60% privat
+    
+    container.innerHTML = `
+        <h3 class="card-title">Prognos för Inventarievärde</h3>
+        <p>Ställ in en procentuell fördelning för att se hur det påverkar den potentiella omsättningen från ditt lager. Inställningen sparas och visas på Översikt-sidan.</p>
+        <div class="projection-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; margin-top: 1rem;">
+            <div class="projection-inputs">
+                <div class="input-group">
+                    <label>Andel såld till Privat (%)</label>
+                    <input type="number" id="percent-private" class="form-input" value="${savedPrivateSplit}" min="0" max="100">
+                </div>
+                <div class="input-group">
+                    <label>Andel såld till Företag (%)</label>
+                    <input type="number" id="percent-business" class="form-input" value="${100 - savedPrivateSplit}" min="0" max="100">
+                </div>
+                <div id="projection-results" style="margin-top: 1.5rem; font-size: 1.1rem;">
+                    <p>Potentiell omsättning (Privat): <strong id="result-private" class="green"></strong></p>
+                    <p>Potentiell omsättning (Företag): <strong id="result-business" class="blue"></strong></p>
+                </div>
+                 <button id="save-projection-btn" class="btn btn-primary" style="margin-top: 1rem;">Spara Prognosinställning</button>
+            </div>
+            <div class="projection-chart" style="position: relative; height: 250px;">
+                <canvas id="inventoryPieChart"></canvas>
+            </div>
+        </div>`;
+    
+    const privateInput = document.getElementById('percent-private');
+    const businessInput = document.getElementById('percent-business');
+
+    const updateProjection = (changedInput) => {
+        let privatePercent = parseFloat(privateInput.value) || 0;
+        let businessPercent = parseFloat(businessInput.value) || 0;
+
+        if (changedInput === 'private') {
+            if (privatePercent > 100) privatePercent = 100;
+            if (privatePercent < 0) privatePercent = 0;
+            businessPercent = 100 - privatePercent;
+            privateInput.value = Math.round(privatePercent);
+            businessInput.value = Math.round(businessPercent);
+        } else {
+            if (businessPercent > 100) businessPercent = 100;
+            if (businessPercent < 0) businessPercent = 0;
+            privatePercent = 100 - businessPercent;
+            businessInput.value = Math.round(businessPercent);
+            privateInput.value = Math.round(privatePercent);
+        }
+
+        let totalPrivateValue = 0;
+        let totalBusinessValue = 0;
+        allProducts.forEach(product => {
+            const stock = product.stock || 0;
+            const privatePrice = product.sellingPricePrivate || 0;
+            const businessPrice = product.sellingPriceBusiness || 0;
+            const privateUnits = stock * (privatePercent / 100);
+            const businessUnits = stock * (businessPercent / 100);
+            totalPrivateValue += privateUnits * privatePrice;
+            totalBusinessValue += businessUnits * businessPrice;
+        });
+
+        document.getElementById('result-private').textContent = `${totalPrivateValue.toLocaleString('sv-SE')} kr`;
+        document.getElementById('result-business').textContent = `${totalBusinessValue.toLocaleString('sv-SE')} kr`;
+        updateInventoryChart([totalPrivateValue, totalBusinessValue]);
+    };
+
+    privateInput.addEventListener('input', () => updateProjection('private'));
+    businessInput.addEventListener('input', () => updateProjection('business'));
+    
+    document.getElementById('save-projection-btn').addEventListener('click', async () => {
+        const newPrivateSplit = parseFloat(privateInput.value) || 0;
+        const companyRef = doc(db, 'companies', currentCompany.id);
+        try {
+            await updateDoc(companyRef, { inventoryProjectionSplit: newPrivateSplit });
+            const updatedCompany = { ...currentCompany, inventoryProjectionSplit: newPrivateSplit };
+            setState({ currentCompany: updatedCompany });
+            showToast("Prognosinställning sparad!", "success");
+        } catch (error) {
+            console.error("Kunde inte spara prognos:", error);
+            showToast("Kunde inte spara inställningen.", "error");
+        }
+    });
+
+    updateProjection('private');
+}
+
+function updateInventoryChart(data) {
+    const ctx = document.getElementById('inventoryPieChart').getContext('2d');
+    if (inventoryChartInstance) {
+        inventoryChartInstance.data.datasets[0].data = data;
+        inventoryChartInstance.update();
+        return;
+    }
+    inventoryChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: { labels: ['Privat', 'Företag'], datasets: [{ data: data, backgroundColor: ['rgba(46, 204, 113, 0.8)', 'rgba(74, 144, 226, 0.8)'] }] },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+}
+
+
+// --- GOOGLE SHEETS IMPORT FUNKTIONALITET (oförändrad från din version) ---
 async function handleSheetImport() {
     try {
         showToast("Öppnar filväljare...", "info");
@@ -100,12 +223,10 @@ function showImportReviewModal(products) {
         const batch = writeBatch(db);
         productsToSave.forEach(product => {
             const docRef = doc(collection(db, 'products'));
-            // Spara all relevant data från sheet, inkl. pris privat om det fanns.
             batch.set(docRef, { ...product, sellingPricePrivate: product.sellingPricePrivate || 0 });
         });
 
         await batch.commit();
-
         await fetchAllCompanyData();
         renderProductsPage();
         closeModal();
@@ -113,8 +234,7 @@ function showImportReviewModal(products) {
     });
 }
 
-
-// --- Den befintliga koden för att hantera enskilda produkter (oförändrad) ---
+// --- STANDARD PRODUKTHANTERING (oförändrad från din version) ---
 function renderProductForm(productId = null) {
     const { allProducts } = getState();
     const product = productId ? allProducts.find(p => p.id === productId) : null;
