@@ -1,7 +1,7 @@
 // js/ui/team.js
 import { getState } from '../state.js';
-import { renderSpinner, showToast } from './utils.js';
-import { addDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { renderSpinner, showToast, closeModal } from './utils.js';
+import { addDoc, collection, serverTimestamp, doc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
 export function renderTeamPage() {
@@ -16,14 +16,13 @@ export function renderTeamPage() {
             </div>
             <div class="card">
                 <h3 class="card-title">Bjud in ny medlem</h3>
-                <p>Personen kan skapa ett konto för att ansluta till ditt företag.</p>
-                <div class="input-group"><label for="invite-email">E-postadress</label><input type="email" id="invite-email" placeholder="namn@exempel.com"></div>
-                <button id="send-invite-btn" class="btn btn-primary" style="margin-top: 1rem;">Skicka inbjudan</button>
+                <p>Skapa en unik engångslänk som du kan skicka till personen du vill bjuda in. Länken leder till en anpassad registreringssida.</p>
+                <button id="create-invite-btn" class="btn btn-primary" style="margin-top: 1rem;">Skapa Inbjudningslänk</button>
             </div>
         </div>`;
 
     renderTeamList();
-    document.getElementById('send-invite-btn').addEventListener('click', handleSendInvitation);
+    document.getElementById('create-invite-btn').addEventListener('click', handleCreateInvitationLink);
 }
 
 function renderTeamList() {
@@ -47,43 +46,60 @@ function renderTeamList() {
     container.innerHTML = memberItems;
 }
 
-async function handleSendInvitation() {
-    const { teamMembers, currentCompany, currentUser } = getState();
-    const emailInput = document.getElementById('invite-email');
-    const email = emailInput.value.trim().toLowerCase();
+/**
+ * Skapar en inbjudan i Firestore och visar en unik länk.
+ */
+async function handleCreateInvitationLink() {
+    const { currentCompany, currentUser } = getState();
     
-    if (!email) {
-        showToast('Ange en giltig e-postadress.', 'warning');
-        return;
-    }
-
-    if (teamMembers.some(member => member.email === email)) {
-        showToast('Denna användare är redan medlem.', 'warning');
-        return;
-    }
-
     try {
         const invitationsRef = collection(db, 'invitations');
-        const q = query(invitationsRef, where("email", "==", email), where("companyId", "==", currentCompany.id));
-        const existingInvite = await getDocs(q);
-
-        if (!existingInvite.empty) {
-            showToast('En inbjudan har redan skickats till denna e-post.', 'warning');
-            return;
-        }
+        const newInviteRef = doc(invitationsRef); // Skapa en referens med ett unikt ID
 
         await addDoc(invitationsRef, {
-            email: email,
+            id: newInviteRef.id, // Spara det unika ID:t i dokumentet
             companyId: currentCompany.id,
             companyName: currentCompany.name,
             invitedBy: currentUser.uid,
-            createdAt: new Date()
+            createdAt: serverTimestamp()
         });
 
-        showToast(`Inbjudan skickad till ${email}!`, 'success');
-        emailInput.value = '';
+        const inviteLink = `${window.location.origin}${window.location.pathname.replace('app.html', '')}register.html?invite=${newInviteRef.id}`;
+        
+        showInvitationLinkModal(inviteLink);
+
     } catch (error) {
-        console.error("Kunde inte skicka inbjudan:", error);
+        console.error("Kunde inte skapa inbjudan:", error);
         showToast('Ett fel uppstod. Försök igen.', 'error');
     }
+}
+
+/**
+ * Visar en modal med den kopierbara inbjudningslänken.
+ */
+function showInvitationLinkModal(link) {
+    const modalHtml = `
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <h3>Inbjudningslänk Skapad!</h3>
+                <p>Skicka följande länk till personen du vill bjuda in. Länken kan bara användas en gång.</p>
+                <div class="input-group">
+                    <input type="text" id="invite-link-input" class="form-input" value="${link}" readonly>
+                </div>
+                <div class="modal-actions">
+                    <button id="copy-link-btn" class="btn btn-primary">Kopiera Länk</button>
+                    <button id="modal-close" class="btn btn-secondary">Stäng</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modal-container').innerHTML = modalHtml;
+    
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('copy-link-btn').addEventListener('click', () => {
+        const linkInput = document.getElementById('invite-link-input');
+        linkInput.select();
+        document.execCommand('copy');
+        showToast("Länken har kopierats!", "success");
+    });
 }
