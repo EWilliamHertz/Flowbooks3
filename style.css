@@ -382,3 +382,50 @@ tr.corrected td { font-style: italic; }
         grid-template-columns: 1fr; /* Stapla diagrammen på varandra */
     }
 }
+/* =================================================================
+   14. Fakturering
+   ================================================================= */
+
+.invoice-status {
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white;
+}
+.invoice-status.Utkast { background-color: #7f8c8d; }
+.invoice-status.Skickad { background-color: var(--primary-color); }
+.invoice-status.Betald { background-color: var(--success-color); }
+.invoice-status.Förfallen { background-color: var(--danger-color); }
+
+.invoice-editor .card {
+    margin-bottom: 1.5rem;
+}
+
+.invoice-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+#invoice-items-container .form-input {
+    width: 100%;
+    padding: 0.5rem;
+}
+
+#invoice-items-container .item-product {
+    margin-bottom: 0.5rem;
+}
+
+.invoice-actions-footer {
+    padding: 1rem;
+    background: var(--background-color);
+    border-radius: var(--border-radius);
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    position: sticky;
+    bottom: 0;
+}
