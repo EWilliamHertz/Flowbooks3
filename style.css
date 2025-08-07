@@ -1,0 +1,353 @@
+/* =================================================================
+   FlowBooks CSS - Version med UX-förbättringar
+   ================================================================= */
+
+/* --- 1. Grundläggande Setup, Reset och Variabler --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+    --primary-color: #4A90E2;
+    --success-color: #2ecc71;
+    --danger-color: #e74c3c;
+    --warning-color: #f39c12;
+    --text-color: #333333;
+    --text-color-light: #666;
+    --background-color: #F8F9FA;
+    --card-background: #FFFFFF;
+    --border-color: #EAECEF;
+    --font-family: 'Inter', sans-serif;
+    --border-radius: 8px;
+    --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+    --sidebar-width: 260px;
+}
+body { font-family: var(--font-family); background-color: var(--background-color); color: var(--text-color); line-height: 1.6; }
+.container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 1rem; }
+.text-center { text-align: center; }
+
+/* --- 2. Landningssida (Oförändrad) --- */
+.landing-header { padding: 1rem 0; background-color: var(--card-background); border-bottom: 1px solid var(--border-color); }
+.main-nav { display: flex; justify-content: space-between; align-items: center; }
+.nav-links { display: flex; align-items: center; gap: 1.5rem; }
+.nav-links a { text-decoration: none; color: var(--text-color-light); font-weight: 500; }
+.hero-section { padding: 4rem 0 6rem 0; }
+.hero-title { font-size: 3.2rem; font-weight: 800; line-height: 1.2; margin-bottom: 1rem; }
+.hero-subtitle { font-size: 1.2rem; color: var(--text-color-light); max-width: 650px; margin: 0 auto 2rem auto; }
+.landing-footer { padding: 2rem 0; text-align: center; color: var(--text-color-light); }
+.features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+
+/* --- 3. Autentiserings-sidor (Oförändrad) --- */
+.auth-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.auth-container { width: 100%; max-width: 420px; padding: 1rem; }
+.auth-box { width: 100%; padding: 2.5rem; background: var(--card-background); border-radius: var(--border-radius); box-shadow: var(--box-shadow); }
+.auth-box h3 { text-align: center; font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; }
+.input-group { margin-bottom: 1.25rem; }
+.input-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+.input-group input { width: 100%; padding: 0.8rem 1rem; border: 1px solid var(--border-color); border-radius: var(--border-radius); font-size: 1rem; font-family: var(--font-family); }
+.error-message { color: var(--danger-color); text-align: center; min-height: 20px; margin-bottom: 1rem; }
+.auth-switch { font-size: 0.9rem; margin-top: 1.5rem; text-align: center; }
+.auth-links { text-align: center; margin-top: 1rem; font-size: 0.9rem; }
+.logo-link { text-decoration: none; text-align: center; display: block; margin-bottom: 1rem; }
+
+/* --- 4. Huvudapplikationens Layout --- */
+#app-container { display: flex; min-height: 100vh; position: relative; }
+.sidebar { width: var(--sidebar-width); background-color: var(--card-background); border-right: 1px solid var(--border-color); position: fixed; top: 0; left: 0; height: 100vh; display: flex; flex-direction: column; z-index: 1000; transition: transform 0.3s ease-in-out; }
+.main-content { flex-grow: 1; margin-left: var(--sidebar-width); transition: margin-left 0.3s ease-in-out; }
+.main-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background-color: var(--card-background); border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 900; }
+.header-left, .header-right { display: flex; align-items: center; gap: 1rem; }
+.page-title { font-size: 1.5rem; font-weight: 600; }
+main { padding: 1.5rem; }
+.profile-container { position: relative; }
+.user-profile { width: 40px; height: 40px; border-radius: 50%; cursor: pointer; background-color: var(--primary-color); color: white; display: flex; justify-content: center; align-items: center; font-weight: 600; background-size: cover; background-position: center; }
+.profile-dropdown { display: none; position: absolute; right: 0; top: 50px; background: var(--card-background); border-radius: var(--border-radius); box-shadow: var(--box-shadow); border: 1px solid var(--border-color); width: 180px; z-index: 1001; }
+.profile-dropdown.show { display: block; }
+.profile-dropdown a { display: block; padding: 0.75rem 1rem; text-decoration: none; color: var(--text-color); }
+.profile-dropdown a:hover { background-color: var(--background-color); }
+
+/* --- 5. Navigation & Sidomeny --- */
+.sidebar-header { padding: 1.5rem; border-bottom: 1px solid var(--border-color); }
+.logo { color: var(--primary-color); font-weight: 700; }
+.sidebar-nav { flex-grow: 1; }
+.sidebar-nav ul { list-style: none; padding: 1rem 0; }
+.sidebar-nav a { display: block; padding: 0.8rem 1.5rem; text-decoration: none; color: var(--text-color-light); font-weight: 500; border-left: 3px solid transparent; }
+.sidebar-nav a:hover { background-color: var(--background-color); color: var(--text-color); }
+.sidebar-nav a.active { background-color: #e9f2fe; color: var(--primary-color); border-left-color: var(--primary-color); font-weight: 600; }
+
+/* --- 6. Återanvändbara Komponenter --- */
+.btn { display: inline-block; padding: 0.6rem 1.2rem; border: none; border-radius: var(--border-radius); cursor: pointer; font-weight: 500; font-size: 0.95rem; text-align: center; text-decoration: none; }
+.btn-large { padding: 0.9rem 2rem; font-size: 1.1rem; }
+.btn-full-width { width: 100%; padding-top: 0.9rem; padding-bottom: 0.9rem; }
+.btn-primary { background-color: var(--primary-color); color: white; }
+.btn-secondary { background-color: #e9ecef; color: var(--text-color); }
+.btn-danger { background-color: var(--danger-color); color: white; }
+.card { background-color: var(--card-background); border-radius: var(--border-radius); box-shadow: var(--box-shadow); padding: 1.5rem; border: 1px solid var(--border-color); }
+.card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; }
+.card-danger { border-left: 4px solid var(--danger-color); }
+.card-danger h3 { color: var(--danger-color); }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th, .data-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+
+/* --- 7. Sök & Filter --- */
+.controls-container { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1.5rem; padding: 1rem; background-color: var(--background-color); border-radius: var(--border-radius); }
+.search-container { flex-grow: 1; }
+.search-container input { width: 100%; min-width: 200px; padding: 0.7rem 1rem; border: 1px solid var(--border-color); border-radius: var(--border-radius); font-size: 1rem; }
+.filter-container { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.filter-container .btn { padding: 0.7rem 1rem; background-color: white; border: 1px solid var(--border-color); }
+.filter-container .btn.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+
+/* --- 8. Moderna Notiser (Toasts) --- */
+#toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { padding: 1rem 1.5rem; border-radius: var(--border-radius); color: white; font-weight: 500; box-shadow: 0 5px 15px rgba(0,0,0,0.2); opacity: 0; transform: translateY(20px); animation: toast-in 0.5s forwards; }
+.toast.success { background-color: var(--success-color); }
+.toast.error { background-color: var(--danger-color); }
+.toast.info { background-color: var(--primary-color); }
+@keyframes toast-in { to { opacity: 1; transform: translateY(0); } }
+
+/* --- 9. Laddningsindikator (Spinner) --- */
+.spinner-container { display: flex; justify-content: center; align-items: center; padding: 3rem; }
+.spinner { width: 50px; height: 50px; border: 5px solid var(--background-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+//* --- 10. Responsiv Design & Hamburgermeny --- */
+.hamburger-menu { 
+    display: none; 
+    background: none; 
+    border: none; 
+    cursor: pointer; 
+    padding: 0.5rem; 
+    /* NYTT: Säkerställer att knappen ligger överst */
+    z-index: 1001; 
+}
+
+.hamburger-menu .bar { 
+    display: block; 
+    width: 25px; 
+    height: 3px; 
+    background-color: var(--text-color); 
+    margin: 5px 0; 
+    transition: 0.3s; 
+}
+
+@media (max-width: 768px) {
+    .sidebar { 
+        transform: translateX(-100%); 
+        /* NYTT: Högre z-index för att ligga över innehållet */
+        z-index: 1000;
+    }
+    .sidebar.open { 
+        transform: translateX(0); 
+        box-shadow: 0 0 20px rgba(0,0,0,0.2); 
+    }
+    .main-content { margin-left: 0; }
+    .hamburger-menu { display: block; }
+    .page-title { font-size: 1.2rem; }
+    .controls-container { flex-direction: column; align-items: stretch; }
+}
+
+@media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); box-shadow: 0 0 20px rgba(0,0,0,0.2); }
+    .main-content { margin-left: 0; }
+    .hamburger-menu { display: block; z-index: 1001; }
+    .page-title { font-size: 1.2rem; }
+    .controls-container { flex-direction: column; align-items: stretch; }
+}
+
+/* --- 11. Övriga App-specifika Stilar --- */
+.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+.metric-value { font-size: 2rem; font-weight: 700; margin: 0; }
+.green { color: var(--success-color); }
+.red { color: var(--danger-color); }
+.blue { color: var(--primary-color); }
+.text-right { text-align: right; }
+.transaction-row.income { border-left: 4px solid var(--success-color); }
+.transaction-row.expense { border-left: 4px solid var(--danger-color); }
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+.modal-content { background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 5px 15px rgba(0,0,0,0.3); max-width: 90%; width: 500px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 1rem; }
+tr.corrected { opacity: 0.6; background-color: #f8f9fa; }
+tr.corrected td { font-style: italic; }
+.btn-correction { background-color: var(--warning-color); color: white; border: none; border-radius: 4px; padding: 0.3rem 0.6rem; font-size: 0.85rem; cursor: pointer; }
+.btn-correction:hover { background-color: #e67e22; }
+.correction-notice { background-color: #e9f2fe; border-left: 4px solid var(--primary-color); padding: 0.8rem; margin-bottom: 1rem; font-size: 0.9rem; }
+.report-result { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); }
+.report-result h4 { margin-bottom: 1rem; }
+.report-result p { margin-bottom: 0.5rem; display: flex; justify-content: space-between; }
+.report-result hr { border: none; border-top: 1px dashed var(--border-color); margin: 0.5rem 0; }
+
+/* --- NYTT: Stilar för Fakturor --- */
+.invoice-status {
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.invoice-status.paid { background-color: #e8f5e9; color: #388e3c; }
+.invoice-status.unpaid { background-color: #fff3e0; color: #f57c00; }
+.invoice-status.overdue { background-color: #ffebee; color: #d32f2f; }
+
+.invoice-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.invoice-actions {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: var(--background-color);
+    border-radius: var(--border-radius);
+    margin-top: 1.5rem;
+}
+
+/* =================================================================
+   12. Portalvy för Företagsöversikt
+   ================================================================= */
+
+/* Döljer standard-layouten när portalvyn är aktiv */
+.portal-view .sidebar,
+.portal-view .main-header {
+    display: none !important;
+}
+
+/* Anpassar huvudcontainern för portalvyn */
+.portal-view .main-content {
+    margin-left: 0;
+    padding: 0;
+    background-color: #f4f7f9; /* En lite annorlunda bakgrund för portalen */
+    min-height: 100vh;
+}
+
+.portal-view #main-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem;
+}
+
+.portal-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.portal-header .logo {
+    font-size: 2.5rem;
+    color: var(--primary-color);
+}
+
+.portal-header p {
+    font-size: 1.1rem;
+    color: var(--text-color-light);
+    margin-top: 0.5rem;
+}
+
+.portal-total-profit {
+    margin-top: 1.5rem;
+    padding: 1rem 2rem;
+    background-color: var(--card-background);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    display: inline-block;
+}
+
+.portal-total-profit span {
+    color: var(--text-color-light);
+}
+
+.portal-total-profit strong {
+    font-size: 1.5rem;
+    margin-left: 1rem;
+}
+
+.company-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 1200px;
+}
+
+.company-card {
+    background-color: var(--card-background);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    border: 1px solid var(--border-color);
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.company-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.company-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.company-card-header h3 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.badge {
+    padding: 0.3rem 0.8rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.badge-owner {
+    background-color: #e8f5e9; /* Ljusgrön */
+    color: #388e3c; /* Mörkgrön */
+}
+
+.badge-member {
+    background-color: #e3f2fd; /* Ljusblå */
+    color: #1565c0; /* Mörkblå */
+}
+
+.company-card-body {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.company-card-body .stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.company-card-body .label {
+    color: var(--text-color-light);
+    font-size: 0.9rem;
+}
+
+.company-card-body .value {
+    font-weight: 600;
+    font-size: 1.2rem;
+}
+
+.company-card-footer {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: var(--text-color-light);
+}
