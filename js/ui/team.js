@@ -1,7 +1,7 @@
 // js/ui/team.js
 import { getState } from '../state.js';
 import { renderSpinner, showToast, closeModal } from './utils.js';
-import { addDoc, collection, serverTimestamp, doc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { collection, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
 export function renderTeamPage() {
@@ -47,23 +47,28 @@ function renderTeamList() {
 }
 
 /**
- * Skapar en inbjudan i Firestore och visar en unik länk.
+ * KORRIGERAD FUNKTION: Skapar en inbjudan i Firestore och visar en unik länk.
  */
 async function handleCreateInvitationLink() {
     const { currentCompany, currentUser } = getState();
+    const btn = document.getElementById('create-invite-btn');
+    btn.disabled = true;
+    btn.textContent = 'Skapar...';
     
     try {
         const invitationsRef = collection(db, 'invitations');
-        const newInviteRef = doc(invitationsRef); // Skapa en referens med ett unikt ID
+        // 1. Skapa en referens med ett unikt, lokalt genererat ID
+        const newInviteRef = doc(invitationsRef); 
 
-        await addDoc(invitationsRef, {
-            id: newInviteRef.id, // Spara det unika ID:t i dokumentet
+        // 2. Använd setDoc för att spara dokumentet med exakt det ID:t
+        await setDoc(newInviteRef, {
             companyId: currentCompany.id,
             companyName: currentCompany.name,
             invitedBy: currentUser.uid,
             createdAt: serverTimestamp()
         });
 
+        // 3. Skapa en länk som nu garanterat matchar dokumentet i databasen
         const inviteLink = `${window.location.origin}${window.location.pathname.replace('app.html', '')}register.html?invite=${newInviteRef.id}`;
         
         showInvitationLinkModal(inviteLink);
@@ -71,6 +76,9 @@ async function handleCreateInvitationLink() {
     } catch (error) {
         console.error("Kunde inte skapa inbjudan:", error);
         showToast('Ett fel uppstod. Försök igen.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Skapa Inbjudningslänk';
     }
 }
 
