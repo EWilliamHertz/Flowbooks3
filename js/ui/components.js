@@ -1,15 +1,22 @@
 // js/ui/components.js
-// Innehåller återanvändbara funktioner för att rendera UI-komponenter, nu med momshantering.
 import { getState } from '../state.js';
 import { renderTransactionForm } from './transactions.js';
+import { attachProductPageEventListeners } from './products.js'; // Importera för att länka
 
 export function getControlsHTML() {
+    const { categories } = getState();
+    const categoryOptions = categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
+
     return `
         <div class="controls-container">
             <div class="search-container">
-                <input type="text" id="search-input" placeholder="Sök transaktioner...">
+                <input type="text" id="search-input" class="form-input" placeholder="Sök transaktioner...">
             </div>
             <div class="filter-container">
+                <select id="category-filter" class="form-input">
+                    <option value="all">Alla Kategorier</option>
+                    ${categoryOptions}
+                </select>
                 <button class="btn filter-btn active" data-period="all">Alla</button>
                 <button class="btn filter-btn" data-period="this-month">Denna månad</button>
                 <button class="btn filter-btn" data-period="last-month">Förra månaden</button>
@@ -19,11 +26,15 @@ export function getControlsHTML() {
 
 export function applyFiltersAndRender(list, type) {
     const searchInput = document.getElementById('search-input');
+    const categoryFilter = document.getElementById('category-filter');
+    
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-    const activeFilterEl = document.querySelector('.filter-btn.active');
-    const activeFilter = activeFilterEl ? activeFilterEl.dataset.period : 'all';
+    const selectedCategory = categoryFilter ? categoryFilter.value : 'all';
+    const activePeriodEl = document.querySelector('.filter-btn.active');
+    const activePeriod = activePeriodEl ? activePeriodEl.dataset.period : 'all';
     
     let filteredList = list;
+
     if (searchTerm) {
         filteredList = filteredList.filter(t => 
             t.description.toLowerCase().includes(searchTerm) || 
@@ -31,14 +42,18 @@ export function applyFiltersAndRender(list, type) {
         );
     }
 
+    if (selectedCategory !== 'all') {
+        filteredList = filteredList.filter(t => t.categoryId === selectedCategory);
+    }
+
     const now = new Date();
     const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    if (activeFilter === 'this-month') {
+    if (activePeriod === 'this-month') {
         filteredList = filteredList.filter(t => new Date(t.date) >= firstDayThisMonth);
-    } else if (activeFilter === 'last-month') {
+    } else if (activePeriod === 'last-month') {
         filteredList = filteredList.filter(t => new Date(t.date) >= firstDayLastMonth && new Date(t.date) <= lastDayLastMonth);
     }
 
@@ -52,17 +67,12 @@ export function renderTransactionTable(transactions, type) {
 
     const getCategoryName = (id) => categories.find(c => c.id === id)?.name || '-';
     
-    // En enhetlig header för alla vyer
     const head = `<th>Datum</th><th>Beskrivning</th><th>Kategori</th><th class="text-right">Summa (exkl. moms)</th><th class="text-right">Moms</th><th class="text-right">Total Summa</th><th>Åtgärd</th>`;
     
-    // En enhetlig metod för att skapa rader
     const rows = transactions.map(t => {
-        // Beräkna värden för att säkerställa att de finns, även för äldre data
         const amountExclVat = t.amountExclVat ?? (t.type === 'income' ? t.amount : (t.amount / (1 + (t.vatRate || 0) / 100)));
         const vatAmount = t.vatAmount ?? (t.amount - amountExclVat);
         const totalAmount = t.amount;
-
-        // Bestäm transaktionstyp för färgkodning och korrigering
         const transactionType = t.type || (t.vatRate !== undefined ? 'expense' : 'income');
 
         return `
