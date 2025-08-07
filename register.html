@@ -27,7 +27,7 @@
 
     <script type="module">
         import { createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
-        import { doc, setDoc, collection, query, where, getDocs, writeBatch, runTransaction, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+        import { doc, setDoc, collection, serverTimestamp, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
         import { auth, db } from './firebase-config.js';
 
         const registerBtn = document.getElementById('register-btn');
@@ -39,27 +39,26 @@
         const positionInput = document.getElementById('position');
         const errorEl = document.getElementById('auth-error');
 
-        // NYTT: Funktion för att kolla efter inbjudan när e-post skrivs in
-        let invitationData = null; // Lagrar eventuell inbjudan
-        emailInput.addEventListener('blur', async () => {
-            const email = emailInput.value.trim().toLowerCase();
-            if (!email) return;
+        let invitationData = null; // Lagrar data från inbjudningslänken
 
-            const invitationsRef = collection(db, 'invitations');
-            const q = query(invitationsRef, where("email", "==", email));
-            const invitationSnapshot = await getDocs(q);
+        // Läs inbjudnings-ID från URL när sidan laddas
+        document.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const inviteId = urlParams.get('invite');
 
-            if (!invitationSnapshot.empty) {
-                invitationData = invitationSnapshot.docs[0].data();
-                companyNameInput.value = invitationData.companyName;
-                companyNameInput.disabled = true; // Lås fältet
-                errorEl.textContent = `Du har bjudits in till ${invitationData.companyName}! Fyll i resten av dina uppgifter.`;
-                errorEl.style.color = 'green';
-            } else {
-                invitationData = null;
-                companyNameInput.value = '';
-                companyNameInput.disabled = false;
-                errorEl.textContent = '';
+            if (inviteId) {
+                const inviteRef = doc(db, 'invitations', inviteId);
+                const inviteSnap = await getDoc(inviteRef);
+
+                if (inviteSnap.exists()) {
+                    invitationData = inviteSnap.data();
+                    companyNameInput.value = invitationData.companyName;
+                    companyNameInput.disabled = true; // Lås fältet
+                    errorEl.textContent = `Välkommen! Du har bjudits in till ${invitationData.companyName}. Fyll i resten av dina uppgifter.`;
+                    errorEl.style.color = 'green';
+                } else {
+                    errorEl.textContent = 'Inbjudningslänken är ogiltig eller har redan använts.';
+                }
             }
         });
 
@@ -82,20 +81,18 @@
                 const user = userCredential.user;
 
                 let companyId;
-                let finalCompanyName = companyName;
+                let finalCompanyName;
 
                 if (invitationData) {
-                    // Användaren har en inbjudan, anslut till befintligt företag
+                    // Användaren kom från en inbjudningslänk
                     companyId = invitationData.companyId;
                     finalCompanyName = invitationData.companyName;
                     
                     // Ta bort inbjudan så den inte kan användas igen
-                    const invitationsRef = collection(db, 'invitations');
-                    const q = query(invitationsRef, where("email", "==", email), where("companyId", "==", companyId));
-                    const invitationSnapshot = await getDocs(q);
-                    if (!invitationSnapshot.empty) {
-                        await deleteDoc(invitationSnapshot.docs[0].ref);
-                    }
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const inviteId = urlParams.get('invite');
+                    await deleteDoc(doc(db, 'invitations', inviteId));
+
                 } else {
                     // Ingen inbjudan, skapa ett nytt företag
                     const newCompanyRef = doc(collection(db, 'companies'));
@@ -105,9 +102,10 @@
                         ownerId: user.uid,
                         createdAt: serverTimestamp()
                     });
+                    finalCompanyName = companyName;
                 }
 
-                // Skapa användarens dokument med all information
+                // Skapa användarens dokument
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
                     firstName: firstName,
@@ -123,7 +121,11 @@
 
             } catch (error) {
                 console.error("Registreringsfel:", error);
-                errorEl.textContent = 'Kunde inte registrera. Kontrollera att e-posten inte redan används.';
+                if (error.code === 'auth/email-already-in-use') {
+                    errorEl.textContent = 'E-postadressen används redan. Vänligen logga in.';
+                } else {
+                    errorEl.textContent = 'Kunde inte registrera. Kontrollera att alla fält är korrekta.';
+                }
             }
         });
     </script>
