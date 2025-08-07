@@ -4,18 +4,195 @@ import { renderSpinner } from './utils.js';
 import { getDocs, query, collection, where } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
-// Håller reda på skapade diagraminstanser för att kunna förstöra dem vid omritning
+// Håller reda på skapade diagraminstanser
 let monthlyChartInstance = null;
 let categoryChartInstance = null;
-let projectionChartInstance = null; // NYTT: Diagram för försäljningspotential
+let inventoryChartInstance = null; // Nytt namn för det nya diagrammet
 
 /**
- * Förbereder och aggregerar data för att passa Chart.js-formatet.
+ * Huvudfunktion för att rendera hela dashboard-vyn.
+ */
+export function renderDashboard() {
+    // Förstör gamla diagraminstanser för att undvika minnesläckor
+    if (monthlyChartInstance) monthlyChartInstance.destroy();
+    if (categoryChartInstance) categoryChartInstance.destroy();
+    if (inventoryChartInstance) inventoryChartInstance.destroy();
+
+    const { allIncomes, allExpenses } = getState();
+    const totalIncome = allIncomes.reduce((sum, doc) => sum + doc.amount, 0);
+    const totalExpense = allExpenses.reduce((sum, doc) => sum + doc.amount, 0);
+    const profit = totalIncome - totalExpense;
+
+    const mainView = document.getElementById('main-view');
+    mainView.innerHTML = `
+        <div class="dashboard-metrics">
+            <div class="card text-center">
+                <h3>Totala Intäkter</h3>
+                <p class="metric-value green">${totalIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+            </div>
+            <div class="card text-center">
+                <h3>Totala Utgifter</h3>
+                <p class="metric-value red">${totalExpense.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+            </div>
+            <div class="card text-center">
+                <h3>Resultat</h3>
+                <p class="metric-value ${profit >= 0 ? 'blue' : 'red'}">${profit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+            </div>
+        </div>
+
+        <div id="inventory-projection-container" class="card" style="margin-bottom: 1.5rem;"></div>
+
+        <div class="dashboard-charts">
+            <div class="card chart-container">
+                <h3 class="card-title">Intäkter vs Utgifter (Senaste 12 mån)</h3>
+                <canvas id="monthlyBarChart"></canvas>
+            </div>
+            <div class="card chart-container">
+                <h3 class="card-title">Utgifter per Kategori</h3>
+                <canvas id="categoryPieChart"></canvas>
+            </div>
+        </div>
+    `;
+
+    renderMonthlyAndCategoryCharts();
+    renderInventoryProjection(); // Anropa funktionen för det nya prognosverktyget
+}
+
+/**
+ * Renderar prognosverktyget för inventariets potential.
+ */
+function renderInventoryProjection() {
+    const { allProducts } = getState();
+    const container = document.getElementById('inventory-projection-container');
+    
+    // Beräkna totalt lagervärde för att visa som referens
+    const totalStockValue = allProducts.reduce((sum, p) => sum + ((p.stock || 0) * (p.sellingPriceBusiness || 0)), 0);
+
+    container.innerHTML = `
+        <h3 class="card-title">Prognos för Inventarievärde</h3>
+        <p>Se den potentiella försäljningen från ditt nuvarande lager (totalt värde ca ${totalStockValue.toLocaleString('sv-SE')} kr) genom att fördela försäljningen procentuellt.</p>
+        <div class="projection-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; margin-top: 1rem;">
+            <div class="projection-inputs">
+                <div class="input-group">
+                    <label>Andel såld till Företag (%)</label>
+                    <input type="number" id="percent-business" class="form-input" value="50" min="0" max="100">
+                </div>
+                <div class="input-group">
+                    <label>Andel såld till Privat (%)</label>
+                    <input type="number" id="percent-private" class="form-input" value="50" min="0" max="100">
+                </div>
+                <div id="projection-results" style="margin-top: 1.5rem; font-size: 1.1rem;">
+                    <p>Potentiell omsättning (Företag): <strong id="result-business" class="blue"></strong></p>
+                    <p>Potentiell omsättning (Privat): <strong id="result-private" class="green"></strong></p>
+                </div>
+            </div>
+            <div class="projection-chart" style="position: relative; height: 250px;">
+                <canvas id="inventoryPieChart"></canvas>
+            </div>
+        </div>`;
+    
+    const businessInput = document.getElementById('percent-business');
+    const privateInput = document.getElementById('percent-private');
+
+    const updateProjection = (changedInput) => {
+        let businessPercent = parseFloat(businessInput.value) || 0;
+        let privatePercent = parseFloat(privateInput.value) || 0;
+
+        // Synka de två textrutorna
+        if (changedInput === 'business') {
+            if (businessPercent > 100) businessPercent = 100;
+            if (businessPercent < 0) businessPercent = 0;
+            privatePercent = 100 - businessPercent;
+            businessInput.value = Math.round(businessPercent);
+            privateInput.value = Math.round(privatePercent);
+        } else {
+            if (privatePercent > 100) privatePercent = 100;
+            if (privatePercent < 0) privatePercent = 0;
+            businessPercent = 100 - privatePercent;
+            privateInput.value = Math.round(privatePercent);
+            businessInput.value = Math.round(businessPercent);
+        }
+
+        // KÄRNLOGIK: Beräkna värdet baserat på lagersaldo och priser per produkt
+        let totalBusinessValue = 0;
+        let totalPrivateValue = 0;
+
+        allProducts.forEach(product => {
+            const stock = product.stock || 0;
+            const businessPrice = product.sellingPriceBusiness || 0;
+            const privatePrice = product.sellingPricePrivate || 0;
+
+            const businessUnits = stock * (businessPercent / 100);
+            const privateUnits = stock * (privatePercent / 100);
+
+            totalBusinessValue += businessUnits * businessPrice;
+            totalPrivateValue += privateUnits * privatePrice;
+        });
+
+        // Uppdatera siffrorna och diagrammet
+        document.getElementById('result-business').textContent = `${totalBusinessValue.toLocaleString('sv-SE')} kr`;
+        document.getElementById('result-private').textContent = `${totalPrivateValue.toLocaleString('sv-SE')} kr`;
+
+        updateInventoryChart([totalBusinessValue, totalPrivateValue]);
+    };
+
+    businessInput.addEventListener('input', () => updateProjection('business'));
+    privateInput.addEventListener('input', () => updateProjection('private'));
+    
+    // Kör en första gång för att rendera initial vyn
+    updateProjection('business');
+}
+
+/**
+ * Ritar och uppdaterar cirkeldiagrammet för inventarieprognosen.
+ */
+function updateInventoryChart(data) {
+    const ctx = document.getElementById('inventoryPieChart').getContext('2d');
+    if (inventoryChartInstance) {
+        inventoryChartInstance.data.datasets[0].data = data;
+        inventoryChartInstance.update();
+        return;
+    }
+    inventoryChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Företag', 'Privat'],
+            datasets: [{
+                label: 'Potentiell Omsättning',
+                data: data,
+                backgroundColor: ['rgba(74, 144, 226, 0.8)', 'rgba(46, 204, 113, 0.8)'],
+                borderColor: ['rgba(74, 144, 226, 1)', 'rgba(46, 204, 113, 1)'],
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) label += ': ';
+                            if (context.parsed !== null) {
+                                label += new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK' }).format(context.parsed);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+/**
+ * Förbereder data för de primära diagrammen.
  */
 function prepareChartData() {
     const { allIncomes, allExpenses, categories } = getState();
 
-    // Data för Stapeldiagram (Intäkter vs Utgifter per månad)
+    // Data för Stapeldiagram
     const monthlyData = {};
     const monthLabels = [];
     for (let i = 11; i >= 0; i--) {
@@ -27,21 +204,17 @@ function prepareChartData() {
         monthlyData[key] = { income: 0, expense: 0 };
     }
     allIncomes.forEach(income => {
-        if (income.date) {
-            const key = income.date.substring(0, 7);
-            if (monthlyData[key]) monthlyData[key].income += income.amount;
-        }
+        const key = income.date?.substring(0, 7);
+        if (monthlyData[key]) monthlyData[key].income += income.amount;
     });
     allExpenses.forEach(expense => {
-        if (expense.date) {
-            const key = expense.date.substring(0, 7);
-            if (monthlyData[key]) monthlyData[key].expense += expense.amount;
-        }
+        const key = expense.date?.substring(0, 7);
+        if (monthlyData[key]) monthlyData[key].expense += expense.amount;
     });
     const incomeValues = Object.values(monthlyData).map(d => d.income);
     const expenseValues = Object.values(monthlyData).map(d => d.expense);
 
-    // Data för Cirkeldiagram (Utgifter per kategori)
+    // Data för Cirkeldiagram
     const categoryData = {};
     allExpenses.forEach(expense => {
         const categoryId = expense.categoryId || 'uncategorized';
@@ -59,203 +232,35 @@ function prepareChartData() {
     };
 }
 
-/**
- * Huvudfunktion för att rendera hela dashboard-vyn.
- */
-export function renderDashboard() {
-    const mainView = document.getElementById('main-view');
-    const { allIncomes, allExpenses, allInvoices } = getState();
-
-    if (monthlyChartInstance) monthlyChartInstance.destroy();
-    if (categoryChartInstance) categoryChartInstance.destroy();
-    if (projectionChartInstance) projectionChartInstance.destroy();
-
-    const totalIncome = allIncomes.reduce((sum, doc) => sum + doc.amount, 0);
-    const totalExpense = allExpenses.reduce((sum, doc) => sum + doc.amount, 0);
-    const profit = totalIncome - totalExpense;
-    const totalInvoicedAmount = allInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-
-    mainView.innerHTML = `
-        <div class="dashboard-metrics">
-            <div class="card text-center">
-                <h3>Totala Intäkter</h3>
-                <p class="metric-value green">${totalIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
-            </div>
-            <div class="card text-center">
-                <h3>Totala Utgifter</h3>
-                <p class="metric-value red">${totalExpense.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
-            </div>
-            <div class="card text-center">
-                <h3>Resultat</h3>
-                <p class="metric-value ${profit >= 0 ? 'blue' : 'red'}">${profit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
-            </div>
-        </div>
-
-        <div id="sales-projection-container" class="card" style="margin-bottom: 1.5rem;"></div>
-
-        <div class="dashboard-charts">
-            <div class="card chart-container">
-                <h3 class="card-title">Intäkter vs Utgifter (Senaste 12 mån)</h3>
-                <canvas id="monthlyBarChart"></canvas>
-            </div>
-            <div class="card chart-container">
-                <h3 class="card-title">Utgifter per Kategori</h3>
-                <canvas id="categoryPieChart"></canvas>
-            </div>
-        </div>
-    `;
-
-    const chartData = prepareChartData();
-    renderMonthlyChart(chartData.monthly);
-    renderCategoryChart(chartData.category);
-    renderSalesProjection(totalInvoicedAmount); // Anropa den nya funktionen
-}
-
 
 /**
- * NY FUNKTION: Renderar den interaktiva modulen för försäljningspotential.
- * @param {number} totalSales - Den totala summan från fakturor.
+ * Funktion för att rita de andra diagrammen (separerad för tydlighet).
  */
-function renderSalesProjection(totalSales) {
-    const container = document.getElementById('sales-projection-container');
-    container.innerHTML = `
-        <h3 class="card-title">Interaktiv Försäljningspotential</h3>
-        <p>Fördela din totala fakturerade summa (${totalSales.toLocaleString('sv-SE')} kr) mellan kundtyper för att se potentiell omsättning.</p>
-        <div class="projection-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; margin-top: 1rem;">
-            <div class="projection-inputs">
-                <div class="input-group">
-                    <label>Andel Företag (%)</label>
-                    <input type="number" id="percent-business" class="form-input" value="50">
-                </div>
-                <div class="input-group">
-                    <label>Andel Privat (%)</label>
-                    <input type="number" id="percent-private" class="form-input" value="50">
-                </div>
-                <div id="projection-results" style="margin-top: 1.5rem; font-size: 1.1rem;">
-                    <p>Potentiell omsättning (Företag): <strong id="result-business" class="blue"></strong></p>
-                    <p>Potentiell omsättning (Privat): <strong id="result-private" class="green"></strong></p>
-                </div>
-            </div>
-            <div class="projection-chart" style="position: relative; height: 250px;">
-                <canvas id="projectionPieChart"></canvas>
-            </div>
-        </div>`;
-    
-    const businessInput = document.getElementById('percent-business');
-    const privateInput = document.getElementById('percent-private');
-
-    const updateProjection = (changedInput) => {
-        let businessPercent = parseFloat(businessInput.value) || 0;
-        let privatePercent = parseFloat(privateInput.value) || 0;
-
-        if (changedInput === 'business') {
-            privatePercent = 100 - businessPercent;
-            privateInput.value = privatePercent;
-        } else {
-            businessPercent = 100 - privatePercent;
-            businessInput.value = businessPercent;
-        }
-
-        const businessAmount = totalSales * (businessPercent / 100);
-        const privateAmount = totalSales * (privatePercent / 100);
-
-        document.getElementById('result-business').textContent = `${businessAmount.toLocaleString('sv-SE')} kr`;
-        document.getElementById('result-private').textContent = `${privateAmount.toLocaleString('sv-SE')} kr`;
-
-        updateProjectionChart([businessAmount, privateAmount]);
-    };
-
-    businessInput.addEventListener('input', () => updateProjection('business'));
-    privateInput.addEventListener('input', () => updateProjection('private'));
-    
-    // Initial rendering
-    updateProjection('business');
-}
-
-/**
- * NY FUNKTION: Ritar och uppdaterar cirkeldiagrammet för försäljningspotential.
- * @param {number[]} data - En array med två värden: [företagssumma, privatsumma].
- */
-function updateProjectionChart(data) {
-    const ctx = document.getElementById('projectionPieChart').getContext('2d');
-    if (projectionChartInstance) {
-        projectionChartInstance.data.datasets[0].data = data;
-        projectionChartInstance.update();
-        return;
+function renderMonthlyAndCategoryCharts() {
+    const data = prepareChartData();
+    const monthlyCtx = document.getElementById('monthlyBarChart')?.getContext('2d');
+    if (monthlyCtx) {
+        monthlyChartInstance = new Chart(monthlyCtx, {
+            type: 'bar',
+            data: { labels: data.monthly.labels, datasets: [{ label: 'Intäkter', data: data.monthly.incomeData, backgroundColor: 'rgba(46, 204, 113, 0.7)' }, { label: 'Utgifter', data: data.monthly.expenseData, backgroundColor: 'rgba(231, 76, 60, 0.7)' }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
     }
-    projectionChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: ['Företag', 'Privat'],
-            datasets: [{
-                label: 'Omsättning',
-                data: data,
-                backgroundColor: ['rgba(74, 144, 226, 0.8)', 'rgba(46, 204, 113, 0.8)'],
-                borderColor: ['rgba(74, 144, 226, 1)', 'rgba(46, 204, 113, 1)'],
-                borderWidth: 1,
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                }
-            }
-        }
-    });
+
+    const categoryCtx = document.getElementById('categoryPieChart')?.getContext('2d');
+    if (categoryCtx) {
+        categoryChartInstance = new Chart(categoryCtx, {
+            type: 'pie',
+            data: { labels: data.category.labels, datasets: [{ label: 'Utgifter', data: data.category.data, backgroundColor: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'], hoverOffset: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
 }
 
-
-function renderMonthlyChart(data) {
-    const ctx = document.getElementById('monthlyBarChart').getContext('2d');
-    monthlyChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: data.labels,
-            datasets: [{
-                label: 'Intäkter',
-                data: data.incomeData,
-                backgroundColor: 'rgba(46, 204, 113, 0.7)',
-            }, {
-                label: 'Utgifter',
-                data: data.expenseData,
-                backgroundColor: 'rgba(231, 76, 60, 0.7)',
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true } }
-        }
-    });
-}
-
-function renderCategoryChart(data) {
-    const ctx = document.getElementById('categoryPieChart').getContext('2d');
-    categoryChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: data.labels,
-            datasets: [{
-                label: 'Utgifter',
-                data: data.data,
-                backgroundColor: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'],
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-        }
-    });
-}
-
-// Företagsportal-vyn är oförändrad
+/**
+ * Renderar företagsportalen för användare med flera företag.
+ */
 export async function renderAllCompaniesDashboard() {
-    // ... (denna funktion är oförändrad)
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = renderSpinner();
     try {
