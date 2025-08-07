@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skapa konto | FlowBooks</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-box">
+            <a href="index.html" class="logo-link"><h2 class="logo">FlowBooks</h2></a>
+            <h3>Skapa ditt konto</h3>
+            <p id="auth-error" class="error-message"></p>
+            <div class="input-group"><label for="firstName">Förnamn</label><input type="text" id="firstName" required></div>
+            <div class="input-group"><label for="lastName">Efternamn</label><input type="text" id="lastName" required></div>
+            <div class="input-group"><label for="position">Position/Roll</label><input type="text" id="position" placeholder="T.ex. VD, Konsult..." required></div>
+            <hr style="border: none; border-top: 1px solid var(--border-color); margin: 1.5rem 0;">
+            <div class="input-group"><label for="companyName">Ditt Företagsnamn</label><input type="text" id="companyName" required></div>
+            <div class="input-group"><label for="email">E-post</label><input type="email" id="email" required></div>
+            <div class="input-group"><label for="password">Lösenord</label><input type="password" id="password" placeholder="Minst 6 tecken" required></div>
+            <button id="register-btn" class="btn btn-primary btn-full-width">Skapa konto</button>
+            <p class="auth-switch">Har du redan ett konto? <a href="login.html">Logga in här</a></p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+        import { doc, setDoc, collection, query, where, getDocs, writeBatch, runTransaction, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+        import { auth, db } from './firebase-config.js';
+
+        const registerBtn = document.getElementById('register-btn');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const companyNameInput = document.getElementById('companyName');
+        const firstNameInput = document.getElementById('firstName');
+        const lastNameInput = document.getElementById('lastName');
+        const positionInput = document.getElementById('position');
+        const errorEl = document.getElementById('auth-error');
+
+        // NYTT: Funktion för att kolla efter inbjudan när e-post skrivs in
+        let invitationData = null; // Lagrar eventuell inbjudan
+        emailInput.addEventListener('blur', async () => {
+            const email = emailInput.value.trim().toLowerCase();
+            if (!email) return;
+
+            const invitationsRef = collection(db, 'invitations');
+            const q = query(invitationsRef, where("email", "==", email));
+            const invitationSnapshot = await getDocs(q);
+
+            if (!invitationSnapshot.empty) {
+                invitationData = invitationSnapshot.docs[0].data();
+                companyNameInput.value = invitationData.companyName;
+                companyNameInput.disabled = true; // Lås fältet
+                errorEl.textContent = `Du har bjudits in till ${invitationData.companyName}! Fyll i resten av dina uppgifter.`;
+                errorEl.style.color = 'green';
+            } else {
+                invitationData = null;
+                companyNameInput.value = '';
+                companyNameInput.disabled = false;
+                errorEl.textContent = '';
+            }
+        });
+
+        registerBtn.addEventListener('click', async () => {
+            errorEl.textContent = '';
+            const companyName = companyNameInput.value.trim();
+            const email = emailInput.value.trim().toLowerCase();
+            const password = passwordInput.value;
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+            const position = positionInput.value.trim();
+
+            if (!companyName || !email || !password || !firstName || !lastName || !position) {
+                errorEl.textContent = 'Vänligen fyll i alla fält.';
+                return;
+            }
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                let companyId;
+                let finalCompanyName = companyName;
+
+                if (invitationData) {
+                    // Användaren har en inbjudan, anslut till befintligt företag
+                    companyId = invitationData.companyId;
+                    finalCompanyName = invitationData.companyName;
+                    
+                    // Ta bort inbjudan så den inte kan användas igen
+                    const invitationsRef = collection(db, 'invitations');
+                    const q = query(invitationsRef, where("email", "==", email), where("companyId", "==", companyId));
+                    const invitationSnapshot = await getDocs(q);
+                    if (!invitationSnapshot.empty) {
+                        await deleteDoc(invitationSnapshot.docs[0].ref);
+                    }
+                } else {
+                    // Ingen inbjudan, skapa ett nytt företag
+                    const newCompanyRef = doc(collection(db, 'companies'));
+                    companyId = newCompanyRef.id;
+                    await setDoc(newCompanyRef, {
+                        name: companyName,
+                        ownerId: user.uid,
+                        createdAt: serverTimestamp()
+                    });
+                }
+
+                // Skapa användarens dokument med all information
+                await setDoc(doc(db, "users", user.uid), {
+                    email: user.email,
+                    firstName: firstName,
+                    lastName: lastName,
+                    position: position,
+                    companyId: companyId,
+                    companyName: finalCompanyName,
+                    createdAt: serverTimestamp()
+                });
+
+                await sendEmailVerification(user);
+                window.location.href = `login.html?status=registered&email=${encodeURIComponent(user.email)}`;
+
+            } catch (error) {
+                console.error("Registreringsfel:", error);
+                errorEl.textContent = 'Kunde inte registrera. Kontrollera att e-posten inte redan används.';
+            }
+        });
+    </script>
+</body>
+</html>
