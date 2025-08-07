@@ -1,5 +1,5 @@
 // js/ui/invoices.js
-// Hanterar all logik och rendering för faktureringssidan med full momshantering.
+// KOMPLETT VERSION: Innehåller all befintlig funktionalitet PLUS den nya prisväljaren för produkter.
 import { getState, setState } from '../state.js';
 import { fetchAllCompanyData, saveDocument, deleteDocument } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
@@ -73,8 +73,7 @@ function renderInvoiceList() {
 export function renderInvoiceEditor(invoiceId = null) {
     const { allInvoices } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
-    // Sätt standardmoms till 25% för nya rader
-    invoiceItems = invoice ? invoice.items : [{ description: '', quantity: 1, price: 0, vatRate: 25 }];
+    invoiceItems = invoice ? JSON.parse(JSON.stringify(invoice.items)) : []; // Klona för att undvika state-mutation
 
     const mainView = document.getElementById('main-view');
     const today = new Date().toISOString().slice(0, 10);
@@ -102,7 +101,8 @@ export function renderInvoiceEditor(invoiceId = null) {
             <div class="card">
                 <h3 class="card-title">Fakturarader</h3>
                 <div id="invoice-items-container"></div>
-                <button id="add-item-btn" class="btn btn-secondary" style="margin-top: 1rem;">+ Lägg till rad</button>
+                <button id="add-item-btn" class="btn btn-secondary" style="margin-top: 1rem;">+ Lägg till Egen Rad</button>
+                <button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem; margin-left: 1rem;">+ Lägg till Produkt</button>
             </div>
             
             <div class="invoice-actions-footer">
@@ -112,9 +112,10 @@ export function renderInvoiceEditor(invoiceId = null) {
 
     renderInvoiceItems();
     document.getElementById('add-item-btn').addEventListener('click', () => {
-        invoiceItems.push({ description: '', quantity: 1, price: 0, vatRate: 25 });
+        invoiceItems.push({ productId: null, description: '', quantity: 1, price: 0, vatRate: 25, priceSelection: 'custom' });
         renderInvoiceItems();
     });
+    document.getElementById('add-product-btn').addEventListener('click', showProductSelector);
     document.getElementById('save-invoice-btn').addEventListener('click', () => saveInvoice(invoiceId));
 }
 
@@ -122,23 +123,40 @@ export function renderInvoiceEditor(invoiceId = null) {
  * Renderar tabellen med fakturarader och momssammanställning.
  */
 function renderInvoiceItems() {
+    const { allProducts } = getState();
     const container = document.getElementById('invoice-items-container');
+    
     const tableRows = invoiceItems.map((item, index) => {
-        const lineTotal = item.quantity * item.price;
+        let priceFieldHtml;
+        
+        // Om raden är kopplad till en produkt, visa dropdown
+        if (item.productId) {
+            const product = allProducts.find(p => p.id === item.productId);
+            if (product) {
+                priceFieldHtml = `
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select class="form-input item-price-select" data-index="${index}">
+                            <option value="business" ${item.priceSelection === 'business' ? 'selected' : ''}>Företag (${product.sellingPriceBusiness.toFixed(2)} kr)</option>
+                            <option value="private" ${item.priceSelection === 'private' ? 'selected' : ''}>Privat (${product.sellingPricePrivate.toFixed(2)} kr)</option>
+                            <option value="custom" ${item.priceSelection === 'custom' ? 'selected' : ''}>Valfri summa</option>
+                        </select>
+                        <input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" ${item.priceSelection !== 'custom' ? 'readonly' : ''}>
+                    </div>
+                `;
+            } else { // Om produkten raderats, återgå till vanligt fält
+                 priceFieldHtml = `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" placeholder="0.00">`;
+            }
+        } else { // Vanlig rad utan produktkoppling
+            priceFieldHtml = `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" placeholder="0.00">`;
+        }
+
         return `
         <tr>
-            <td><input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning av tjänst/produkt"></td>
+            <td><input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning"></td>
             <td><input type="number" class="form-input item-quantity" data-index="${index}" value="${item.quantity}" style="width: 80px;"></td>
-            <td><input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" style="width: 120px;" placeholder="0.00"></td>
-            <td>
-                <select class="form-input item-vatRate" data-index="${index}" style="width: 90px;">
-                    <option value="25" ${item.vatRate == 25 ? 'selected' : ''}>25%</option>
-                    <option value="12" ${item.vatRate == 12 ? 'selected' : ''}>12%</option>
-                    <option value="6" ${item.vatRate == 6 ? 'selected' : ''}>6%</option>
-                    <option value="0" ${item.vatRate == 0 ? 'selected' : ''}>0%</option>
-                </select>
-            </td>
-            <td class="text-right">${lineTotal.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</td>
+            <td style="min-width: 320px;">${priceFieldHtml}</td>
+            <td><select class="form-input item-vatRate" data-index="${index}" style="width: 90px;"><option value="25" ${item.vatRate == 25 ? 'selected' : ''}>25%</option><option value="12" ${item.vatRate == 12 ? 'selected' : ''}>12%</option><option value="6" ${item.vatRate == 6 ? 'selected' : ''}>6%</option><option value="0" ${item.vatRate == 0 ? 'selected' : ''}>0%</option></select></td>
+            <td class="text-right">${(item.quantity * item.price).toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</td>
             <td><button class="btn btn-sm btn-danger" data-index="${index}">X</button></td>
         </tr>`;
     }).join('');
@@ -146,37 +164,103 @@ function renderInvoiceItems() {
     const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     const totalVat = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
     const grandTotal = subtotal + totalVat;
-
+    
     container.innerHTML = `
         <table class="data-table">
-            <thead><tr><th>Beskrivning</th><th>Antal</th><th>Pris (exkl. moms)</th><th>Moms</th><th class="text-right">Summa (exkl. moms)</th><th></th></tr></thead>
+            <thead><tr><th>Beskrivning</th><th>Antal</th><th>Pris (exkl. moms)</th><th>Moms</th><th class="text-right">Summa</th><th></th></tr></thead>
             <tbody>${tableRows}</tbody>
             <tfoot>
-                <tr><td colspan="4" class="text-right"><strong>Summa (exkl. moms):</strong></td><td class="text-right"><strong>${subtotal.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</strong></td><td></td></tr>
-                <tr><td colspan="4" class="text-right"><strong>Moms:</strong></td><td class="text-right"><strong>${totalVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</strong></td><td></td></tr>
-                <tr><td colspan="4" class="text-right" style="font-size: 1.2em;"><strong>Totalsumma att betala:</strong></td><td class="text-right" style="font-size: 1.2em;"><strong>${grandTotal.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right"><strong>Summa (exkl. moms):</strong></td><td class="text-right"><strong>${subtotal.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right"><strong>Moms:</strong></td><td class="text-right"><strong>${totalVat.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right" style="font-size: 1.2em;"><strong>Totalsumma:</strong></td><td class="text-right" style="font-size: 1.2em;"><strong>${grandTotal.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
             </tfoot>
         </table>`;
         
-    container.querySelectorAll('input, select').forEach(input => {
-        input.addEventListener('change', updateInvoiceItem);
-    });
+    container.querySelectorAll('input, select').forEach(input => input.addEventListener('change', updateInvoiceItem));
     container.querySelectorAll('.btn-danger').forEach(btn => btn.addEventListener('click', removeInvoiceItem));
+}
+
+
+/**
+ * Visar en modal för att välja en produkt från lagret.
+ */
+function showProductSelector() {
+    const { allProducts } = getState();
+    const modalContainer = document.getElementById('modal-container');
+    const productItems = allProducts.map(p => `
+        <div class="product-selector-item" data-product-id="${p.id}">
+            <img src="${p.imageUrl || 'https://via.placeholder.com/40'}" alt="${p.name}">
+            <div class="product-selector-item-info">
+                <strong>${p.name}</strong>
+                <span>Företag: ${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr | Privat: ${(p.sellingPricePrivate || 0).toLocaleString('sv-SE')} kr</span>
+            </div>
+        </div>`).join('');
+    modalContainer.innerHTML = `
+        <div class="modal-overlay" id="product-selector-overlay">
+            <div class="modal-content">
+                <h3>Välj en produkt</h3>
+                <div class="product-selector-dropdown show">${productItems.length > 0 ? productItems : '<p style="padding: 1rem;">Inga produkter hittades.</p>'}</div>
+                <div class="modal-actions">
+                    <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('product-selector-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'product-selector-overlay') closeModal();
+    });
+    modalContainer.querySelectorAll('.product-selector-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const productId = e.currentTarget.dataset.productId;
+            const product = allProducts.find(p => p.id === productId);
+            if (product) {
+                invoiceItems.push({
+                    productId: product.id,
+                    description: product.name,
+                    quantity: 1,
+                    price: product.sellingPriceBusiness || 0, // Standard till företagspris
+                    vatRate: 25,
+                    priceSelection: 'business' // Sätt standardvalet
+                });
+                renderInvoiceItems();
+            }
+            closeModal();
+        });
+    });
 }
 
 /**
  * Uppdaterar en fakturarad när användaren ändrar ett värde.
  */
 function updateInvoiceItem(event) {
+    const { allProducts } = getState();
     const index = parseInt(event.target.dataset.index);
-    const property = event.target.classList[1].split('-')[1]; // 'description', 'quantity', 'price', 'vatRate'
-    let value = event.target.value;
+    const propertyClass = event.target.classList[1];
+    const item = invoiceItems[index];
 
-    if (event.target.type === 'number' || property === 'vatRate') {
-        value = parseFloat(value) || 0;
+    if (propertyClass === 'item-price-select') {
+        const selection = event.target.value;
+        item.priceSelection = selection;
+        const product = allProducts.find(p => p.id === item.productId);
+        if (product) {
+            if (selection === 'business') {
+                item.price = product.sellingPriceBusiness;
+            } else if (selection === 'private') {
+                item.price = product.sellingPricePrivate;
+            }
+        }
+    } else {
+        const property = propertyClass.split('-')[1];
+        let value = event.target.value;
+        if (event.target.type === 'number' || property === 'vatRate') {
+            value = parseFloat(value) || 0;
+        }
+        item[property] = value;
+        // Om användaren manuellt ändrar priset, sätt valet till "Valfri summa"
+        if (property === 'price' && item.productId) {
+            item.priceSelection = 'custom';
+        }
     }
-    
-    invoiceItems[index][property] = value;
     renderInvoiceItems();
 }
 
