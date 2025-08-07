@@ -38,6 +38,18 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
     const today = new Date().toISOString().slice(0, 10);
     const categoryOptions = categories.map(cat => `<option value="${cat.id}" ${originalData.categoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('');
 
+    // NYTT: Moms-väljare för utgifter
+    const vatSelectorHTML = type === 'expense' ? `
+        <div class="input-group">
+            <label>Moms (VAT)</label>
+            <select id="trans-vat">
+                <option value="0" ${originalData.vatRate === 0 ? 'selected' : ''}>0%</option>
+                <option value="6" ${originalData.vatRate === 6 ? 'selected' : ''}>6%</option>
+                <option value="12" ${originalData.vatRate === 12 ? 'selected' : ''}>12%</option>
+                <option value="25" ${originalData.vatRate === 25 ? 'selected' : ''}>25%</option>
+            </select>
+        </div>` : '';
+
     mainView.innerHTML = `
         <div class="card" style="max-width: 600px; margin: auto;">
             <h3>${title}</h3>
@@ -46,7 +58,8 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
             <div class="input-group"><label>Beskrivning</label><input id="trans-desc" type="text" value="${originalData.description || ''}"></div>
             <div class="input-group"><label>Kategori</label><select id="trans-category"><option value="">Välj...</option>${categoryOptions}</select></div>
             <div class="input-group"><label>Motpart</label><input id="trans-party" type="text" value="${originalData.party || ''}"></div>
-            <div class="input-group"><label>Summa (SEK)</label><input id="trans-amount" type="number" placeholder="0.00" value="${originalData.amount || ''}"></div>
+            <div class="input-group"><label>Summa (inkl. moms)</label><input id="trans-amount" type="number" placeholder="0.00" value="${originalData.amount || ''}"></div>
+            ${vatSelectorHTML}
             <div style="display: flex; gap: 1rem; margin-top: 1rem;">
                 <button id="cancel-btn" class="btn btn-secondary">Avbryt</button>
                 <button id="save-btn" class="btn btn-primary">${isCorrection ? 'Spara Rättelse' : 'Spara'}</button>
@@ -54,13 +67,21 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
         </div>`;
 
     document.getElementById('save-btn').addEventListener('click', () => {
+        const amountInclVat = parseFloat(document.getElementById('trans-amount').value) || 0;
+        const vatRate = type === 'expense' ? parseFloat(document.getElementById('trans-vat').value) : 0;
+        const vatAmount = amountInclVat - (amountInclVat / (1 + vatRate / 100));
+
         const newData = {
             date: document.getElementById('trans-date').value,
             description: document.getElementById('trans-desc').value,
             party: document.getElementById('trans-party').value,
-            amount: parseFloat(document.getElementById('trans-amount').value) || 0,
+            amount: amountInclVat, // Spara totalbeloppet inkl. moms
+            amountExclVat: amountInclVat - vatAmount, // Belopp exkl. moms
+            vatRate: vatRate,
+            vatAmount: vatAmount,
             categoryId: document.getElementById('trans-category').value || null,
         };
+
         if (isCorrection) {
             handleCorrectionSave(type, originalId, originalData, newData);
         } else {
