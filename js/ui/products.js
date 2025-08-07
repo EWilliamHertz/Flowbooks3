@@ -1,9 +1,10 @@
 // js/ui/products.js
-// KOMPLETT OCH KORREKT VERSION: Innehåller all funktionalitet: Prognosverktyg, Google Import, och standardhantering.
+// KOMPLETT OCH KORREKT VERSION: Innehåller all funktionalitet: Prognosverktyg, AI Google Import, och standardhantering.
 import { getState, setState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { pickAndParseSheet } from '../services/google.js';
+import { getProductCategorySuggestion } from '../services/ai.js';
 import { writeBatch, doc, collection, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
@@ -172,7 +173,7 @@ async function handleSheetImport() {
         showToast("Öppnar filväljare...", "info");
         const productsFromSheet = await pickAndParseSheet();
         if (productsFromSheet && productsFromSheet.length > 0) {
-            showImportReviewModal(productsFromSheet);
+            await showImportReviewModal(productsFromSheet);
         }
     } catch (error) {
         console.log("Import avbruten eller misslyckad:", error.message);
@@ -182,41 +183,55 @@ async function handleSheetImport() {
 /**
  * Visar en modal för att granska och bekräfta importen från Google Sheets.
  */
-function showImportReviewModal(products) {
+async function showImportReviewModal(products) {
     const modalContainer = document.getElementById('modal-container');
+    modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Hämtar AI-förslag...</h3>${renderSpinner()}</div></div>`;
+    
+    for(const product of products) {
+        product.suggestedCategoryId = await getProductCategorySuggestion(product.name);
+    }
+    
+    const { categories } = getState();
     const rows = products.map((p, index) => `
         <tr>
             <td><input type="checkbox" class="import-checkbox" data-index="${index}" checked></td>
-            <td><img src="${p.imageUrl || 'https://via.placeholder.com/40'}" alt="${p.name}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;"></td>
+            <td><img src="${p.imageUrl || 'https://via.placeholder.com/40'}" alt="${p.name}" class="product-thumbnail"></td>
             <td>${p.name}</td>
             <td>${p.sellingPriceBusiness.toLocaleString('sv-SE')} kr</td>
-            <td>${p.stock}</td>
+            <td>
+                <select class="form-input import-category" data-index="${index}">
+                    <option value="">Välj kategori...</option>
+                    ${categories.map(cat => `<option value="${cat.id}" ${p.suggestedCategoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('')}
+                </select>
+            </td>
         </tr>
     `).join('');
 
     modalContainer.innerHTML = `
-        <div class="modal-overlay">
-            <div class="modal-content" style="max-width: 800px;">
-                <h3>Granska Produkter för Import</h3>
-                <p>Kalkylarket måste ha rubrikerna: <strong>namn, pris, lager, bild-url</strong>. Bocka ur de produkter du inte vill importera.</p>
-                <div style="max-height: 400px; overflow-y: auto;">
-                    <table class="data-table">
-                        <thead><tr><th>Importera?</th><th>Bild</th><th>Namn</th><th>Pris</th><th>Lager</th></tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>
-                <div class="modal-actions">
-                    <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
-                    <button id="modal-confirm-import" class="btn btn-primary">Importera Valda</button>
-                </div>
+        <div class="modal-overlay"><div class="modal-content" style="max-width: 900px;">
+            <h3>Granska Produkter för Import</h3>
+            <p>AI har föreslagit en inköpskategori för varje produkt.</p>
+            <div style="max-height: 400px; overflow-y: auto;">
+                <table class="data-table">
+                    <thead><tr><th>Importera?</th><th>Bild</th><th>Namn</th><th>Pris</th><th>Kategori</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
             </div>
-        </div>
-    `;
+            <div class="modal-actions">
+                <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
+                <button id="modal-confirm-import" class="btn btn-primary">Importera Valda</button>
+            </div>
+        </div></div>`;
 
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('modal-confirm-import').addEventListener('click', async () => {
         const selectedIndexes = Array.from(document.querySelectorAll('.import-checkbox:checked')).map(cb => parseInt(cb.dataset.index));
-        const productsToSave = selectedIndexes.map(i => products[i]);
+        const productsToSave = selectedIndexes.map(i => {
+            const product = products[i];
+            const categorySelect = document.querySelector(`.import-category[data-index="${i}"]`);
+            product.categoryId = categorySelect ? categorySelect.value : null;
+            return product;
+        });
         
         if (productsToSave.length === 0) {
             showToast("Inga produkter valda.", "warning");
@@ -226,7 +241,7 @@ function showImportReviewModal(products) {
         const batch = writeBatch(db);
         productsToSave.forEach(product => {
             const docRef = doc(collection(db, 'products'));
-            batch.set(docRef, { ...product, sellingPricePrivate: product.sellingPricePrivate || 0 });
+            batch.set(docRef, product);
         });
 
         await batch.commit();
