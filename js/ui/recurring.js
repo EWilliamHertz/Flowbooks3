@@ -1,9 +1,9 @@
 // js/ui/recurring.js
 import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
-import { showToast, renderSpinner, showConfirmationModal } from './utils.js';
+import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
 import { navigateTo } from './navigation.js';
-import { writeBatch, doc, collection } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { writeBatch, doc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
 export function renderRecurringPage() {
@@ -30,17 +30,22 @@ function renderRecurringList() {
         <tr>
             <td>${item.type === 'income' ? 'Intäkt' : 'Utgift'}</td>
             <td>${item.description}</td>
-            <td>${item.party || ''}</td>
             <td class="text-right ${item.type === 'income' ? 'green' : 'red'}">${Number(item.amount).toFixed(2)} kr</td>
             <td>Varje månad</td>
             <td>${item.nextDueDate}</td>
+            <td><button class="btn btn-sm btn-secondary" data-id="${item.id}" data-desc="${item.description}">Visa</button></td>
             <td><button class="btn btn-sm btn-danger" data-id="${item.id}">Ta bort</button></td>
         </tr>`).join('');
     container.innerHTML = `
         <table class="data-table">
-            <thead><tr><th>Typ</th><th>Beskrivning</th><th>Motpart</th><th class="text-right">Summa</th><th>Frekvens</th><th>Nästa Datum</th><th>Åtgärd</th></tr></thead>
+            <thead><tr><th>Typ</th><th>Beskrivning</th><th class="text-right">Summa</th><th>Frekvens</th><th>Nästa Datum</th><th>Historik</th><th>Åtgärd</th></tr></thead>
             <tbody>${rows.length > 0 ? rows : `<tr><td colspan="7" class="text-center">Du har inga återkommande transaktioner.</td></tr>`}</tbody>
         </table>`;
+        
+    container.querySelectorAll('.btn-secondary').forEach(btn => {
+        btn.addEventListener('click', (e) => showHistoryModal(e.target.dataset.id, e.target.dataset.desc));
+    });
+
     container.querySelectorAll('.btn-danger').forEach(btn => {
         btn.addEventListener('click', (e) => {
             showConfirmationModal(async () => {
@@ -112,7 +117,7 @@ async function runRecurringTransactions() {
         for (const item of toCreate) {
             const collectionName = item.type === 'income' ? 'incomes' : 'expenses';
             const docRef = doc(collection(db, collectionName));
-            batch.set(docRef, {
+            const transactionData = {
                 date: item.nextDueDate,
                 description: item.description,
                 party: item.party,
@@ -121,8 +126,9 @@ async function runRecurringTransactions() {
                 companyId: currentCompany.id,
                 createdAt: new Date(),
                 isCorrection: false,
-                generatedFromRecurring: true
-            });
+                generatedFromRecurringId: item.id // NYTT: Kopplar transaktionen till den återkommande posten
+            };
+            batch.set(docRef, transactionData);
             const nextDate = new Date(item.nextDueDate);
             nextDate.setMonth(nextDate.getMonth() + 1);
             batch.update(doc(db, 'recurring', item.id), { nextDueDate: nextDate.toISOString().slice(0, 10) });
@@ -136,5 +142,56 @@ async function runRecurringTransactions() {
     } finally {
         runBtn.disabled = false;
         runBtn.textContent = 'Simulera månadskörning';
+    }
+}
+
+/**
+ * NY FUNKTION: Visar en modal med historik för en återkommande transaktion.
+ */
+async function showHistoryModal(recurringId, description) {
+    const modalContainer = document.getElementById('modal-container');
+    modalContainer.innerHTML = `
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <h3>Historik för "${description}"</h3>
+                <div id="history-content">${renderSpinner()}</div>
+                <div class="modal-actions">
+                    <button id="modal-close" class="btn btn-primary">Stäng</button>
+                </div>
+            </div>
+        </div>`;
+    
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+
+    try {
+        const { currentCompany } = getState();
+        const incomesQuery = query(collection(db, 'incomes'), where('companyId', '==', currentCompany.id), where('generatedFromRecurringId', '==', recurringId));
+        const expensesQuery = query(collection(db, 'expenses'), where('companyId', '==', currentCompany.id), where('generatedFromRecurringId', '==', recurringId));
+
+        const [incomesSnap, expensesSnap] = await Promise.all([getDocs(incomesQuery), getDocs(expensesQuery)]);
+        
+        const historyItems = [
+            ...incomesSnap.docs.map(doc => doc.data()),
+            ...expensesSnap.docs.map(doc => doc.data())
+        ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const historyContent = document.getElementById('history-content');
+        if (historyItems.length > 0) {
+            historyContent.innerHTML = `
+                <ul class="history-list">
+                    ${historyItems.map(item => `
+                        <li class="history-item">
+                            <span>${item.date}</span>
+                            <span class="text-right ${item.amount > 0 ? 'green' : 'red'}">${item.amount.toLocaleString('sv-SE')} kr</span>
+                        </li>
+                    `).join('')}
+                </ul>`;
+        } else {
+            historyContent.innerHTML = '<p>Inga transaktioner har genererats från denna post än.</p>';
+        }
+    } catch (error) {
+        console.error("Kunde inte hämta historik:", error);
+        document.getElementById('history-content').innerHTML = '<p>Kunde inte ladda historik.</p>';
+        showToast("Kunde inte hämta historik.", "error");
     }
 }
