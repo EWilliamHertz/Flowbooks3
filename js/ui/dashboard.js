@@ -7,30 +7,41 @@ import { db } from '../../firebase-config.js';
 // Håller reda på skapade diagraminstanser
 let monthlyChartInstance = null;
 let categoryChartInstance = null;
-let inventoryChartInstance = null;
 
 /**
  * Huvudfunktion för att rendera hela dashboard-vyn.
  */
 export function renderDashboard() {
-    // Förstör gamla diagraminstanser
+    // Förstör gamla diagraminstanser för att undvika minnesläckor
     if (monthlyChartInstance) monthlyChartInstance.destroy();
     if (categoryChartInstance) categoryChartInstance.destroy();
-    if (inventoryChartInstance) inventoryChartInstance.destroy();
 
-    const { allIncomes, allExpenses, allProducts } = getState();
+    const { allIncomes, allExpenses, allProducts, currentCompany } = getState();
 
     // Befintliga beräkningar
     const totalIncome = allIncomes.reduce((sum, doc) => sum + doc.amount, 0);
     const totalExpense = allExpenses.reduce((sum, doc) => sum + doc.amount, 0);
 
-    // NY BERÄKNING: Beräkna det totala potentiella värdet av lagret.
-    // Vi använder "sellingPriceBusiness" som standard för denna huvudnyckeltal.
-    const calculatedInventoryRevenue = allProducts.reduce((sum, p) => {
-        return sum + ((p.stock || 0) * (p.sellingPriceBusiness || 0));
-    }, 0);
+    // NY, KORREKT BERÄKNING:
+    // Hämta den sparade procentuella fördelningen från företagsinställningarna.
+    // Använd 60% för privatkunder som standardvärde om inget är sparat.
+    const privateSplitPercent = currentCompany.inventoryProjectionSplit || 60;
+    const businessSplitPercent = 100 - privateSplitPercent;
+    
+    // Beräkna det totala potentiella värdet av lagret baserat på den sparade fördelningen.
+    let calculatedInventoryRevenue = 0;
+    allProducts.forEach(product => {
+        const stock = product.stock || 0;
+        const businessPrice = product.sellingPriceBusiness || 0;
+        const privatePrice = product.sellingPricePrivate || 0;
+        
+        const businessValue = stock * (businessSplitPercent / 100) * businessPrice;
+        const privateValue = stock * (privateSplitPercent / 100) * privatePrice;
+        
+        calculatedInventoryRevenue += businessValue + privateValue;
+    });
 
-    // NY RESULTATRÄKNING: Inkludera lagervärdet i resultatet.
+    // Uppdaterad resultatberäkning som inkluderar det nya lagervärdet.
     const projectedProfit = (totalIncome + calculatedInventoryRevenue) - totalExpense;
 
     const mainView = document.getElementById('main-view');
@@ -57,8 +68,6 @@ export function renderDashboard() {
             </div>
         </div>
 
-        <div id="inventory-projection-container" class="card" style="margin-bottom: 1.5rem;"></div>
-
         <div class="dashboard-charts">
             <div class="card chart-container">
                 <h3 class="card-title">Intäkter vs Utgifter (Senaste 12 mån)</h3>
@@ -72,125 +81,6 @@ export function renderDashboard() {
     `;
 
     renderMonthlyAndCategoryCharts();
-    renderInventoryProjection();
-}
-
-/**
- * Renderar prognosverktyget för inventariets potential.
- */
-function renderInventoryProjection() {
-    const { allProducts } = getState();
-    const container = document.getElementById('inventory-projection-container');
-    
-    const totalStockValue = allProducts.reduce((sum, p) => sum + ((p.stock || 0) * (p.sellingPriceBusiness || 0)), 0);
-
-    container.innerHTML = `
-        <h3 class="card-title">Prognos för Inventarievärde</h3>
-        <p>Se den potentiella försäljningen från ditt nuvarande lager (totalt värde ca ${totalStockValue.toLocaleString('sv-SE')} kr) genom att fördela försäljningen procentuellt.</p>
-        <div class="projection-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; margin-top: 1rem;">
-            <div class="projection-inputs">
-                <div class="input-group">
-                    <label>Andel såld till Företag (%)</label>
-                    <input type="number" id="percent-business" class="form-input" value="50" min="0" max="100">
-                </div>
-                <div class="input-group">
-                    <label>Andel såld till Privat (%)</label>
-                    <input type="number" id="percent-private" class="form-input" value="50" min="0" max="100">
-                </div>
-                <div id="projection-results" style="margin-top: 1.5rem; font-size: 1.1rem;">
-                    <p>Potentiell omsättning (Företag): <strong id="result-business" class="blue"></strong></p>
-                    <p>Potentiell omsättning (Privat): <strong id="result-private" class="green"></strong></p>
-                </div>
-            </div>
-            <div class="projection-chart" style="position: relative; height: 250px;">
-                <canvas id="inventoryPieChart"></canvas>
-            </div>
-        </div>`;
-    
-    const businessInput = document.getElementById('percent-business');
-    const privateInput = document.getElementById('percent-private');
-
-    const updateProjection = (changedInput) => {
-        let businessPercent = parseFloat(businessInput.value) || 0;
-        let privatePercent = parseFloat(privateInput.value) || 0;
-
-        if (changedInput === 'business') {
-            if (businessPercent > 100) businessPercent = 100;
-            if (businessPercent < 0) businessPercent = 0;
-            privatePercent = 100 - businessPercent;
-            businessInput.value = Math.round(businessPercent);
-            privateInput.value = Math.round(privatePercent);
-        } else {
-            if (privatePercent > 100) privatePercent = 100;
-            if (privatePercent < 0) privatePercent = 0;
-            businessPercent = 100 - privatePercent;
-            privateInput.value = Math.round(privatePercent);
-            businessInput.value = Math.round(businessPercent);
-        }
-
-        let totalBusinessValue = 0;
-        let totalPrivateValue = 0;
-        allProducts.forEach(product => {
-            const stock = product.stock || 0;
-            const businessPrice = product.sellingPriceBusiness || 0;
-            const privatePrice = product.sellingPricePrivate || 0;
-            const businessUnits = stock * (businessPercent / 100);
-            const privateUnits = stock * (privatePercent / 100);
-            totalBusinessValue += businessUnits * businessPrice;
-            totalPrivateValue += privateUnits * privatePrice;
-        });
-
-        document.getElementById('result-business').textContent = `${totalBusinessValue.toLocaleString('sv-SE')} kr`;
-        document.getElementById('result-private').textContent = `${totalPrivateValue.toLocaleString('sv-SE')} kr`;
-        updateInventoryChart([totalBusinessValue, totalPrivateValue]);
-    };
-
-    businessInput.addEventListener('input', () => updateProjection('business'));
-    privateInput.addEventListener('input', () => updateProjection('private'));
-    updateProjection('business');
-}
-
-/**
- * Ritar och uppdaterar cirkeldiagrammet för inventarieprognosen.
- */
-function updateInventoryChart(data) {
-    const ctx = document.getElementById('inventoryPieChart').getContext('2d');
-    if (inventoryChartInstance) {
-        inventoryChartInstance.data.datasets[0].data = data;
-        inventoryChartInstance.update();
-        return;
-    }
-    inventoryChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: ['Företag', 'Privat'],
-            datasets: [{
-                label: 'Potentiell Omsättning',
-                data: data,
-                backgroundColor: ['rgba(74, 144, 226, 0.8)', 'rgba(46, 204, 113, 0.8)'],
-                borderColor: ['rgba(74, 144, 226, 1)', 'rgba(46, 204, 113, 1)'],
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'top' },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.label || '';
-                            if (label) label += ': ';
-                            if (context.parsed !== null) {
-                                label += new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK' }).format(context.parsed);
-                            }
-                            return label;
-                        }
-                    }
-                }
-            }
-        }
-    });
 }
 
 /**
