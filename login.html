@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logga in | FlowBooks</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-box">
+            <a href="index.html" class="logo-link"><h2 class="logo">FlowBooks</h2></a>
+            <h3>Välkommen tillbaka!</h3>
+            
+            <p id="auth-message" class="error-message"></p>
+            
+            <div class="input-group">
+                <label for="email">E-post</label>
+                <input type="email" id="email" required>
+            </div>
+            <div class="input-group">
+                <label for="password">Lösenord</label>
+                <input type="password" id="password" required>
+            </div>
+            
+            <button id="login-btn" class="btn btn-primary btn-full-width">Logga in</button>
+            
+            <div class="auth-links">
+                 <a href="#" id="forgot-password-link">Glömt lösenord?</a>
+                 <a href="#" id="resend-verification-link" style="display: none; margin-left: 10px;">Skicka nytt bekräftelsemejl</a>
+            </div>
+            
+            <p class="auth-switch">Har du inget konto? <a href="register.html">Skapa ett här</a></p>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+        import { auth } from './firebase-config.js';
+
+        // Hämta element från DOM
+        const loginBtn = document.getElementById('login-btn');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const messageEl = document.getElementById('auth-message');
+        const forgotPasswordLink = document.getElementById('forgot-password-link');
+        const resendVerificationLink = document.getElementById('resend-verification-link');
+
+        // NYTT: Kolla efter meddelanden i URL:en när sidan laddas
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const status = urlParams.get('status');
+            const email = urlParams.get('email');
+
+            if (status === 'registered' && email) {
+                messageEl.textContent = `Ett verifieringsmejl har skickats till ${decodeURIComponent(email)}. Klicka på länken i mejlet och logga sedan in.`;
+                messageEl.style.color = 'green'; // Grön färg för framgång
+            }
+        });
+
+
+        // Om en verifierad användare redan är inloggad, skicka direkt till appen
+        onAuthStateChanged(auth, user => {
+            if (user && user.emailVerified) {
+                window.location.href = 'app.html';
+            }
+        });
+
+        // Funktion som hanterar inloggningslogiken
+        const handleLogin = async () => {
+            messageEl.textContent = '';
+            messageEl.style.color = '#e74c3c'; // Röd färg för fel
+            resendVerificationLink.style.display = 'none'; // Göm länken vid varje nytt försök
+
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            if (!email || !password) {
+                messageEl.textContent = 'Vänligen fyll i både e-post och lösenord.';
+                return;
+            }
+
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                
+                if (!userCredential.user.emailVerified) {
+                    messageEl.textContent = 'Verifiera din e-post innan du loggar in. Klicka på länken för att skicka ett nytt mejl.';
+                    messageEl.style.color = '#f39c12'; // Gul färg för varning
+                    
+                    // Visa länken för att skicka nytt mejl
+                    resendVerificationLink.style.display = 'inline';
+                    
+                    // Klonar och ersätter länken för att undvika flera event listeners
+                    const newLink = resendVerificationLink.cloneNode(true);
+                    resendVerificationLink.parentNode.replaceChild(newLink, resendVerificationLink);
+
+                    // Lägg till event listener för att skicka nytt mejl
+                    newLink.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        try {
+                            await sendEmailVerification(userCredential.user);
+                            messageEl.textContent = `Ett nytt bekräftelsemejl har skickats till ${email}.`;
+                            messageEl.style.color = 'green'; // Grön färg för framgång
+                            newLink.style.display = 'none'; // Göm länken igen
+                        } catch (error) {
+                            console.error("Fel vid sändning av verifieringsmejl:", error);
+                            messageEl.textContent = 'Kunde inte skicka nytt bekräftelsemejl. Försök igen om en stund.';
+                            messageEl.style.color = '#e74c3c';
+                        }
+                    });
+
+                    // Logga ut den overifierade användaren så de inte fastnar
+                    await auth.signOut();
+                } else {
+                    // Användaren är verifierad, skicka till appen
+                    window.location.href = 'app.html';
+                }
+            } catch (error) {
+                console.error("Inloggningsfel:", error.code);
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                    messageEl.textContent = 'Fel e-post eller lösenord.';
+                } else {
+                    messageEl.textContent = 'Ett okänt fel uppstod. Försök igen.';
+                }
+            }
+        };
+
+        // Event listener för "Glömt lösenord?"
+        const handlePasswordReset = async (e) => {
+            e.preventDefault();
+            messageEl.textContent = '';
+            resendVerificationLink.style.display = 'none';
+            
+            const email = emailInput.value;
+            if (!email) {
+                messageEl.textContent = 'Fyll i din e-postadress i fältet ovan först.';
+                messageEl.style.color = '#e74c3c';
+                return;
+            }
+
+            try {
+                await sendPasswordResetEmail(auth, email);
+                messageEl.textContent = `En länk för att återställa lösenordet har skickats till ${email}.`;
+                messageEl.style.color = 'green';
+            } catch (error) {
+                console.error("Fel vid återställning:", error.code);
+                messageEl.textContent = 'Kunde inte skicka återställningslänk. Kontrollera att e-postadressen är korrekt.';
+                messageEl.style.color = '#e74c3c';
+            }
+        };
+
+        // Koppla alla event listeners
+        loginBtn.addEventListener('click', handleLogin);
+        forgotPasswordLink.addEventListener('click', handlePasswordReset);
+        
+        passwordInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                handleLogin();
+            }
+        });
+    </script>
+</body>
+</html>
