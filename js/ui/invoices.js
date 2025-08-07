@@ -1,9 +1,10 @@
 // js/ui/invoices.js
-// KOMPLETT VERSION: Innehåller all befintlig funktionalitet PLUS den nya prisväljaren för produkter.
+// KOMPLETT VERSION: Innehåller all funktionalitet, inklusive produktlänkar, "sparar"-status och standardtext.
 import { getState, setState } from '../state.js';
 import { fetchAllCompanyData, saveDocument, deleteDocument } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
 import { navigateTo } from './navigation.js';
+import { attachProductPageEventListeners } from './products.js'; // Importeras för att kunna redigera produkter från fakturavyn
 
 // Importera jsPDF och se till att autoTable-pluginet kan hitta det.
 const { jsPDF } = window.jspdf;
@@ -32,13 +33,13 @@ function renderInvoiceList() {
     const { allInvoices } = getState();
     const container = document.getElementById('invoice-list-container');
 
-    const rows = allInvoices.map(invoice => `
+    const rows = allInvoices.sort((a, b) => b.invoiceNumber - a.invoiceNumber).map(invoice => `
         <tr>
             <td><span class="invoice-status ${invoice.status || 'Utkast'}">${invoice.status || 'Utkast'}</span></td>
             <td>#${invoice.invoiceNumber}</td>
             <td>${invoice.customerName}</td>
             <td>${invoice.dueDate}</td>
-            <td class="text-right">${(invoice.grandTotal || invoice.total || 0).toLocaleString('sv-SE')} kr</td>
+            <td class="text-right">${(invoice.grandTotal || 0).toLocaleString('sv-SE')} kr</td>
             <td>
                 <div class="action-menu">
                     <button class="btn btn-sm btn-secondary" onclick="window.invoiceFunctions.editInvoice('${invoice.id}')">Visa / Redigera</button>
@@ -71,12 +72,15 @@ function renderInvoiceList() {
  * Renderar formuläret för att skapa eller redigera en faktura.
  */
 export function renderInvoiceEditor(invoiceId = null) {
-    const { allInvoices } = getState();
+    const { allInvoices, currentCompany } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
     invoiceItems = invoice ? JSON.parse(JSON.stringify(invoice.items)) : []; // Klona för att undvika state-mutation
 
     const mainView = document.getElementById('main-view');
     const today = new Date().toISOString().slice(0, 10);
+    
+    // Fyll på med standardtext om det är en ny faktura och texten finns i företagsinställningarna.
+    const defaultNotes = invoice ? (invoice.notes || '') : (currentCompany.defaultInvoiceText || '');
 
     mainView.innerHTML = `
         <div class="invoice-editor">
@@ -105,6 +109,11 @@ export function renderInvoiceEditor(invoiceId = null) {
                 <button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem; margin-left: 1rem;">+ Lägg till Produkt</button>
             </div>
             
+            <div class="card">
+                <h3 class="card-title">Villkor och Kommentarer</h3>
+                <textarea id="invoice-notes" class="form-input" rows="4" placeholder="T.ex. information om betalningsvillkor...">${defaultNotes}</textarea>
+            </div>
+            
             <div class="invoice-actions-footer">
                 <button id="save-invoice-btn" class="btn btn-primary">Spara Faktura</button>
             </div>
@@ -116,7 +125,7 @@ export function renderInvoiceEditor(invoiceId = null) {
         renderInvoiceItems();
     });
     document.getElementById('add-product-btn').addEventListener('click', showProductSelector);
-    document.getElementById('save-invoice-btn').addEventListener('click', () => saveInvoice(invoiceId));
+    document.getElementById('save-invoice-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId));
 }
 
 /**
@@ -127,11 +136,14 @@ function renderInvoiceItems() {
     const container = document.getElementById('invoice-items-container');
     
     const tableRows = invoiceItems.map((item, index) => {
+        let descriptionFieldHtml;
         let priceFieldHtml;
         
-        // Om raden är kopplad till en produkt, visa dropdown
+        // Om raden är kopplad till en produkt, gör namnet klickbart och visa en dropdown för pris.
         if (item.productId) {
             const product = allProducts.find(p => p.id === item.productId);
+            descriptionFieldHtml = `<a href="#" class="link-to-product" data-product-id="${item.productId}">${item.description}</a>`;
+
             if (product) {
                 priceFieldHtml = `
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -143,16 +155,17 @@ function renderInvoiceItems() {
                         <input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" ${item.priceSelection !== 'custom' ? 'readonly' : ''}>
                     </div>
                 `;
-            } else { // Om produkten raderats, återgå till vanligt fält
+            } else { // Om produkten raderats, återgå till vanligt fält.
                  priceFieldHtml = `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" placeholder="0.00">`;
             }
         } else { // Vanlig rad utan produktkoppling
+            descriptionFieldHtml = `<input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning">`;
             priceFieldHtml = `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" placeholder="0.00">`;
         }
 
         return `
         <tr>
-            <td><input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning"></td>
+            <td>${descriptionFieldHtml}</td>
             <td><input type="number" class="form-input item-quantity" data-index="${index}" value="${item.quantity}" style="width: 80px;"></td>
             <td style="min-width: 320px;">${priceFieldHtml}</td>
             <td><select class="form-input item-vatRate" data-index="${index}" style="width: 90px;"><option value="25" ${item.vatRate == 25 ? 'selected' : ''}>25%</option><option value="12" ${item.vatRate == 12 ? 'selected' : ''}>12%</option><option value="6" ${item.vatRate == 6 ? 'selected' : ''}>6%</option><option value="0" ${item.vatRate == 0 ? 'selected' : ''}>0%</option></select></td>
@@ -178,8 +191,15 @@ function renderInvoiceItems() {
         
     container.querySelectorAll('input, select').forEach(input => input.addEventListener('change', updateInvoiceItem));
     container.querySelectorAll('.btn-danger').forEach(btn => btn.addEventListener('click', removeInvoiceItem));
+    container.querySelectorAll('.link-to-product').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const productId = e.target.dataset.productId;
+            // Anropar funktionen från products.js för att öppna redigeringsmodalen.
+            attachProductPageEventListeners.renderProductForm(productId);
+        });
+    });
 }
-
 
 /**
  * Visar en modal för att välja en produkt från lagret.
@@ -235,7 +255,7 @@ function showProductSelector() {
 function updateInvoiceItem(event) {
     const { allProducts } = getState();
     const index = parseInt(event.target.dataset.index);
-    const propertyClass = event.target.classList[1];
+    const propertyClass = event.target.classList[1]; // e.g., 'item-quantity'
     const item = invoiceItems[index];
 
     if (propertyClass === 'item-price-select') {
@@ -250,7 +270,7 @@ function updateInvoiceItem(event) {
             }
         }
     } else {
-        const property = propertyClass.split('-')[1];
+        const property = propertyClass.replace('item-', ''); // 'quantity', 'price', etc.
         let value = event.target.value;
         if (event.target.type === 'number' || property === 'vatRate') {
             value = parseFloat(value) || 0;
@@ -276,7 +296,7 @@ function removeInvoiceItem(event) {
 /**
  * Sparar fakturan till Firestore.
  */
-async function saveInvoice(invoiceId = null) {
+async function saveInvoice(btn, invoiceId = null) {
     const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     const totalVat = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
     
@@ -288,6 +308,7 @@ async function saveInvoice(invoiceId = null) {
         subtotal: subtotal,
         totalVat: totalVat,
         grandTotal: subtotal + totalVat,
+        notes: document.getElementById('invoice-notes').value, // Spara den nya texten
         status: 'Utkast', // Alltid sparas som utkast initialt
         invoiceNumber: invoiceId ? getState().allInvoices.find(i => i.id === invoiceId).invoiceNumber : Date.now()
     };
@@ -297,6 +318,10 @@ async function saveInvoice(invoiceId = null) {
         return;
     }
 
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Sparar...";
+
     try {
         await saveDocument('invoices', invoiceData, invoiceId);
         await fetchAllCompanyData();
@@ -305,6 +330,9 @@ async function saveInvoice(invoiceId = null) {
     } catch (error) {
         console.error("Kunde inte spara faktura:", error);
         showToast('Kunde inte spara fakturan.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
     }
 }
 
@@ -328,17 +356,21 @@ async function generateInvoicePDF(invoiceId) {
  * Bygger upp innehållet i PDF-dokumentet.
  */
 function createPdfContent(doc, invoice, company, user) {
+    // Sidhuvud
     doc.setFontSize(22);
     doc.text('Faktura', 190, 20, { align: 'right' });
 
+    // Företagsinformation
     doc.setFontSize(10);
     doc.text(company.name || '', 15, 40);
     doc.text(`Org.nr: ${company.orgNumber || ''}`, 15, 45);
     doc.text(`Utskriven av: ${user.firstName} ${user.lastName}`, 15, 50);
 
+    // Kundinformation
     doc.text('Faktura till:', 130, 40);
     doc.text(invoice.customerName, 130, 45);
 
+    // Fakturadetaljer
     doc.text(`Fakturanummer:`, 130, 60);
     doc.text(`${invoice.invoiceNumber}`, 190, 60, { align: 'right' });
     doc.text(`Fakturadatum:`, 130, 65);
@@ -346,6 +378,7 @@ function createPdfContent(doc, invoice, company, user) {
     doc.text(`Förfallodatum:`, 130, 70);
     doc.text(invoice.dueDate, 190, 70, { align: 'right' });
 
+    // Fakturarader
     const tableBody = invoice.items.map(item => [
         item.description,
         item.quantity,
@@ -359,19 +392,33 @@ function createPdfContent(doc, invoice, company, user) {
         head: [['Beskrivning', 'Antal', 'À-pris (SEK)', 'Moms', 'Summa (SEK)']],
         body: tableBody,
         theme: 'striped',
-        headStyles: { fillColor: [44, 62, 80] },
+        headStyles: { fillColor: [44, 62, 80] }, // Mörkgrå färg för rubriker
     });
 
     const finalY = doc.autoTable.previous.finalY;
+    
+    // Sammanställning
     doc.setFontSize(10);
     doc.text(`Summa (exkl. moms):`, 140, finalY + 10);
     doc.text(`${(invoice.subtotal || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}`, 190, finalY + 10, { align: 'right' });
     doc.text(`Moms:`, 140, finalY + 16);
     doc.text(`${(invoice.totalVat || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}`, 190, finalY + 16, { align: 'right' });
+    
+    // Totalsumma
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
     doc.text(`Att betala:`, 140, finalY + 22);
     doc.text(`${(invoice.grandTotal || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}`, 190, finalY + 22, { align: 'right' });
+    
+    // Standardtext / Kommentarer
+    let finalYWithTotals = finalY + 28;
+    if (invoice.notes) {
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        doc.text("Kommentarer & Villkor:", 15, finalYWithTotals);
+        const splitNotes = doc.splitTextToSize(invoice.notes, 175); // Bryt texten för att passa på sidan
+        doc.text(splitNotes, 15, finalYWithTotals + 5);
+    }
 }
 
 // Gör funktioner globalt tillgängliga så de kan anropas från HTML (onclick)
