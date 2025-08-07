@@ -7,21 +7,31 @@ import { db } from '../../firebase-config.js';
 // Håller reda på skapade diagraminstanser
 let monthlyChartInstance = null;
 let categoryChartInstance = null;
-let inventoryChartInstance = null; // Nytt namn för det nya diagrammet
+let inventoryChartInstance = null;
 
 /**
  * Huvudfunktion för att rendera hela dashboard-vyn.
  */
 export function renderDashboard() {
-    // Förstör gamla diagraminstanser för att undvika minnesläckor
+    // Förstör gamla diagraminstanser
     if (monthlyChartInstance) monthlyChartInstance.destroy();
     if (categoryChartInstance) categoryChartInstance.destroy();
     if (inventoryChartInstance) inventoryChartInstance.destroy();
 
-    const { allIncomes, allExpenses } = getState();
+    const { allIncomes, allExpenses, allProducts } = getState();
+
+    // Befintliga beräkningar
     const totalIncome = allIncomes.reduce((sum, doc) => sum + doc.amount, 0);
     const totalExpense = allExpenses.reduce((sum, doc) => sum + doc.amount, 0);
-    const profit = totalIncome - totalExpense;
+
+    // NY BERÄKNING: Beräkna det totala potentiella värdet av lagret.
+    // Vi använder "sellingPriceBusiness" som standard för denna huvudnyckeltal.
+    const calculatedInventoryRevenue = allProducts.reduce((sum, p) => {
+        return sum + ((p.stock || 0) * (p.sellingPriceBusiness || 0));
+    }, 0);
+
+    // NY RESULTATRÄKNING: Inkludera lagervärdet i resultatet.
+    const projectedProfit = (totalIncome + calculatedInventoryRevenue) - totalExpense;
 
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
@@ -30,13 +40,20 @@ export function renderDashboard() {
                 <h3>Totala Intäkter</h3>
                 <p class="metric-value green">${totalIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
             </div>
+            
+            <div class="card text-center">
+                <h3>Beräknat Lagervärde</h3>
+                <p class="metric-value green">${calculatedInventoryRevenue.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+            </div>
+
             <div class="card text-center">
                 <h3>Totala Utgifter</h3>
                 <p class="metric-value red">${totalExpense.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
             </div>
-            <div class="card text-center">
-                <h3>Resultat</h3>
-                <p class="metric-value ${profit >= 0 ? 'blue' : 'red'}">${profit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+
+            <div class="card text-center" style="grid-column: 1 / -1;">
+                <h3>Projicerat Resultat (inkl. lagervärde)</h3>
+                <p class="metric-value ${projectedProfit >= 0 ? 'blue' : 'red'}">${projectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
             </div>
         </div>
 
@@ -55,7 +72,7 @@ export function renderDashboard() {
     `;
 
     renderMonthlyAndCategoryCharts();
-    renderInventoryProjection(); // Anropa funktionen för det nya prognosverktyget
+    renderInventoryProjection();
 }
 
 /**
@@ -65,7 +82,6 @@ function renderInventoryProjection() {
     const { allProducts } = getState();
     const container = document.getElementById('inventory-projection-container');
     
-    // Beräkna totalt lagervärde för att visa som referens
     const totalStockValue = allProducts.reduce((sum, p) => sum + ((p.stock || 0) * (p.sellingPriceBusiness || 0)), 0);
 
     container.innerHTML = `
@@ -98,7 +114,6 @@ function renderInventoryProjection() {
         let businessPercent = parseFloat(businessInput.value) || 0;
         let privatePercent = parseFloat(privateInput.value) || 0;
 
-        // Synka de två textrutorna
         if (changedInput === 'business') {
             if (businessPercent > 100) businessPercent = 100;
             if (businessPercent < 0) businessPercent = 0;
@@ -113,33 +128,25 @@ function renderInventoryProjection() {
             businessInput.value = Math.round(businessPercent);
         }
 
-        // KÄRNLOGIK: Beräkna värdet baserat på lagersaldo och priser per produkt
         let totalBusinessValue = 0;
         let totalPrivateValue = 0;
-
         allProducts.forEach(product => {
             const stock = product.stock || 0;
             const businessPrice = product.sellingPriceBusiness || 0;
             const privatePrice = product.sellingPricePrivate || 0;
-
             const businessUnits = stock * (businessPercent / 100);
             const privateUnits = stock * (privatePercent / 100);
-
             totalBusinessValue += businessUnits * businessPrice;
             totalPrivateValue += privateUnits * privatePrice;
         });
 
-        // Uppdatera siffrorna och diagrammet
         document.getElementById('result-business').textContent = `${totalBusinessValue.toLocaleString('sv-SE')} kr`;
         document.getElementById('result-private').textContent = `${totalPrivateValue.toLocaleString('sv-SE')} kr`;
-
         updateInventoryChart([totalBusinessValue, totalPrivateValue]);
     };
 
     businessInput.addEventListener('input', () => updateProjection('business'));
     privateInput.addEventListener('input', () => updateProjection('private'));
-    
-    // Kör en första gång för att rendera initial vyn
     updateProjection('business');
 }
 
@@ -191,8 +198,6 @@ function updateInventoryChart(data) {
  */
 function prepareChartData() {
     const { allIncomes, allExpenses, categories } = getState();
-
-    // Data för Stapeldiagram
     const monthlyData = {};
     const monthLabels = [];
     for (let i = 11; i >= 0; i--) {
@@ -213,8 +218,6 @@ function prepareChartData() {
     });
     const incomeValues = Object.values(monthlyData).map(d => d.income);
     const expenseValues = Object.values(monthlyData).map(d => d.expense);
-
-    // Data för Cirkeldiagram
     const categoryData = {};
     allExpenses.forEach(expense => {
         const categoryId = expense.categoryId || 'uncategorized';
@@ -225,16 +228,14 @@ function prepareChartData() {
         return categories.find(c => c.id === id)?.name || 'Okänd Kategori';
     });
     const categoryValues = Object.values(categoryData);
-
     return {
         monthly: { labels: monthLabels, incomeData: incomeValues, expenseData: expenseValues },
         category: { labels: categoryLabels, data: categoryValues }
     };
 }
 
-
 /**
- * Funktion för att rita de andra diagrammen (separerad för tydlighet).
+ * Funktion för att rita de andra diagrammen.
  */
 function renderMonthlyAndCategoryCharts() {
     const data = prepareChartData();
