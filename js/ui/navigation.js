@@ -6,7 +6,7 @@ import { fetchAllCompanyData } from '../services/firestore.js';
 
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage, attachProductPageEventListeners } from './products.js';
-// KORRIGERING HÄR: Tog bort extra 'from'
+// KORRIGERING: Tog bort felaktigt 'from'
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
 import { renderTeamPage } from './team.js';
 import { renderSettingsPage } from './settings.js';
