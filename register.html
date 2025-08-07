@@ -53,7 +53,7 @@
                 if (inviteSnap.exists()) {
                     invitationData = inviteSnap.data();
                     companyNameInput.value = invitationData.companyName;
-                    companyNameInput.disabled = true; // Lås fältet
+                    companyNameInput.disabled = true; // Lås fältet så det inte kan ändras
                     errorEl.textContent = `Välkommen! Du har bjudits in till ${invitationData.companyName}. Fyll i resten av dina uppgifter.`;
                     errorEl.style.color = 'green';
                 } else {
@@ -76,6 +76,9 @@
                 return;
             }
 
+            registerBtn.disabled = true;
+            registerBtn.textContent = 'Registrerar...';
+
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
@@ -91,7 +94,9 @@
                     // Ta bort inbjudan så den inte kan användas igen
                     const urlParams = new URLSearchParams(window.location.search);
                     const inviteId = urlParams.get('invite');
-                    await deleteDoc(doc(db, 'invitations', inviteId));
+                    if (inviteId) {
+                        await deleteDoc(doc(db, 'invitations', inviteId));
+                    }
 
                 } else {
                     // Ingen inbjudan, skapa ett nytt företag
@@ -123,9 +128,15 @@
                 console.error("Registreringsfel:", error);
                 if (error.code === 'auth/email-already-in-use') {
                     errorEl.textContent = 'E-postadressen används redan. Vänligen logga in.';
-                } else {
+                } else if (error.code === 'auth/weak-password') {
+                    errorEl.textContent = 'Lösenordet är för svagt. Det måste vara minst 6 tecken.';
+                }
+                else {
                     errorEl.textContent = 'Kunde inte registrera. Kontrollera att alla fält är korrekta.';
                 }
+            } finally {
+                registerBtn.disabled = false;
+                registerBtn.textContent = 'Skapa konto';
             }
         });
     </script>
