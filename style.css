@@ -451,3 +451,18 @@ tr.corrected td { font-style: italic; }
 .history-item:last-child {
     border-bottom: none;
 }
+/* =================================================================
+   16. Generella Formulärförbättringar
+   ================================================================= */
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.modal-content hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 1.5rem 0;
+}
