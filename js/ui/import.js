@@ -5,7 +5,7 @@ import { getState } from '../state.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, renderSpinner } from './utils.js';
 import { navigateTo } from './navigation.js';
-import { getCategorySuggestion } from '../services/ai.js'; // Importera den nya AI-funktionen
+import { getCategorySuggestion } from '../services/ai.js';
 
 export function renderImportPage() {
     const mainView = document.getElementById('main-view');
@@ -13,7 +13,7 @@ export function renderImportPage() {
         <div class="card">
             <h3>Importera Transaktioner</h3>
             <p>Ladda upp en CSV-fil. Kolumner: <strong>Datum, Typ, Beskrivning, Motpart, Summa (SEK)</strong>.</p>
-            <p>Vår AI-assistent kommer automatiskt att föreslå en kategori för varje transaktion.</p>
+            <p>Vår AI-assistent kommer automatiskt att föreslå en kategori för dina utgifter.</p>
             <hr style="margin: 1rem 0;">
             <h4>Ladda upp fil</h4>
             <input type="file" id="csv-file-input" accept=".csv" style="display: block; margin-top: 1rem;">
@@ -42,9 +42,8 @@ async function processFileContent(text) {
     try {
         const transactions = parseCSV(text);
 
-        // Hämta AI-förslag för varje utgiftstransaktion
+        // Hämta AI-förslag endast för utgifter, eftersom AI:n är tränad för det.
         for (const t of transactions) {
-            // Vi hämtar bara förslag för utgifter, eftersom intäkter sällan kategoriseras på samma sätt.
             if (t.type.toLowerCase() === 'utgift') {
                 t.suggestedCategoryId = await getCategorySuggestion(t);
             }
@@ -82,18 +81,18 @@ function parseCSV(text) {
     
     const transactions = [];
     for (let i = 1; i < lines.length; i++) {
-        const data = lines[i].split(',');
-        const type = data[idx.type]?.trim().toLowerCase();
+        const data = lines[i].split(',').map(d => d.trim());
+        const type = data[idx.type]?.toLowerCase();
         if (type !== 'intäkt' && type !== 'utgift') continue;
         
         const amount = parseFloat(data[idx.amount]?.replace(/"/g, '').replace(/\s/g, '').replace(',', '.'));
         if (isNaN(amount)) continue;
 
         transactions.push({
-            date: data[idx.date]?.trim(),
+            date: data[idx.date],
             type: type.charAt(0).toUpperCase() + type.slice(1),
-            description: data[idx.description]?.trim(),
-            party: data[idx.party]?.trim() || '',
+            description: data[idx.description],
+            party: data[idx.party] || '',
             amount: Math.abs(amount),
             id: `import-${i}`
         });
@@ -103,8 +102,16 @@ function parseCSV(text) {
 
 function showImportConfirmationModal(transactions) {
     const { categories } = getState();
+    
+    const transactionRows = transactions.map((t, index) => {
+        // Skapa kategoriväljaren
+        const categorySelector = `
+            <select class="form-input import-category" data-transaction-index="${index}">
+                <option value="">Välj kategori...</option>
+                ${categories.map(cat => `<option value="${cat.id}" ${t.suggestedCategoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('')}
+            </select>`;
 
-    const transactionRows = transactions.map((t, index) => `
+        return `
         <tr>
             <td><input type="checkbox" class="import-checkbox" data-transaction-index="${index}" checked></td>
             <td>${t.date}</td>
@@ -112,14 +119,9 @@ function showImportConfirmationModal(transactions) {
             <td>${t.party}</td>
             <td class="${t.type === 'Intäkt' ? 'green' : 'red'}">${t.type}</td>
             <td class="text-right">${t.amount.toFixed(2)} kr</td>
-            <td>
-                ${t.type === 'Utgift' ? `
-                <select class="form-input import-category" data-transaction-index="${index}">
-                    <option value="">Välj kategori...</option>
-                    ${categories.map(cat => `<option value="${cat.id}" ${t.suggestedCategoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('')}
-                </select>` : 'N/A'}
-            </td>
-        </tr>`).join('');
+            <td>${categorySelector}</td> 
+        </tr>`;
+    }).join('');
     
     const modalHtml = `
         <div class="modal-overlay">
@@ -128,7 +130,7 @@ function showImportConfirmationModal(transactions) {
                 <p>Bocka ur de rader du inte vill importera. Vår AI har föreslagit kategorier för utgifter.</p>
                 <div style="max-height: 500px; overflow-y: auto;">
                     <table class="data-table">
-                        <thead><tr><th><input type="checkbox" id="select-all-checkbox" checked></th><th>Datum</th><th>Beskrivning</th><th>Motpart</th><th>Typ</th><th class="text-right">Summa</th><th>Kategori (för utgifter)</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" id="select-all-checkbox" checked></th><th>Datum</th><th>Beskrivning</th><th>Motpart</th><th>Typ</th><th class="text-right">Summa</th><th>Kategori</th></tr></thead>
                         <tbody>${transactionRows}</tbody>
                     </table>
                 </div>
@@ -147,9 +149,11 @@ function showImportConfirmationModal(transactions) {
     document.getElementById('modal-confirm-import').addEventListener('click', () => handleImportConfirm(transactions));
 }
 
+
 async function handleImportConfirm(transactions) {
     const { currentUser, currentCompany } = getState();
     const selectedIndexes = Array.from(document.querySelectorAll('.import-checkbox:checked')).map(cb => parseInt(cb.dataset.transactionIndex));
+    
     const toSave = selectedIndexes.map(index => {
         const transaction = transactions[index];
         const categorySelect = document.querySelector(`.import-category[data-transaction-index="${index}"]`);
@@ -159,12 +163,6 @@ async function handleImportConfirm(transactions) {
 
     if (toSave.length === 0) {
         showToast("Inga transaktioner valda.", "warning");
-        return;
-    }
-    
-    const hasUncategorizedExpense = toSave.some(t => t.type === 'Utgift' && !t.categoryId);
-    if (hasUncategorizedExpense) {
-        showToast("Vänligen välj en kategori för alla valda utgifter.", "warning");
         return;
     }
 
@@ -185,11 +183,10 @@ async function handleImportConfirm(transactions) {
                 userId: currentUser.uid,
                 companyId: currentCompany.id,
                 createdAt: new Date(),
-                isCorrection: false
+                isCorrection: false,
+                // Lägg bara till categoryId om ett val har gjorts
+                ...(t.categoryId && { categoryId: t.categoryId })
             };
-            if(t.categoryId) {
-                data.categoryId = t.categoryId;
-            }
             batch.set(docRef, data);
         });
         await batch.commit();
