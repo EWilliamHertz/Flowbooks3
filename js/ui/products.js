@@ -1,5 +1,5 @@
 // js/ui/products.js
-// KOMPLETT VERSION: Innehåller all befintlig funktionalitet (inkl. Google Import) PLUS det nya prognosverktyget.
+// KOMPLETT OCH KORREKT VERSION: Innehåller all funktionalitet: Prognosverktyg, Google Import, och standardhantering.
 import { getState, setState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
@@ -19,7 +19,7 @@ export function renderProductsPage() {
     const { allProducts } = getState();
     const mainView = document.getElementById('main-view');
 
-    // Sätter upp ALLA knappar för denna sida
+    // Sätter upp ALLA knappar för denna sida: Ny Produkt + Importera
     const newItemBtn = document.getElementById('new-item-btn');
     newItemBtn.innerHTML = `
         <button id="add-new-product-btn" class="btn btn-primary">Ny Produkt</button>
@@ -58,7 +58,6 @@ export function renderProductsPage() {
 
     renderInventoryProjection(); // Anropa funktionen som ritar upp prognosverktyget
 }
-
 
 /**
  * Renderar prognosverktyget för inventariets potential på produktsidan.
@@ -165,8 +164,9 @@ function updateInventoryChart(data) {
     });
 }
 
-
-// --- GOOGLE SHEETS IMPORT FUNKTIONALITET (oförändrad från din version) ---
+/**
+ * Startar importflödet från Google Sheets.
+ */
 async function handleSheetImport() {
     try {
         showToast("Öppnar filväljare...", "info");
@@ -179,6 +179,9 @@ async function handleSheetImport() {
     }
 }
 
+/**
+ * Visar en modal för att granska och bekräfta importen från Google Sheets.
+ */
 function showImportReviewModal(products) {
     const modalContainer = document.getElementById('modal-container');
     const rows = products.map((p, index) => `
@@ -234,7 +237,9 @@ function showImportReviewModal(products) {
     });
 }
 
-// --- STANDARD PRODUKTHANTERING (oförändrad från din version) ---
+/**
+ * Renderar modalen för att skapa eller redigera en enskild produkt.
+ */
 function renderProductForm(productId = null) {
     const { allProducts } = getState();
     const product = productId ? allProducts.find(p => p.id === productId) : null;
@@ -270,6 +275,9 @@ function renderProductForm(productId = null) {
     });
 }
 
+/**
+ * Sparar en enskild produkt till databasen.
+ */
 async function saveProductHandler(productId = null) {
     const productData = {
         name: document.getElementById('product-name').value,
@@ -295,6 +303,9 @@ async function saveProductHandler(productId = null) {
     }
 }
 
+/**
+ * Raderar en produkt från databasen.
+ */
 function deleteProductHandler(productId) {
     showConfirmationModal(async () => {
         try {
