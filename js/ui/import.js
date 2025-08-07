@@ -1,19 +1,19 @@
 // js/ui/import.js
-// KOMPLETT VERSION: Använder en avancerad AI-funktion för att föreslå alla produktattribut.
+// KOMPLETT OCH KORRIGERAD VERSION: Använder en avancerad AI och en smartare CSV-läsare.
 import { writeBatch, doc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 import { getState } from '../state.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, renderSpinner } from './utils.js';
 import { navigateTo } from './navigation.js';
-import { getAIProductDetails } from '../services/ai.js'; // Använder den nya, smarta AI-funktionen
+import { getAIProductDetails } from '../services/ai.js';
 
 export function renderImportPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
         <div class="card" style="max-width: 700px; margin: auto;">
             <h3>Importera Produkter med AI</h3>
-            <p>Ladda upp en enkel CSV-fil med en enda kolumn: <strong>Produktnamn</strong>. Vår AI kommer att analysera namnen och föreslå fullständiga produktprofiler inklusive priser, lager och bilder, som du sedan kan granska och justera.</p>
+            <p>Ladda upp en CSV-fil från din leverantör. Systemet letar automatiskt efter en kolumn som heter <strong>"Product Name"</strong> för att analysera dina produkter.</p>
             <hr style="margin: 1rem 0;">
             <h4>Ladda upp CSV-fil</h4>
             <input type="file" id="product-csv-input" accept=".csv" style="display: block; margin-top: 1rem;">
@@ -34,19 +34,18 @@ async function processFileContent(text) {
     modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Analyserar produkter med AI...</h3><p>Detta kan ta en liten stund.</p>${renderSpinner()}</div></div>`;
 
     try {
-        const productNames = parseCSV(text);
+        const productNames = parseProductCSV(text);
         if (productNames.length === 0) {
             closeModal();
-            showToast("Inga produktnamn hittades i filen.", "warning");
+            showToast("Kunde inte hitta några produktnamn i filen. Kontrollera att filen har en kolumn som heter 'Product Name'.", "warning");
             return;
         }
 
-        // Anropa AI för varje produktnamn för att få fullständiga detaljer
         const productSuggestions = await Promise.all(
             productNames.map(name => getAIProductDetails(name))
         );
         
-        showImportConfirmationModal(productSuggestions.filter(p => p)); // Filtrera bort eventuella misslyckade anrop
+        showImportConfirmationModal(productSuggestions.filter(p => p));
 
     } catch (error) {
         closeModal();
@@ -54,10 +53,31 @@ async function processFileContent(text) {
     }
 }
 
-function parseCSV(text) {
-    // Förväntar sig en enkel CSV med en kolumn för produktnamn
-    return text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line.length > 0);
+/**
+ * Smartare CSV-parser som letar efter en 'Product Name'-kolumn.
+ * @param {string} text - Innehållet från CSV-filen.
+ * @returns {Array<string>} En lista med produktnamn.
+ */
+function parseProductCSV(text) {
+    const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+    if (lines.length < 2) return [];
+
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+    const nameIndex = header.indexOf('product name');
+
+    if (nameIndex === -1) {
+        throw new Error("CSV-filen måste innehålla en kolumn med rubriken 'Product Name'.");
+    }
+
+    const productNames = lines.slice(1).map(line => {
+        // Enkel CSV-split, kan vara bräcklig för komplexa CSV men fungerar för exemplet.
+        const columns = line.split(',');
+        return columns[nameIndex] ? columns[nameIndex].replace(/"/g, '').trim() : null;
+    }).filter(name => name); // Filtrera bort tomma rader
+
+    return productNames;
 }
+
 
 function showImportConfirmationModal(products) {
     const modalContainer = document.getElementById('modal-container');
