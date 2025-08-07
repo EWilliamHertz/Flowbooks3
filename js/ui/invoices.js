@@ -5,6 +5,7 @@ import { fetchAllCompanyData, saveDocument, deleteDocument } from '../services/f
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
 import { navigateTo } from './navigation.js';
 
+
 // Importera jsPDF-biblioteken från CDN (förutsätter att de finns i app.html)
 const { jsPDF } = window.jspdf;
 
