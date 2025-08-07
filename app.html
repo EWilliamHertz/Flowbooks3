@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | FlowBooks</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://apis.google.com/js/api.js"></script>
+</head>
+<body>
+    <div id="app-container" style="visibility: hidden;">
+        <aside class="sidebar">
+            <div class="sidebar-header"><h2 class="logo">FlowBooks</h2></div>
+            <nav class="sidebar-nav">
+                <ul>
+                    <li><a href="#" class="active" data-page="Översikt">Översikt</a></li>
+                    <li><a href="#" data-page="Översikt Alla Företag">Företagsportal</a></li>
+                    <li><a href="#" data-page="Sammanfattning">Sammanfattning</a></li>
+                    <li><a href="#" data-page="Fakturor">Fakturor</a></li>
+                    <li><a href="#" data-page="Intäkter">Intäkter</a></li>
+                    <li><a href="#" data-page="Utgifter">Utgifter</a></li>
+                    <li><a href="#" data-page="Återkommande">Återkommande</a></li>
+                    <li><a href="#" data-page="Produkter">Produkter</a></li>
+                    <li><a href="#" data-page="Team">Team</a></li>
+                    <li><a href="#" data-page="Rapporter">Rapporter</a></li>
+                    <li><a href="#" data-page="Importera">Importera Data</a></li>
+                    <li><a href="#" data-page="Inställningar">Inställningar</a></li>
+                </ul>
+            </nav>
+        </aside>
+        <div class="main-content">
+            <header class="main-header">
+                <div class="header-left">
+                    <button id="hamburger-btn" class="hamburger-menu">
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                    </button>
+                    <h1 class="page-title">Översikt</h1>
+                </div>
+                <div class="header-right">
+                    <div class="company-selector" style="margin-right: 15px;">
+                        <select id="company-selector" class="form-input" style="min-width: 200px;"></select>
+                    </div>
+                    <button id="new-item-btn" class="btn btn-primary" style="display: none;"></button>
+                    <div class="profile-container">
+                        <div id="user-profile-icon" class="user-profile"></div>
+                        <div id="profile-dropdown" class="profile-dropdown">
+                            <a href="#" id="settings-link">Inställningar</a>
+                            <a href="#" id="logout-btn">Logga ut</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <main id="main-view"></main>
+        </div>
+    </div>
+
+    <div id="modal-container"></div>
+    <div id="toast-container"></div>
+    
+    <script src="js/app.js" type="module"></script>
+</body>
+</html>
