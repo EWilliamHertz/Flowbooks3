@@ -1,15 +1,15 @@
 // js/ui/invoices.js
-// Hanterar all logik och rendering för faktureringssidan.
+// Hanterar all logik och rendering för faktureringssidan med full momshantering.
 import { getState, setState } from '../state.js';
 import { fetchAllCompanyData, saveDocument, deleteDocument } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
 import { navigateTo } from './navigation.js';
 
-
-// Importera jsPDF-biblioteken från CDN (förutsätter att de finns i app.html)
+// Importera jsPDF och se till att autoTable-pluginet kan hitta det.
 const { jsPDF } = window.jspdf;
 
-let invoiceItems = []; // Håller reda på raderna i faktura-redigeraren
+// Håller reda på raderna i faktura-redigeraren
+let invoiceItems = [];
 
 /**
  * Huvudfunktion för att rendera fakturasidan.
@@ -29,16 +29,16 @@ export function renderInvoicesPage() {
  * Renderar listan med alla fakturor.
  */
 function renderInvoiceList() {
-    const { allInvoices } = getState(); // Antag att fakturor laddas in i state
+    const { allInvoices } = getState();
     const container = document.getElementById('invoice-list-container');
 
     const rows = allInvoices.map(invoice => `
         <tr>
-            <td><span class="invoice-status ${invoice.status}">${invoice.status}</span></td>
+            <td><span class="invoice-status ${invoice.status || 'Utkast'}">${invoice.status || 'Utkast'}</span></td>
             <td>#${invoice.invoiceNumber}</td>
             <td>${invoice.customerName}</td>
             <td>${invoice.dueDate}</td>
-            <td class="text-right">${invoice.total.toLocaleString('sv-SE')} kr</td>
+            <td class="text-right">${(invoice.grandTotal || invoice.total || 0).toLocaleString('sv-SE')} kr</td>
             <td>
                 <div class="action-menu">
                     <button class="btn btn-sm btn-secondary" onclick="window.invoiceFunctions.editInvoice('${invoice.id}')">Visa / Redigera</button>
@@ -57,7 +57,7 @@ function renderInvoiceList() {
                     <th>Fakturanr.</th>
                     <th>Kund</th>
                     <th>Förfallodatum</th>
-                    <th class="text-right">Summa</th>
+                    <th class="text-right">Summa (inkl. moms)</th>
                     <th>Åtgärder</th>
                 </tr>
             </thead>
@@ -71,9 +71,10 @@ function renderInvoiceList() {
  * Renderar formuläret för att skapa eller redigera en faktura.
  */
 export function renderInvoiceEditor(invoiceId = null) {
-    const { allInvoices, allProducts } = getState();
+    const { allInvoices } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
-    invoiceItems = invoice ? invoice.items : [{ description: '', quantity: 1, price: 0 }];
+    // Sätt standardmoms till 25% för nya rader
+    invoiceItems = invoice ? invoice.items : [{ description: '', quantity: 1, price: 0, vatRate: 25 }];
 
     const mainView = document.getElementById('main-view');
     const today = new Date().toISOString().slice(0, 10);
@@ -82,18 +83,18 @@ export function renderInvoiceEditor(invoiceId = null) {
         <div class="invoice-editor">
             <div class="card">
                 <h3>${invoiceId ? `Redigera Faktura #${invoice.invoiceNumber}` : 'Skapa Ny Faktura'}</h3>
-                <div class="invoice-form-grid">
-                    <div class="input-group">
-                        <label>Kundnamn</label>
-                        <input id="customerName" value="${invoice?.customerName || ''}">
-                    </div>
+                <div class="input-group">
+                    <label>Kundnamn</label>
+                    <input id="customerName" class="form-input" value="${invoice?.customerName || ''}">
+                </div>
+                <div class="invoice-form-grid" style="margin-top: 1rem;">
                     <div class="input-group">
                         <label>Fakturadatum</label>
-                        <input id="invoiceDate" type="date" value="${invoice?.invoiceDate || today}">
+                        <input id="invoiceDate" type="date" class="form-input" value="${invoice?.invoiceDate || today}">
                     </div>
-                     <div class="input-group">
+                    <div class="input-group">
                         <label>Förfallodatum</label>
-                        <input id="dueDate" type="date" value="${invoice?.dueDate || today}">
+                        <input id="dueDate" type="date" class="form-input" value="${invoice?.dueDate || today}">
                     </div>
                 </div>
             </div>
@@ -105,84 +106,77 @@ export function renderInvoiceEditor(invoiceId = null) {
             </div>
             
             <div class="invoice-actions-footer">
-                <button id="save-draft-btn" class="btn btn-secondary">Spara som utkast</button>
-                <button id="save-invoice-btn" class="btn btn-primary">Spara och Skicka</button>
+                <button id="save-invoice-btn" class="btn btn-primary">Spara Faktura</button>
             </div>
         </div>`;
 
     renderInvoiceItems();
     document.getElementById('add-item-btn').addEventListener('click', () => {
-        invoiceItems.push({ description: '', quantity: 1, price: 0 });
+        invoiceItems.push({ description: '', quantity: 1, price: 0, vatRate: 25 });
         renderInvoiceItems();
     });
     document.getElementById('save-invoice-btn').addEventListener('click', () => saveInvoice(invoiceId));
 }
 
 /**
- * Renderar tabellen med fakturarader i redigeringsläget.
+ * Renderar tabellen med fakturarader och momssammanställning.
  */
 function renderInvoiceItems() {
-    const { allProducts } = getState();
     const container = document.getElementById('invoice-items-container');
-    const productOptions = allProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-
-    const tableRows = invoiceItems.map((item, index) => `
+    const tableRows = invoiceItems.map((item, index) => {
+        const lineTotal = item.quantity * item.price;
+        return `
         <tr>
-            <td>
-                <select class="form-input item-product" data-index="${index}">
-                    <option value="">Välj produkt...</option>
-                    ${productOptions}
-                </select>
-                <input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning">
-            </td>
+            <td><input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning av tjänst/produkt"></td>
             <td><input type="number" class="form-input item-quantity" data-index="${index}" value="${item.quantity}" style="width: 80px;"></td>
-            <td><input type="number" class="form-input item-price" data-index="${index}" value="${item.price}" style="width: 120px;"></td>
-            <td class="text-right">${(item.quantity * item.price).toLocaleString('sv-SE')} kr</td>
+            <td><input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" style="width: 120px;" placeholder="0.00"></td>
+            <td>
+                <select class="form-input item-vatRate" data-index="${index}" style="width: 90px;">
+                    <option value="25" ${item.vatRate == 25 ? 'selected' : ''}>25%</option>
+                    <option value="12" ${item.vatRate == 12 ? 'selected' : ''}>12%</option>
+                    <option value="6" ${item.vatRate == 6 ? 'selected' : ''}>6%</option>
+                    <option value="0" ${item.vatRate == 0 ? 'selected' : ''}>0%</option>
+                </select>
+            </td>
+            <td class="text-right">${lineTotal.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</td>
             <td><button class="btn btn-sm btn-danger" data-index="${index}">X</button></td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 
-    const total = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    const totalVat = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
+    const grandTotal = subtotal + totalVat;
 
     container.innerHTML = `
         <table class="data-table">
-            <thead><tr><th>Beskrivning</th><th>Antal</th><th>Pris</th><th class="text-right">Summa</th><th></th></tr></thead>
+            <thead><tr><th>Beskrivning</th><th>Antal</th><th>Pris (exkl. moms)</th><th>Moms</th><th class="text-right">Summa (exkl. moms)</th><th></th></tr></thead>
             <tbody>${tableRows}</tbody>
             <tfoot>
-                <tr>
-                    <td colspan="3" class="text-right"><strong>Total summa:</strong></td>
-                    <td class="text-right"><strong>${total.toLocaleString('sv-SE')} kr</strong></td>
-                    <td></td>
-                </tr>
+                <tr><td colspan="4" class="text-right"><strong>Summa (exkl. moms):</strong></td><td class="text-right"><strong>${subtotal.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right"><strong>Moms:</strong></td><td class="text-right"><strong>${totalVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right" style="font-size: 1.2em;"><strong>Totalsumma att betala:</strong></td><td class="text-right" style="font-size: 1.2em;"><strong>${grandTotal.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</strong></td><td></td></tr>
             </tfoot>
         </table>`;
-
-    // Add event listeners
-    container.querySelectorAll('.item-product, .item-description, .item-quantity, .item-price').forEach(input => {
+        
+    container.querySelectorAll('input, select').forEach(input => {
         input.addEventListener('change', updateInvoiceItem);
     });
-    container.querySelectorAll('.btn-danger').forEach(btn => {
-        btn.addEventListener('click', removeInvoiceItem);
-    });
+    container.querySelectorAll('.btn-danger').forEach(btn => btn.addEventListener('click', removeInvoiceItem));
 }
 
 /**
  * Uppdaterar en fakturarad när användaren ändrar ett värde.
  */
 function updateInvoiceItem(event) {
-    const { allProducts } = getState();
     const index = parseInt(event.target.dataset.index);
-    const property = event.target.classList[1].split('-')[1]; // 'description', 'quantity', etc.
+    const property = event.target.classList[1].split('-')[1]; // 'description', 'quantity', 'price', 'vatRate'
+    let value = event.target.value;
 
-    if (property === 'product' && event.target.value) {
-        const product = allProducts.find(p => p.id === event.target.value);
-        if (product) {
-            invoiceItems[index].description = product.name;
-            invoiceItems[index].price = product.price || 0;
-        }
-    } else {
-        invoiceItems[index][property] = event.target.type === 'number' ? parseFloat(event.target.value) : event.target.value;
+    if (event.target.type === 'number' || property === 'vatRate') {
+        value = parseFloat(value) || 0;
     }
+    
+    invoiceItems[index][property] = value;
     renderInvoiceItems();
 }
 
@@ -199,21 +193,30 @@ function removeInvoiceItem(event) {
  * Sparar fakturan till Firestore.
  */
 async function saveInvoice(invoiceId = null) {
-    const total = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    const totalVat = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
+    
     const invoiceData = {
         customerName: document.getElementById('customerName').value,
         invoiceDate: document.getElementById('invoiceDate').value,
         dueDate: document.getElementById('dueDate').value,
         items: invoiceItems,
-        total: total,
-        status: 'Skickad', // Simple status for now
-        invoiceNumber: invoiceId ? getState().allInvoices.find(i => i.id === invoiceId).invoiceNumber : Date.now() // Simple number
+        subtotal: subtotal,
+        totalVat: totalVat,
+        grandTotal: subtotal + totalVat,
+        status: 'Utkast', // Alltid sparas som utkast initialt
+        invoiceNumber: invoiceId ? getState().allInvoices.find(i => i.id === invoiceId).invoiceNumber : Date.now()
     };
+
+    if (!invoiceData.customerName || invoiceItems.length === 0) {
+        showToast("Kundnamn och minst en fakturarad är obligatoriskt.", "warning");
+        return;
+    }
 
     try {
         await saveDocument('invoices', invoiceData, invoiceId);
         await fetchAllCompanyData();
-        showToast('Faktura sparad!', 'success');
+        showToast('Fakturan har sparats som ett utkast!', 'success');
         navigateTo('Fakturor');
     } catch (error) {
         console.error("Kunde inte spara faktura:", error);
@@ -227,70 +230,67 @@ async function saveInvoice(invoiceId = null) {
 async function generateInvoicePDF(invoiceId) {
     const { allInvoices, currentCompany, userData } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
-    if (!invoice) return;
+    if (!invoice) {
+        showToast("Kunde inte hitta fakturadata.", "error");
+        return;
+    }
 
     const doc = new jsPDF();
-    
-    // Lägg till logotyp om den finns
-    if (currentCompany.logoUrl) {
-        try {
-            // Vi måste konvertera bilden till base64 för att jsPDF ska kunna hantera den säkert
-            const response = await fetch(currentCompany.logoUrl);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-                const base64data = reader.result;
-                doc.addImage(base64data, 'JPEG', 15, 10, 40, 0);
-                createPdfContent(doc, invoice, currentCompany, userData);
-                doc.save(`faktura-${invoice.invoiceNumber}.pdf`);
-            };
-        } catch (e) {
-            console.error("Kunde inte ladda logotyp:", e);
-            createPdfContent(doc, invoice, currentCompany, userData);
-            doc.save(`faktura-${invoice.invoiceNumber}.pdf`);
-        }
-    } else {
-        createPdfContent(doc, invoice, currentCompany, userData);
-        doc.save(`faktura-${invoice.invoiceNumber}.pdf`);
-    }
+    createPdfContent(doc, invoice, currentCompany, userData);
+    doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
 }
 
+/**
+ * Bygger upp innehållet i PDF-dokumentet.
+ */
 function createPdfContent(doc, invoice, company, user) {
-    // Rubrik
     doc.setFontSize(22);
-    doc.text('Faktura', 140, 20);
+    doc.text('Faktura', 190, 20, { align: 'right' });
 
-    // Företagsinformation (Avsändare)
     doc.setFontSize(10);
-    doc.text(company.name, 15, 40);
-    doc.text(`Från: ${user.firstName} ${user.lastName}`, 15, 45);
+    doc.text(company.name || '', 15, 40);
+    doc.text(`Org.nr: ${company.orgNumber || ''}`, 15, 45);
+    doc.text(`Utskriven av: ${user.firstName} ${user.lastName}`, 15, 50);
 
-    // Kundinformation
-    doc.text('Faktura till:', 140, 40);
-    doc.text(invoice.customerName, 140, 45);
+    doc.text('Faktura till:', 130, 40);
+    doc.text(invoice.customerName, 130, 45);
 
-    // Fakturadetaljer
-    doc.text(`Fakturanummer: #${invoice.invoiceNumber}`, 140, 60);
-    doc.text(`Fakturadatum: ${invoice.invoiceDate}`, 140, 65);
-    doc.text(`Förfallodatum: ${invoice.dueDate}`, 140, 70);
+    doc.text(`Fakturanummer:`, 130, 60);
+    doc.text(`${invoice.invoiceNumber}`, 190, 60, { align: 'right' });
+    doc.text(`Fakturadatum:`, 130, 65);
+    doc.text(invoice.invoiceDate, 190, 65, { align: 'right' });
+    doc.text(`Förfallodatum:`, 130, 70);
+    doc.text(invoice.dueDate, 190, 70, { align: 'right' });
 
-    // Tabell med fakturarader
-    const tableBody = invoice.items.map(item => [item.description, item.quantity, `${item.price.toFixed(2)} kr`, `${(item.quantity * item.price).toFixed(2)} kr`]);
-    tableBody.push(['', '', 'Total summa:', `${invoice.total.toFixed(2)} kr`]);
+    const tableBody = invoice.items.map(item => [
+        item.description,
+        item.quantity,
+        item.price.toFixed(2),
+        `${item.vatRate}%`,
+        (item.quantity * item.price).toFixed(2)
+    ]);
 
     doc.autoTable({
-        startY: 80,
-        head: [['Beskrivning', 'Antal', 'À-pris', 'Summa']],
+        startY: 85,
+        head: [['Beskrivning', 'Antal', 'À-pris (SEK)', 'Moms', 'Summa (SEK)']],
         body: tableBody,
         theme: 'striped',
-        headStyles: { fillColor: [52, 73, 94] },
-        foot: [['', '', 'Total summa:', `${invoice.total.toFixed(2)} kr`]],
-        footStyles: { fontStyle: 'bold' }
+        headStyles: { fillColor: [44, 62, 80] },
     });
+
+    const finalY = doc.autoTable.previous.finalY;
+    doc.setFontSize(10);
+    doc.text(`Summa (exkl. moms):`, 140, finalY + 10);
+    doc.text(`${(invoice.subtotal || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}`, 190, finalY + 10, { align: 'right' });
+    doc.text(`Moms:`, 140, finalY + 16);
+    doc.text(`${(invoice.totalVat || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}`, 190, finalY + 16, { align: 'right' });
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text(`Att betala:`, 140, finalY + 22);
+    doc.text(`${(invoice.grandTotal || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}`, 190, finalY + 22, { align: 'right' });
 }
 
-// Gör funktioner globalt tillgängliga
+// Gör funktioner globalt tillgängliga så de kan anropas från HTML (onclick)
 window.invoiceFunctions = {
     editInvoice: renderInvoiceEditor,
     generatePDF: generateInvoicePDF,
