@@ -545,3 +545,49 @@ tr.corrected td { font-style: italic; }
     color: var(--text-color-light);
     font-size: 0.9rem;
 }
+
+/* --- 18. Category Manager Modal --- */
+
+.category-manager-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 1.5rem;
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+}
+
+.category-manager-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.category-manager-item:last-child {
+    border-bottom: none;
+}
+
+.category-manager-item span {
+    font-weight: 500;
+}
+
+.category-manager-item .actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.category-manager-add-form {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1.5rem;
+}
+
+.category-manager-add-form .input-group {
+    flex-grow: 1;
+    margin-bottom: 0;
+}
