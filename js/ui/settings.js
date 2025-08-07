@@ -8,22 +8,24 @@ import { fetchAllCompanyData } from '../services/firestore.js'; // Importera fö
 
 export function renderSettingsPage() {
     const { currentCompany } = getState();
-    const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
         <div class="settings-grid">
             <div class="card">
                 <h3>Företagsinformation</h3>
                 <div class="input-group">
                     <label>Företagsnamn</label>
-                    <input id="setting-company" value="${currentCompany.name || ''}">
+                    <input id="setting-company" class="form-input" value="${currentCompany.name || ''}">
                 </div>
                 <div class="input-group">
                     <label>Organisationsnummer</label>
-                    <input id="setting-org-number" value="${currentCompany.orgNumber || ''}" placeholder="T.ex. 556677-8899">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input id="setting-org-number" class="form-input" value="${currentCompany.orgNumber || ''}" placeholder="T.ex. 556677-8899" style="flex-grow: 1;">
+                        <button id="copy-org-number" class="btn btn-sm btn-secondary" title="Kopiera till urklipp">📋</button>
+                    </div>
                 </div>
                 <button id="save-company" class="btn btn-primary">Spara Företagsinfo</button>
             </div>
-            
+
             <div class="card">
                 <h3>Utgiftskategorier</h3>
                 <p>Hantera de kategorier som används för att klassificera dina utgifter.</p>
@@ -39,9 +41,18 @@ export function renderSettingsPage() {
                 </div>
                  <div class="input-group">
                     <label>Eller klistra in bildlänk</label>
-                    <input id="logo-url" placeholder="https://..." value="${currentCompany.logoUrl || ''}">
+                    <input id="logo-url" class="form-input" placeholder="https://..." value="${currentCompany.logoUrl || ''}">
                 </div>
                 <button id="save-logo" class="btn btn-primary">Spara Logotyp</button>
+            </div>
+            
+            <div class="card">
+                <h3>Standardtext för Fakturor</h3>
+                <p>Denna text (t.ex. betalningsvillkor) läggs automatiskt till på alla nya fakturor.</p>
+                <div class="input-group">
+                    <textarea id="setting-invoice-text" class="form-input" rows="4" placeholder="T.ex. Betalning inom 30 dagar. Dröjsmålsränta enligt lag.">${currentCompany.defaultInvoiceText || ''}</textarea>
+                </div>
+                <button id="save-invoice-text" class="btn btn-primary">Spara Standardtext</button>
             </div>
 
             <div class="card card-danger">
@@ -54,12 +65,41 @@ export function renderSettingsPage() {
     document.getElementById('save-company').addEventListener('click', saveCompanyInfo);
     document.getElementById('save-logo').addEventListener('click', saveCompanyLogo);
     document.getElementById('delete-account').addEventListener('click', deleteAccount);
-    document.getElementById('manage-categories-btn').addEventListener('click', renderCategoryManagerModal); // Event listener för nya knappen
+    document.getElementById('manage-categories-btn').addEventListener('click', renderCategoryManagerModal);
+    document.getElementById('copy-org-number').addEventListener('click', copyOrgNumber);
+    document.getElementById('save-invoice-text').addEventListener('click', saveInvoiceDefaultText);
 }
 
-/**
- * NY FUNKTION: Renderar modalen för att hantera kategorier.
- */
+function copyOrgNumber() {
+    const orgNumberInput = document.getElementById('setting-org-number');
+    navigator.clipboard.writeText(orgNumberInput.value).then(() => {
+        showToast("Organisationsnummer kopierat!", "success");
+    }).catch(err => {
+        showToast("Kunde inte kopiera.", "error");
+    });
+}
+
+async function saveInvoiceDefaultText() {
+    const btn = document.getElementById('save-invoice-text');
+    const defaultText = document.getElementById('setting-invoice-text').value;
+    const { currentCompany } = getState();
+
+    btn.disabled = true;
+    btn.textContent = 'Sparar...';
+
+    try {
+        await updateDoc(doc(db, 'companies', currentCompany.id), { defaultInvoiceText: defaultText });
+        setState({ currentCompany: { ...currentCompany, defaultInvoiceText: defaultText } });
+        showToast('Standardtext för fakturor har sparats!', 'success');
+    } catch (error) {
+        console.error("Fel vid sparning av standardtext:", error);
+        showToast("Kunde inte spara texten.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Spara Standardtext';
+    }
+}
+
 function renderCategoryManagerModal() {
     const { categories } = getState();
     const categoryItems = categories.map(cat => `
@@ -99,8 +139,8 @@ function renderCategoryManagerModal() {
     document.getElementById('modal-container').innerHTML = modalHtml;
     document.getElementById('modal-close').addEventListener('click', closeModal);
 
-    // Event listeners för modalens knappar
-    document.getElementById('add-category-btn').addEventListener('click', () => handleSaveCategory());
+    const addBtn = document.getElementById('add-category-btn');
+    addBtn.addEventListener('click', () => handleSaveCategory(addBtn));
 
     document.querySelectorAll('.btn-edit-cat').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -109,7 +149,7 @@ function renderCategoryManagerModal() {
             const category = categories.find(c => c.id === categoryId);
             const newName = prompt("Ange nytt namn för kategorin:", category.name);
             if (newName && newName.trim() !== "") {
-                handleSaveCategory(categoryId, newName.trim());
+                handleSaveCategory(e.target, categoryId, newName.trim());
             }
         });
     });
@@ -123,53 +163,49 @@ function renderCategoryManagerModal() {
     });
 }
 
-/**
- * NY FUNKTION: Sparar en ny eller uppdaterad kategori.
- */
-async function handleSaveCategory(categoryId = null, newName = null) {
+async function handleSaveCategory(btnElement, categoryId = null, newName = null) {
     const { currentCompany } = getState();
-    const name = newName || document.getElementById('new-category-name').value.trim();
+    const nameInput = document.getElementById('new-category-name');
+    const name = newName || nameInput.value.trim();
 
     if (!name) {
         showToast("Kategorinamn kan inte vara tomt.", "warning");
         return;
     }
+    
+    const originalText = btnElement.textContent;
+    btnElement.disabled = true;
+    btnElement.textContent = 'Sparar...';
 
-    const data = {
-        name: name,
-        companyId: currentCompany.id
-    };
+    const data = { name: name, companyId: currentCompany.id };
 
     try {
         if (categoryId) {
-            // Uppdatera befintlig
-            const docRef = doc(db, 'categories', categoryId);
-            await updateDoc(docRef, { name: name });
+            await updateDoc(doc(db, 'categories', categoryId), { name: name });
         } else {
-            // Skapa ny
             await addDoc(collection(db, 'categories'), data);
         }
         
         await fetchAllCompanyData();
-        renderCategoryManagerModal(); // Rita om modalen med den nya datan
+        renderCategoryManagerModal();
         showToast("Kategori sparad!", "success");
-        if (!categoryId) document.getElementById('new-category-name').value = '';
+        if (!categoryId && nameInput) nameInput.value = '';
 
     } catch (error) {
         console.error("Kunde inte spara kategori:", error);
         showToast("Kunde inte spara kategorin.", "error");
+    } finally {
+        btnElement.disabled = false;
+        btnElement.textContent = originalText;
     }
 }
 
-/**
- * NY FUNKTION: Raderar en kategori.
- */
 function handleDeleteCategory(categoryId) {
     showConfirmationModal(async () => {
         try {
             await deleteDoc(doc(db, 'categories', categoryId));
             await fetchAllCompanyData();
-            renderCategoryManagerModal(); // Rita om modalen
+            renderCategoryManagerModal();
             showToast("Kategorin har tagits bort.", "success");
         } catch (error) {
             console.error("Kunde inte radera kategori:", error);
@@ -178,9 +214,8 @@ function handleDeleteCategory(categoryId) {
     }, "Ta bort kategori", "Är du säker? Detta kan inte ångras.");
 }
 
-
-// --- Resten av filen (oförändrad) ---
 async function saveCompanyInfo() {
+    const btn = document.getElementById('save-company');
     const { currentUser, currentCompany } = getState();
     const newName = document.getElementById('setting-company').value;
     const newOrgNumber = document.getElementById('setting-org-number').value;
@@ -188,7 +223,10 @@ async function saveCompanyInfo() {
     if (!newName) {
         showToast("Företagsnamn kan inte vara tomt.", "warning");
         return;
-    };
+    }
+    
+    btn.disabled = true;
+    btn.textContent = "Sparar...";
 
     try {
         const dataToUpdate = { name: newName, orgNumber: newOrgNumber };
@@ -204,16 +242,24 @@ async function saveCompanyInfo() {
     } catch (error) {
         console.error("Fel vid sparning:", error);
         showToast("Kunde inte spara.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Spara Företagsinfo";
     }
 }
 
 async function saveCompanyLogo() {
+    const btn = document.getElementById('save-logo');
     const fileInput = document.getElementById('logo-upload');
     const urlInput = document.getElementById('logo-url');
     const file = fileInput.files[0];
     const url = urlInput.value.trim();
     const { currentCompany } = getState();
     let logoUrl = '';
+
+    btn.disabled = true;
+    btn.textContent = "Sparar...";
+
     try {
         if (file) {
             const storageRef = ref(storage, `company_logos/${currentCompany.id}/${file.name}`);
@@ -222,17 +268,11 @@ async function saveCompanyLogo() {
         } else if (url) {
             if (!url.match(/\.(jpeg|jpg|gif|png)$/)) {
                 showToast("Ange en direktlänk till en bild (jpg, png, etc).", "error");
-                if (url.includes('imgur.com') && !url.includes('i.imgur.com')) {
-                    const parts = url.split('/');
-                    const imgurId = parts[parts.length - 1];
-                    urlInput.value = `https://i.imgur.com/${imgurId}.png`;
-                    showToast("Försökte korrigera Imgur-länk. Vänligen verifiera och spara igen.", "info");
-                }
                 return;
             }
             logoUrl = url;
         } else {
-            logoUrl = '';
+            logoUrl = currentCompany.logoUrl || ''; // Behåll existerande om inget anges
         }
         await updateDoc(doc(db, 'companies', currentCompany.id), { logoUrl: logoUrl });
         setState({ currentCompany: { ...currentCompany, logoUrl: logoUrl } });
@@ -240,13 +280,17 @@ async function saveCompanyLogo() {
     } catch (error) {
         console.error("Kunde inte spara logotyp:", error);
         showToast("Kunde inte spara logotypen.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Spara Logotyp";
     }
 }
 
 async function deleteAccount() {
-    if (prompt("Är du helt säker? Skriv 'RADERA' för att bekräfta.") === 'RADERA') {
+    showConfirmationModal(async () => {
         try {
             const { currentUser } = getState();
+            // Detta är destruktivt, ingen "väntar"-status behövs då sidan laddas om.
             await deleteDoc(doc(db, 'users', currentUser.uid));
             await auth.currentUser.delete();
             showToast("Ditt konto har tagits bort.", "info");
@@ -255,5 +299,5 @@ async function deleteAccount() {
             console.error("Fel vid borttagning:", error);
             showToast("Kunde inte ta bort kontot. Logga ut och in igen.", "error");
         }
-    }
+    }, "Ta bort konto", "Är du helt säker? Skriv 'RADERA' för att bekräfta.", 'RADERA');
 }
