@@ -5,7 +5,7 @@ import { setState, getState } from '../state.js';
 import { showToast } from '../ui/utils.js';
 
 export async function fetchInitialData(user) {
-    // ... (denna funktion är oförändrad)
+
     try {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
