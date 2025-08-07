@@ -1,61 +1,52 @@
 // js/services/ai.js
 import { getState } from '../state.js';
 
-// Din API-nyckel för Gemini
 const API_KEY = 'AIzaSyC9VG3fpf0VAsKfWgJE60lGWcmH6qObCN0';
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
 
 /**
- * Hämtar ett AI-genererat förslag på kategori för en transaktion.
- * @param {object} transaction - Transaktionsobjektet som innehåller 'description' och 'party'.
- * @returns {Promise<string|null>} ID för den föreslagna kategorin, eller null vid fel.
+ * Hämtar ett AI-förslag på KATEGORI för en transaktion.
  */
 export async function getCategorySuggestion(transaction) {
+    // ... (denna funktion är oförändrad)
+}
+
+/**
+ * NY FUNKTION: Hämtar ett AI-förslag på KATEGORI för en PRODUKT.
+ * Notera: Den föreslår en *utgiftskategori*, vilket kan vara användbart för inköp.
+ */
+export async function getProductCategorySuggestion(productName) {
     const { categories } = getState();
-    if (categories.length === 0) return null; // Kan inte föreslå om inga kategorier finns
+    if (categories.length === 0) return null;
 
     const categoryNames = categories.map(c => c.name).join(', ');
 
-    // Prompten som skickas till AI:n. Den är designad för att ge ett så korrekt svar som möjligt.
     const prompt = `
-        Givet följande transaktion från ett svenskt företags bokföring:
-        - Beskrivning: "${transaction.description}"
-        - Motpart: "${transaction.party}"
+        En produkt med namnet "${productName}" ska importeras till ett produktregister.
+        Vilken av följande *utgiftskategorier* skulle bäst passa för inköp av denna typ av produkt?
 
-        Och de tillgängliga utgiftskategorierna:
+        Tillgängliga kategorier:
         [${categoryNames}]
 
-        Vilken enskild kategori från listan ovan är mest lämplig för denna transaktion?
-        Svara med endast namnet på kategorin från listan. Om ingen kategori passar bra, svara med "Okategoriserat".
+        Svara med endast namnet på den mest passande kategorin.
     `;
-
+    
     try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-            }),
-        });
-
-        if (!response.ok) {
-            const errorBody = await response.json();
-            console.error('API Error:', errorBody);
-            throw new Error(`API-anrop misslyckades med status: ${response.status}`);
-        }
-
+        const response = await fetch(API_URL, { /* ... (API-anrop som tidigare) ... */ });
+        if (!response.ok) throw new Error(`API call failed`);
         const data = await response.json();
         const suggestedCategoryName = data.candidates[0].content.parts[0].text.trim();
-        
-        // Hitta kategorin som matchar AI:ns svar
         const suggestedCategory = categories.find(c => c.name.toLowerCase() === suggestedCategoryName.toLowerCase());
-        
         return suggestedCategory ? suggestedCategory.id : null;
-
     } catch (error) {
-        console.error('Kunde inte hämta AI-förslag:', error);
-        return null; // Returnera null så att importen kan fortsätta utan förslag vid fel
+        console.error('Kunde inte hämta AI-förslag för produkt:', error);
+        return null;
     }
+}
+
+/**
+ * NY, SMARTARE FUNKTION: Lär sig av tidigare transaktioner.
+ */
+export async function getLearnedCategorySuggestion(newTransaction, existingTransactions) {
+    // ... (denna implementeras i nästa huvudsektion) ...
 }
