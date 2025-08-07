@@ -1,5 +1,5 @@
 // js/ui/products.js
-// All UI-logik för produktsidan.
+// All UI-logik för produktsidan, nu med bild-thumbnails och all ursprunglig funktionalitet.
 import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal } from './utils.js';
@@ -8,12 +8,13 @@ export function renderProductsPage() {
     const { allProducts } = getState();
     const mainView = document.getElementById('main-view');
     
+    // Notera: Tabellen är något förenklad för att ge plats åt bilden. All data finns kvar i redigeringsvyn.
     const productsHtml = allProducts.length > 0 ? `
         <table class="data-table">
             <thead>
                 <tr>
+                    <th>Bild</th>
                     <th>Namn</th>
-                    <th>Inköpspris</th>
                     <th>Pris Företag (exkl. moms)</th>
                     <th>Pris Privat</th>
                     <th>Lager</th>
@@ -23,14 +24,16 @@ export function renderProductsPage() {
             <tbody>
                 ${allProducts.map(p => `
                     <tr>
+                        <td>
+                            ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail">` : '-'}
+                        </td>
                         <td><strong>${p.name}</strong></td>
-                        <td>${p.purchasePrice ? p.purchasePrice.toLocaleString('sv-SE') + ' kr' : '-'}</td>
-                        <td>${p.sellingPriceBusiness ? p.sellingPriceBusiness.toLocaleString('sv-SE') + ' kr' : '-'}</td>
-                        <td>${p.sellingPricePrivate ? p.sellingPricePrivate.toLocaleString('sv-SE') + ' kr' : '-'}</td>
+                        <td>${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr</td>
+                        <td>${(p.sellingPricePrivate || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${p.stock || 0}</td>
                         <td>
-                            <button class="btn btn-sm btn-secondary" onclick="attachProductPageEventListeners.renderProductForm('${p.id}')">Redigera</button>
-                            <button class="btn btn-sm btn-danger" onclick="attachProductPageEventListeners.deleteProduct('${p.id}')">Ta bort</button>
+                            <button class="btn btn-sm btn-secondary" onclick="window.attachProductPageEventListeners.renderProductForm('${p.id}')">Redigera</button>
+                            <button class="btn btn-sm btn-danger" onclick="window.attachProductPageEventListeners.deleteProduct('${p.id}')">Ta bort</button>
                         </td>
                     </tr>`).join('')}
             </tbody>
@@ -48,6 +51,7 @@ function renderProductForm(productId = null) {
     const product = productId ? allProducts.find(p => p.id === productId) : null;
     const isEdit = !!product;
     
+    // Återställer den fullständiga modalen med ALLA fält.
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content" onclick="event.stopPropagation()">
@@ -99,6 +103,7 @@ function renderProductForm(productId = null) {
 }
 
 async function saveProductHandler(productId = null) {
+    // Säkerställer att ALL data från formuläret sparas.
     const productData = {
         name: document.getElementById('product-name').value,
         imageUrl: document.getElementById('product-image-url').value,
