@@ -1,17 +1,15 @@
 // js/ui/products.js
-// KOMPLETT OCH KORREKT VERSION: Innehåller all funktionalitet: Prognosverktyg, AI Google Import, och standardhantering.
+// KOMPLETT VERSION: Importhanteringen är flyttad till import.js för att centralisera flöden.
 import { getState, setState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
-import { pickAndParseSheet } from '../services/google.js';
-import { getProductCategorySuggestion } from '../services/ai.js';
 import { writeBatch, doc, collection, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
-let inventoryChartInstance = null; // Diagraminstans för denna sida
+let inventoryChartInstance = null; // Håller reda på diagraminstansen för denna sida
 
 export function renderProductsPage() {
-    // Förstör gammalt diagram om det finns för att undvika dubbletter
+    // Förstör gammalt diagram om det finns för att undvika dubbletter och minnesläckor
     if (inventoryChartInstance) {
         inventoryChartInstance.destroy();
         inventoryChartInstance = null;
@@ -19,16 +17,6 @@ export function renderProductsPage() {
 
     const { allProducts } = getState();
     const mainView = document.getElementById('main-view');
-
-    // Sätter upp ALLA knappar för denna sida: Ny Produkt + Importera
-    const newItemBtn = document.getElementById('new-item-btn');
-    newItemBtn.innerHTML = `
-        <button id="add-new-product-btn" class="btn btn-primary">Ny Produkt</button>
-        <button id="import-from-sheets-btn" class="btn btn-secondary" style="margin-left: 1rem;">Importera från Google Sheets</button>
-    `;
-    newItemBtn.style.display = 'block';
-    document.getElementById('add-new-product-btn').onclick = () => renderProductForm();
-    document.getElementById('import-from-sheets-btn').onclick = () => handleSheetImport();
     
     const productsHtml = allProducts.length > 0 ? `
         <table class="data-table">
@@ -48,7 +36,7 @@ export function renderProductsPage() {
                     </tr>`).join('')}
             </tbody>
         </table>` : 
-        `<div class="empty-state"><h3>Inga produkter ännu</h3><p>Lägg till din första produkt via knapparna ovan.</p></div>`;
+        `<div class="empty-state"><h3>Inga produkter ännu</h3><p>Lägg till din första produkt via knappen "Ny Produkt" uppe till höger eller via "Importera Data" i menyn.</p></div>`;
 
     mainView.innerHTML = `
         <div id="inventory-projection-container" class="card" style="margin-bottom: 1.5rem;"></div>
@@ -95,6 +83,7 @@ function renderInventoryProjection() {
     
     const privateInput = document.getElementById('percent-private');
     const businessInput = document.getElementById('percent-business');
+    const saveBtn = document.getElementById('save-projection-btn');
 
     const updateProjection = (changedInput) => {
         let privatePercent = parseFloat(privateInput.value) || 0;
@@ -134,9 +123,13 @@ function renderInventoryProjection() {
     privateInput.addEventListener('input', () => updateProjection('private'));
     businessInput.addEventListener('input', () => updateProjection('business'));
     
-    document.getElementById('save-projection-btn').addEventListener('click', async () => {
+    saveBtn.addEventListener('click', async () => {
         const newPrivateSplit = parseFloat(privateInput.value) || 0;
         const companyRef = doc(db, 'companies', currentCompany.id);
+        
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Sparar...';
+
         try {
             await updateDoc(companyRef, { inventoryProjectionSplit: newPrivateSplit });
             const updatedCompany = { ...currentCompany, inventoryProjectionSplit: newPrivateSplit };
@@ -145,6 +138,9 @@ function renderInventoryProjection() {
         } catch (error) {
             console.error("Kunde inte spara prognos:", error);
             showToast("Kunde inte spara inställningen.", "error");
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Spara Prognosinställning';
         }
     });
 
@@ -152,7 +148,9 @@ function renderInventoryProjection() {
 }
 
 function updateInventoryChart(data) {
-    const ctx = document.getElementById('inventoryPieChart').getContext('2d');
+    const ctx = document.getElementById('inventoryPieChart')?.getContext('2d');
+    if (!ctx) return;
+
     if (inventoryChartInstance) {
         inventoryChartInstance.data.datasets[0].data = data;
         inventoryChartInstance.update();
@@ -162,93 +160,6 @@ function updateInventoryChart(data) {
         type: 'pie',
         data: { labels: ['Privat', 'Företag'], datasets: [{ data: data, backgroundColor: ['rgba(46, 204, 113, 0.8)', 'rgba(74, 144, 226, 0.8)'] }] },
         options: { responsive: true, maintainAspectRatio: false }
-    });
-}
-
-/**
- * Startar importflödet från Google Sheets.
- */
-async function handleSheetImport() {
-    try {
-        showToast("Öppnar filväljare...", "info");
-        const productsFromSheet = await pickAndParseSheet();
-        if (productsFromSheet && productsFromSheet.length > 0) {
-            await showImportReviewModal(productsFromSheet);
-        }
-    } catch (error) {
-        console.log("Import avbruten eller misslyckad:", error.message);
-    }
-}
-
-/**
- * Visar en modal för att granska och bekräfta importen från Google Sheets.
- */
-async function showImportReviewModal(products) {
-    const modalContainer = document.getElementById('modal-container');
-    modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Hämtar AI-förslag...</h3>${renderSpinner()}</div></div>`;
-    
-    for(const product of products) {
-        product.suggestedCategoryId = await getProductCategorySuggestion(product.name);
-    }
-    
-    const { categories } = getState();
-    const rows = products.map((p, index) => `
-        <tr>
-            <td><input type="checkbox" class="import-checkbox" data-index="${index}" checked></td>
-            <td><img src="${p.imageUrl || 'https://via.placeholder.com/40'}" alt="${p.name}" class="product-thumbnail"></td>
-            <td>${p.name}</td>
-            <td>${p.sellingPriceBusiness.toLocaleString('sv-SE')} kr</td>
-            <td>
-                <select class="form-input import-category" data-index="${index}">
-                    <option value="">Välj kategori...</option>
-                    ${categories.map(cat => `<option value="${cat.id}" ${p.suggestedCategoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('')}
-                </select>
-            </td>
-        </tr>
-    `).join('');
-
-    modalContainer.innerHTML = `
-        <div class="modal-overlay"><div class="modal-content" style="max-width: 900px;">
-            <h3>Granska Produkter för Import</h3>
-            <p>AI har föreslagit en inköpskategori för varje produkt.</p>
-            <div style="max-height: 400px; overflow-y: auto;">
-                <table class="data-table">
-                    <thead><tr><th>Importera?</th><th>Bild</th><th>Namn</th><th>Pris</th><th>Kategori</th></tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-            <div class="modal-actions">
-                <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
-                <button id="modal-confirm-import" class="btn btn-primary">Importera Valda</button>
-            </div>
-        </div></div>`;
-
-    document.getElementById('modal-cancel').addEventListener('click', closeModal);
-    document.getElementById('modal-confirm-import').addEventListener('click', async () => {
-        const selectedIndexes = Array.from(document.querySelectorAll('.import-checkbox:checked')).map(cb => parseInt(cb.dataset.index));
-        const productsToSave = selectedIndexes.map(i => {
-            const product = products[i];
-            const categorySelect = document.querySelector(`.import-category[data-index="${i}"]`);
-            product.categoryId = categorySelect ? categorySelect.value : null;
-            return product;
-        });
-        
-        if (productsToSave.length === 0) {
-            showToast("Inga produkter valda.", "warning");
-            return;
-        }
-
-        const batch = writeBatch(db);
-        productsToSave.forEach(product => {
-            const docRef = doc(collection(db, 'products'));
-            batch.set(docRef, product);
-        });
-
-        await batch.commit();
-        await fetchAllCompanyData();
-        renderProductsPage();
-        closeModal();
-        showToast(`${productsToSave.length} produkter har importerats!`, 'success');
     });
 }
 
@@ -264,16 +175,16 @@ function renderProductForm(productId = null) {
             <div class="modal-content" onclick="event.stopPropagation()">
                 <h3>${isEdit ? 'Redigera Produkt' : 'Ny Produkt'}</h3>
                 <form id="product-form">
-                    <div class="input-group"><label>Produktnamn *</label><input id="product-name" value="${product?.name || ''}" required></div>
-                    <div class="input-group"><label>Bild-URL (valfritt)</label><input id="product-image-url" value="${product?.imageUrl || ''}" placeholder="https://..."></div>
+                    <div class="input-group"><label>Produktnamn *</label><input class="form-input" id="product-name" value="${product?.name || ''}" required></div>
+                    <div class="input-group"><label>Bild-URL (valfritt)</label><input class="form-input" id="product-image-url" value="${product?.imageUrl || ''}" placeholder="https://..."></div>
                     <div class="form-grid">
-                        <div class="input-group"><label>Inköpspris</label><input id="product-purchase-price" type="number" step="0.01" value="${product?.purchasePrice || ''}" placeholder="0.00"></div>
-                        <div class="input-group"><label>Lagerantal</label><input id="product-stock" type="number" value="${product?.stock || 0}"></div>
+                        <div class="input-group"><label>Inköpspris</label><input class="form-input" id="product-purchase-price" type="number" step="0.01" value="${product?.purchasePrice || ''}" placeholder="0.00"></div>
+                        <div class="input-group"><label>Lagerantal</label><input class="form-input" id="product-stock" type="number" value="${product?.stock || 0}"></div>
                     </div>
                     <hr>
                     <div class="form-grid">
-                        <div class="input-group"><label>Försäljningspris Företag (exkl. moms)</label><input id="product-selling-business" type="number" step="0.01" value="${product?.sellingPriceBusiness || ''}" placeholder="0.00"></div>
-                        <div class="input-group"><label>Försäljningspris Privat</label><input id="product-selling-private" type="number" step="0.01" value="${product?.sellingPricePrivate || ''}" placeholder="0.00"></div>
+                        <div class="input-group"><label>Försäljningspris Företag (exkl. moms)</label><input class="form-input" id="product-selling-business" type="number" step="0.01" value="${product?.sellingPriceBusiness || ''}" placeholder="0.00"></div>
+                        <div class="input-group"><label>Försäljningspris Privat</label><input class="form-input" id="product-selling-private" type="number" step="0.01" value="${product?.sellingPricePrivate || ''}" placeholder="0.00"></div>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
@@ -286,14 +197,15 @@ function renderProductForm(productId = null) {
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('product-form').addEventListener('submit', async (e) => {
         e.preventDefault();
-        await saveProductHandler(productId);
+        const btn = e.target.querySelector('button[type="submit"]');
+        await saveProductHandler(btn, productId);
     });
 }
 
 /**
  * Sparar en enskild produkt till databasen.
  */
-async function saveProductHandler(productId = null) {
+async function saveProductHandler(btn, productId = null) {
     const productData = {
         name: document.getElementById('product-name').value,
         imageUrl: document.getElementById('product-image-url').value,
@@ -306,6 +218,11 @@ async function saveProductHandler(productId = null) {
         showToast("Produktnamn är obligatoriskt.", "warning");
         return;
     }
+
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Sparar...';
+
     try {
         await saveDocument('products', productData, productId);
         showToast(`Produkten har ${productId ? 'uppdaterats' : 'skapats'}!`, 'success');
@@ -315,6 +232,9 @@ async function saveProductHandler(productId = null) {
     } catch (error) {
         console.error("Kunde inte spara produkt:", error);
         showToast('Kunde inte spara produkten.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
     }
 }
 
@@ -334,6 +254,7 @@ function deleteProductHandler(productId) {
     }, "Ta bort produkt", "Är du säker på att du vill ta bort denna produkt permanent?");
 }
 
+// Gör funktioner globalt tillgängliga så de kan anropas från HTML-onclick i tabellen.
 export const attachProductPageEventListeners = {
     renderProductForm,
     deleteProduct: deleteProductHandler,
