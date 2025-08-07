@@ -1,25 +1,24 @@
 // js/ui/import.js
-// KOMPLETT OCH KORREKT VERSION: Använder den smarta, lärande AI-funktionen för alla transaktioner.
-import { writeBatch, doc, collection } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+// KOMPLETT VERSION: Använder en avancerad AI-funktion för att föreslå alla produktattribut.
+import { writeBatch, doc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 import { getState } from '../state.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, renderSpinner } from './utils.js';
 import { navigateTo } from './navigation.js';
-import { getLearnedCategorySuggestion } from '../services/ai.js'; // Använder den smarta funktionen
+import { getAIProductDetails } from '../services/ai.js'; // Använder den nya, smarta AI-funktionen
 
 export function renderImportPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
-        <div class="card">
-            <h3>Importera Transaktioner</h3>
-            <p>Ladda upp en CSV-fil. Kolumner: <strong>Datum, Typ, Beskrivning, Motpart, Summa (SEK)</strong>.</p>
-            <p>Vår AI lär sig av din historik för att föreslå rätt kategori.</p>
+        <div class="card" style="max-width: 700px; margin: auto;">
+            <h3>Importera Produkter med AI</h3>
+            <p>Ladda upp en enkel CSV-fil med en enda kolumn: <strong>Produktnamn</strong>. Vår AI kommer att analysera namnen och föreslå fullständiga produktprofiler inklusive priser, lager och bilder, som du sedan kan granska och justera.</p>
             <hr style="margin: 1rem 0;">
-            <h4>Ladda upp fil</h4>
-            <input type="file" id="csv-file-input" accept=".csv" style="display: block; margin-top: 1rem;">
+            <h4>Ladda upp CSV-fil</h4>
+            <input type="file" id="product-csv-input" accept=".csv" style="display: block; margin-top: 1rem;">
         </div>`;
-    document.getElementById('csv-file-input').addEventListener('change', handleFileSelect, false);
+    document.getElementById('product-csv-input').addEventListener('change', handleFileSelect, false);
 }
 
 function handleFileSelect(event) {
@@ -32,23 +31,23 @@ function handleFileSelect(event) {
 
 async function processFileContent(text) {
     const modalContainer = document.getElementById('modal-container');
-    modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Analyserar fil och lär av din historik...</h3>${renderSpinner()}</div></div>`;
+    modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Analyserar produkter med AI...</h3><p>Detta kan ta en liten stund.</p>${renderSpinner()}</div></div>`;
 
     try {
-        const newTransactions = parseCSV(text);
-        const { allTransactions } = getState(); // Hämta din befintliga historik
-
-        for (const t of newTransactions) {
-            // Skicka med historiken till AI:n för smartare förslag för ALLA rader
-            t.suggestedCategoryId = await getLearnedCategorySuggestion(t, allTransactions);
-        }
-        
-        if (newTransactions.length > 0) {
-            showImportConfirmationModal(newTransactions);
-        } else {
+        const productNames = parseCSV(text);
+        if (productNames.length === 0) {
             closeModal();
-            showToast("Inga giltiga transaktioner hittades i filen.", "warning");
+            showToast("Inga produktnamn hittades i filen.", "warning");
+            return;
         }
+
+        // Anropa AI för varje produktnamn för att få fullständiga detaljer
+        const productSuggestions = await Promise.all(
+            productNames.map(name => getAIProductDetails(name))
+        );
+        
+        showImportConfirmationModal(productSuggestions.filter(p => p)); // Filtrera bort eventuella misslyckade anrop
+
     } catch (error) {
         closeModal();
         showToast(`Fel vid läsning av fil: ${error.message}`, "error");
@@ -56,140 +55,110 @@ async function processFileContent(text) {
 }
 
 function parseCSV(text) {
-    const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
-    if (lines.length < 2) return [];
-    
-    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
-    const required = ['datum', 'typ', 'beskrivning', 'motpart', 'summa (sek)'];
-    const idx = {
-        date: header.indexOf(required[0]),
-        type: header.indexOf(required[1]),
-        description: header.indexOf(required[2]),
-        party: header.indexOf(required[3]),
-        amount: header.indexOf(required[4])
-    };
-
-    if (Object.values(idx).some(i => i === -1)) {
-        throw new Error(`Filen saknar en eller flera av de obligatoriska kolumnerna: ${required.join(', ')}`);
-    }
-    
-    const transactions = [];
-    for (let i = 1; i < lines.length; i++) {
-        const data = lines[i].split(',').map(d => d.trim());
-        const type = data[idx.type]?.toLowerCase();
-        if (type !== 'intäkt' && type !== 'utgift') continue;
-        
-        const amount = parseFloat(data[idx.amount]?.replace(/"/g, '').replace(/\s/g, '').replace(',', '.'));
-        if (isNaN(amount)) continue;
-
-        transactions.push({
-            date: data[idx.date],
-            type: type.charAt(0).toUpperCase() + type.slice(1),
-            description: data[idx.description],
-            party: data[idx.party] || '',
-            amount: Math.abs(amount),
-            id: `import-${i}`
-        });
-    }
-    return transactions;
+    // Förväntar sig en enkel CSV med en kolumn för produktnamn
+    return text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line.length > 0);
 }
 
-function showImportConfirmationModal(transactions) {
-    const { categories } = getState();
+function showImportConfirmationModal(products) {
+    const modalContainer = document.getElementById('modal-container');
     
-    const transactionRows = transactions.map((t, index) => {
-        // Skapa kategoriväljaren för varje rad
-        const categorySelector = `
-            <select class="form-input import-category" data-transaction-index="${index}">
-                <option value="">Välj kategori...</option>
-                ${categories.map(cat => `<option value="${cat.id}" ${t.suggestedCategoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('')}
-            </select>`;
+    const rows = products.map((p, index) => `
+        <tr data-index="${index}">
+            <td><input type="checkbox" class="import-checkbox" checked></td>
+            <td><input type="text" class="form-input" name="name" value="${p.name || ''}"></td>
+            <td><input type="number" class="form-input text-right" name="purchasePrice" value="${p.purchasePrice || 0}"></td>
+            <td><input type="number" class="form-input text-right" name="stock" value="${p.stock || 0}"></td>
+            <td><input type="text" class="form-input" name="imageUrl" value="${p.imageUrl || ''}"></td>
+            <td><input type="number" class="form-input text-right" name="sellingPriceBusiness" value="${p.sellingPriceBusiness || 0}"></td>
+            <td><input type="number" class="form-input text-right" name="sellingPricePrivate" value="${p.sellingPricePrivate || 0}"></td>
+        </tr>
+    `).join('');
 
-        return `
-        <tr>
-            <td><input type="checkbox" class="import-checkbox" data-transaction-index="${index}" checked></td>
-            <td>${t.date}</td>
-            <td>${t.description}</td>
-            <td>${t.party}</td>
-            <td class="${t.type === 'Intäkt' ? 'green' : 'red'}">${t.type}</td>
-            <td class="text-right">${t.amount.toFixed(2)} kr</td>
-            <td>${categorySelector}</td> 
-        </tr>`;
-    }).join('');
-    
-    const modalHtml = `
+    modalContainer.innerHTML = `
         <div class="modal-overlay">
-            <div class="modal-content" style="max-width: 1000px;">
-                <h3>Granska och bekräfta import</h3>
-                <p>AI har föreslagit kategorier baserat på din historik.</p>
-                <div style="max-height: 500px; overflow-y: auto;">
+            <div class="modal-content" style="max-width: 1200px;">
+                <h3>Granska AI-förslag</h3>
+                <p>AI:n har fyllt i produktdata. Du kan redigera alla fält nedan innan du importerar.</p>
+                <div style="max-height: 60vh; overflow-y: auto;">
                     <table class="data-table">
-                        <thead><tr><th><input type="checkbox" id="select-all-checkbox" checked></th><th>Datum</th><th>Beskrivning</th><th>Motpart</th><th>Typ</th><th class="text-right">Summa</th><th>Kategori</th></tr></thead>
-                        <tbody>${transactionRows}</tbody>
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all-checkbox" checked></th>
+                                <th>Namn</th>
+                                <th>Inköpspris</th>
+                                <th>Lager</th>
+                                <th>Bild-URL</th>
+                                <th>Pris Företag</th>
+                                <th>Pris Privat</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
                     </table>
                 </div>
                 <div class="modal-actions">
                     <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
-                    <button id="modal-confirm-import" class="btn btn-primary">Importera valda</button>
+                    <button id="modal-confirm-import" class="btn btn-primary">Importera Valda</button>
                 </div>
             </div>
         </div>`;
 
-    document.getElementById('modal-container').innerHTML = modalHtml;
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('select-all-checkbox').addEventListener('change', (e) => {
         document.querySelectorAll('.import-checkbox').forEach(checkbox => checkbox.checked = e.target.checked);
     });
-    document.getElementById('modal-confirm-import').addEventListener('click', () => handleImportConfirm(transactions));
+    document.getElementById('modal-confirm-import').addEventListener('click', (e) => handleImportConfirm(e.target));
 }
 
-async function handleImportConfirm(transactions) {
+async function handleImportConfirm(btn) {
     const { currentUser, currentCompany } = getState();
-    const selectedIndexes = Array.from(document.querySelectorAll('.import-checkbox:checked')).map(cb => parseInt(cb.dataset.transactionIndex));
-    
-    const toSave = selectedIndexes.map(index => {
-        const transaction = transactions[index];
-        const categorySelect = document.querySelector(`.import-category[data-transaction-index="${index}"]`);
-        transaction.categoryId = categorySelect ? categorySelect.value : null;
-        return transaction;
+    const rows = document.querySelectorAll('#modal-container tbody tr');
+    const productsToSave = [];
+
+    rows.forEach(row => {
+        const checkbox = row.querySelector('.import-checkbox');
+        if (checkbox.checked) {
+            const productData = {};
+            row.querySelectorAll('input[name]').forEach(input => {
+                const name = input.name;
+                const value = (input.type === 'number') ? parseFloat(input.value) || 0 : input.value;
+                productData[name] = value;
+            });
+            productsToSave.push(productData);
+        }
     });
 
-    if (toSave.length === 0) {
-        showToast("Inga transaktioner valda.", "warning");
+    if (productsToSave.length === 0) {
+        showToast("Inga produkter valda.", "warning");
         return;
     }
-
-    const confirmBtn = document.getElementById('modal-confirm-import');
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Sparar...';
+    
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Sparar...';
 
     try {
         const batch = writeBatch(db);
-        toSave.forEach(t => {
-            const collectionName = t.type === 'Intäkt' ? 'incomes' : 'expenses';
-            const docRef = doc(collection(db, collectionName));
+        productsToSave.forEach(product => {
+            const docRef = doc(collection(db, 'products'));
             const data = {
-                date: t.date,
-                description: t.description,
-                party: t.party,
-                amount: t.amount,
+                ...product,
                 userId: currentUser.uid,
                 companyId: currentCompany.id,
-                createdAt: new Date(),
-                isCorrection: false,
-                ...(t.categoryId && { categoryId: t.categoryId })
+                createdAt: serverTimestamp()
             };
             batch.set(docRef, data);
         });
+
         await batch.commit();
         await fetchAllCompanyData();
-        showToast(`${toSave.length} transaktioner har importerats!`, 'success');
+        showToast(`${productsToSave.length} produkter har importerats!`, 'success');
         closeModal();
-        navigateTo('Sammanfattning');
+        navigateTo('Produkter');
     } catch (error) {
         showToast("Ett fel uppstod vid importen.", "error");
         console.error("Import error:", error);
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Importera valda';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
     }
 }
