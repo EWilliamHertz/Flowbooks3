@@ -2,7 +2,7 @@
 import { getState } from '../state.js';
 import { saveDocument, performCorrection, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal } from './utils.js';
-import { getControlsHTML, renderTransactionTable, applyFiltersAndRender } from './components.js';
+import { getControlsHTML, applyFiltersAndRender } from './components.js';
 import { navigateTo } from './navigation.js';
 
 export function renderTransactionsPage(type) {
@@ -21,6 +21,7 @@ export function renderTransactionsPage(type) {
     setTimeout(() => {
         applyFiltersAndRender(dataToList, type);
         document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList, type));
+        document.getElementById('category-filter').addEventListener('change', () => applyFiltersAndRender(dataToList, type));
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelector('.filter-btn.active').classList.remove('active');
@@ -38,11 +39,10 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
     const today = new Date().toISOString().slice(0, 10);
     const categoryOptions = categories.map(cat => `<option value="${cat.id}" ${originalData.categoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('');
 
-    // NYTT: Moms-väljare för utgifter
     const vatSelectorHTML = type === 'expense' ? `
         <div class="input-group">
             <label>Moms (VAT)</label>
-            <select id="trans-vat">
+            <select id="trans-vat" class="form-input">
                 <option value="0" ${originalData.vatRate === 0 ? 'selected' : ''}>0%</option>
                 <option value="6" ${originalData.vatRate === 6 ? 'selected' : ''}>6%</option>
                 <option value="12" ${originalData.vatRate === 12 ? 'selected' : ''}>12%</option>
@@ -54,11 +54,11 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
         <div class="card" style="max-width: 600px; margin: auto;">
             <h3>${title}</h3>
             ${isCorrection ? `<p class="correction-notice">Du skapar en rättelsepost. Originalposten markeras som rättad och en omvänd post skapas.</p>` : ''}
-            <div class="input-group"><label>Datum</label><input id="trans-date" type="date" value="${originalData.date || today}"></div>
-            <div class="input-group"><label>Beskrivning</label><input id="trans-desc" type="text" value="${originalData.description || ''}"></div>
-            <div class="input-group"><label>Kategori</label><select id="trans-category"><option value="">Välj...</option>${categoryOptions}</select></div>
-            <div class="input-group"><label>Motpart</label><input id="trans-party" type="text" value="${originalData.party || ''}"></div>
-            <div class="input-group"><label>Summa (inkl. moms)</label><input id="trans-amount" type="number" placeholder="0.00" value="${originalData.amount || ''}"></div>
+            <div class="input-group"><label>Datum</label><input id="trans-date" type="date" class="form-input" value="${originalData.date || today}"></div>
+            <div class="input-group"><label>Beskrivning</label><input id="trans-desc" type="text" class="form-input" value="${originalData.description || ''}"></div>
+            <div class="input-group"><label>Kategori</label><select id="trans-category" class="form-input"><option value="">Välj...</option>${categoryOptions}</select></div>
+            <div class="input-group"><label>Motpart</label><input id="trans-party" type="text" class="form-input" value="${originalData.party || ''}"></div>
+            <div class="input-group"><label>Summa (inkl. moms)</label><input id="trans-amount" type="number" class="form-input" placeholder="0.00" value="${originalData.amount || ''}"></div>
             ${vatSelectorHTML}
             <div style="display: flex; gap: 1rem; margin-top: 1rem;">
                 <button id="cancel-btn" class="btn btn-secondary">Avbryt</button>
@@ -66,7 +66,8 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
             </div>
         </div>`;
 
-    document.getElementById('save-btn').addEventListener('click', () => {
+    document.getElementById('save-btn').addEventListener('click', (e) => {
+        const btn = e.target;
         const amountInclVat = parseFloat(document.getElementById('trans-amount').value) || 0;
         const vatRate = type === 'expense' ? parseFloat(document.getElementById('trans-vat').value) : 0;
         const vatAmount = amountInclVat - (amountInclVat / (1 + vatRate / 100));
@@ -75,28 +76,31 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
             date: document.getElementById('trans-date').value,
             description: document.getElementById('trans-desc').value,
             party: document.getElementById('trans-party').value,
-            amount: amountInclVat, // Spara totalbeloppet inkl. moms
-            amountExclVat: amountInclVat - vatAmount, // Belopp exkl. moms
+            amount: amountInclVat,
+            amountExclVat: amountInclVat - vatAmount,
             vatRate: vatRate,
             vatAmount: vatAmount,
             categoryId: document.getElementById('trans-category').value || null,
         };
 
         if (isCorrection) {
-            handleCorrectionSave(type, originalId, originalData, newData);
+            handleCorrectionSave(btn, type, originalId, originalData, newData);
         } else {
-            handleSave(type, newData);
+            handleSave(btn, type, newData);
         }
     });
     document.getElementById('cancel-btn').addEventListener('click', () => navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
 }
 
-async function handleSave(type, data) {
+async function handleSave(btn, type, data) {
     if (!data.date || !data.description || data.amount <= 0) {
         showToast('Fyll i datum, beskrivning och en giltig summa.', 'warning');
         return;
     }
     showConfirmationModal(async () => {
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Sparar...';
         try {
             const collectionName = type === 'income' ? 'incomes' : 'expenses';
             await saveDocument(collectionName, { ...data, isCorrection: false });
@@ -106,16 +110,22 @@ async function handleSave(type, data) {
         } catch (error) {
             console.error("Fel vid sparning:", error);
             showToast("Kunde inte spara.", "error");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
         }
     }, "Bekräfta Bokföring", "Enligt Bokföringslagen är detta en slutgiltig aktion.");
 }
 
-async function handleCorrectionSave(type, originalId, originalData, newData) {
+async function handleCorrectionSave(btn, type, originalId, originalData, newData) {
     if (!newData.date || !newData.description || newData.amount <= 0) {
         showToast('Fyll i alla fält korrekt.', 'warning');
         return;
     }
     showConfirmationModal(async () => {
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Sparar...';
         try {
             await performCorrection(type, originalId, originalData, newData);
             await fetchAllCompanyData();
@@ -124,6 +134,9 @@ async function handleCorrectionSave(type, originalId, originalData, newData) {
         } catch (error) {
             console.error("Fel vid rättelse:", error);
             showToast("Kunde inte spara rättelsen.", "error");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
         }
     }, "Bekräfta Rättelse", "Detta kan inte ångras.");
 }
