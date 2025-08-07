@@ -1,15 +1,19 @@
 // js/ui/navigation.js
+// Hanterar all sidnavigering och rendering av sidinnehåll.
 import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
+
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage, attachProductPageEventListeners } from './products.js';
+// KORRIGERING HÄR: Tog bort extra 'from'
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
 import { renderTeamPage } from './team.js';
 import { renderSettingsPage } from './settings.js';
 import { renderRecurringPage, renderRecurringTransactionForm } from './recurring.js';
 import { renderImportPage } from './import.js';
 
+// Karta över sidor och deras renderingsfunktioner
 const pageRenderers = {
     'Översikt': renderDashboard,
     'Översikt Alla Företag': renderAllCompaniesDashboard,
@@ -26,17 +30,23 @@ const pageRenderers = {
 };
 
 function renderPlaceholderPage(title) {
-    document.getElementById('main-view').innerHTML = `<div class="card"><h3 class="card-title">${title}</h3><p>Denna sektion är under utveckling.</p></div>`;
+    document.getElementById('main-view').innerHTML = `
+        <div class="card">
+            <h3 class="card-title">${title}</h3>
+            <p>Denna sektion är under utveckling.</p>
+        </div>`;
 }
 
+// Initierar UI när appen har laddat all nödvändig data.
 export function initializeAppUI() {
     updateProfileIcon();
     setupCompanySelector();
     setupEventListeners();
-    navigateTo('Översikt');
+    navigateTo('Översikt'); // Starta på huvuddashboarden
     document.getElementById('app-container').style.visibility = 'visible';
 }
 
+// Funktion för att byta sida
 export function navigateTo(page) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
@@ -57,6 +67,7 @@ export function navigateTo(page) {
     document.querySelector('.sidebar')?.classList.remove('open');
 }
 
+// Renderar innehållet för den valda sidan
 function renderPageContent(page) {
     document.querySelector('.page-title').textContent = page;
     document.getElementById('main-view').innerHTML = ''; 
@@ -97,6 +108,7 @@ function renderPageContent(page) {
     }
 }
 
+// Sätter upp alla globala event listeners
 function setupEventListeners() {
     document.querySelector('.sidebar-nav').addEventListener('click', e => {
         if (e.target.tagName === 'A' && e.target.dataset.page) {
@@ -114,6 +126,7 @@ function setupEventListeners() {
     document.getElementById('hamburger-btn').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
 }
 
+// Uppdaterar profilbilden/initialen
 function updateProfileIcon() {
     const { userData } = getState();
     const profileIcon = document.getElementById('user-profile-icon');
@@ -127,6 +140,7 @@ function updateProfileIcon() {
     }
 }
 
+// Sätter upp företagsväljaren
 function setupCompanySelector() {
     const { userCompanies, currentCompany } = getState();
     const selector = document.getElementById('company-selector');
@@ -139,6 +153,7 @@ function setupCompanySelector() {
     });
 }
 
+// Visar ett allvarligt fel som blockerar appen
 export function showFatalError(message) {
     document.body.innerHTML = `
         <div class="fatal-error-container">
@@ -152,6 +167,7 @@ export function showFatalError(message) {
     document.getElementById('logout-btn-error').addEventListener('click', handleSignOut);
 }
 
+// Gör funktionen globalt tillgänglig så den kan anropas från HTML-onclick i portalvyn
 window.switchToCompany = (companyId) => {
     const { userCompanies } = getState();
     const newCurrentCompany = userCompanies.find(c => c.id === companyId);
