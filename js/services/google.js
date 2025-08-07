@@ -23,12 +23,11 @@ export function initGoogleClient(apiConfig) {
     config = { ...config, ...apiConfig };
     gapi = window.gapi;
     google = window.google;
-    gapi.load('client:picker', initializePickerApi);
+    gapi.load('client:picker', () => {
+        pickerApiLoaded = true;
+    });
+    // Ladda Sheets API-klienten
     gapi.client.load('sheets', 'v4');
-}
-
-function initializePickerApi() {
-    pickerApiLoaded = true;
 }
 
 /**
@@ -37,6 +36,11 @@ function initializePickerApi() {
  */
 function showPicker() {
     return new Promise((resolve, reject) => {
+        if (!pickerApiLoaded) {
+            reject(new Error("Picker API är inte laddad än."));
+            return;
+        }
+
         const view = new google.picker.View(google.picker.ViewId.SPREADSHEETS);
         view.setMimeTypes("application/vnd.google-apps.spreadsheet");
 
@@ -46,11 +50,11 @@ function showPicker() {
             .addView(view)
             .setDeveloperKey(config.apiKey)
             .setCallback((data) => {
-                if (data[google.picker.Action.PICKED]) {
-                    const doc = data[google.picker.Response.DOCUMENTS][0];
+                if (data.action === google.picker.Action.PICKED) {
+                    const doc = data.docs[0];
                     resolve(doc.id);
-                } else if (data[google.picker.Action.CANCEL]) {
-                    reject(new Error("Användaren avbröt."));
+                } else if (data.action === google.picker.Action.CANCEL) {
+                    reject(new Error("Användaren avbröt filvalet."));
                 }
             })
             .build();
@@ -76,9 +80,14 @@ async function getSheetData(spreadsheetId) {
         }
 
         const header = rows[0].map(h => h.trim().toLowerCase());
+        const requiredHeaders = ['namn', 'pris', 'lager', 'bild-url'];
+        if (!requiredHeaders.every(h => header.includes(h))) {
+            throw new Error(`Kalkylarket måste innehålla följande kolumnrubriker: ${requiredHeaders.join(', ')}`);
+        }
+        
         const products = rows.slice(1).map(row => ({
             name: row[header.indexOf('namn')] || '',
-            sellingPriceBusiness: parseFloat(row[header.indexOf('pris')]) || 0,
+            sellingPriceBusiness: parseFloat(String(row[header.indexOf('pris')] || '0').replace(',', '.')) || 0,
             stock: parseInt(row[header.indexOf('lager')]) || 0,
             imageUrl: row[header.indexOf('bild-url')] || '',
         }));
@@ -86,8 +95,8 @@ async function getSheetData(spreadsheetId) {
         return products.filter(p => p.name); // Filtrera bort tomma rader
 
     } catch (err) {
-        console.error("Fel vid hämtning av kalkylarksdata:", err);
-        throw new Error("Kunde inte läsa data från det valda kalkylarket.");
+        console.error("Fel vid hämtning av kalkylarksdata:", err.result?.error?.message || err.message);
+        throw new Error("Kunde inte läsa data från det valda kalkylarket. Kontrollera format och delningsinställningar.");
     }
 }
 
@@ -100,6 +109,10 @@ export function pickAndParseSheet() {
             client_id: config.clientId,
             scope: config.scope,
             callback: async (tokenResponse) => {
+                if (tokenResponse.error) {
+                    reject(new Error("Autentisering misslyckades."));
+                    return;
+                }
                 oAuthToken = tokenResponse.access_token;
                 try {
                     const fileId = await showPicker();
@@ -113,6 +126,7 @@ export function pickAndParseSheet() {
             },
         });
 
+        // Om vi redan har en token, försök utan prompt. Annars, be om samtycke.
         if (oAuthToken) {
             tokenClient.requestAccessToken({ prompt: '' });
         } else {
