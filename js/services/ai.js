@@ -58,6 +58,72 @@ export async function getAIProductDetails(productName) {
 }
 
 /**
+ * NY FUNKTION: Analyserar en kvittobild och extraherar data.
+ * @param {string} imageBase64 - Bilden som en base64-kodad sträng.
+ * @param {string} mimeType - Bildens MIME-typ (t.ex. 'image/jpeg').
+ * @returns {Promise<Object|null>} Ett objekt med kvittodata eller null vid fel.
+ */
+export async function getAIReceiptDetails(imageBase64, mimeType) {
+    const { categories } = getState();
+    const categoryNames = categories.map(c => c.name).join(', ');
+
+    const prompt = `
+        Agera som en AI-assistent för bokföring i ett svenskt företag. Analysera följande kvittobild.
+        Extrahera följande information och returnera den som ett JSON-objekt:
+        - date: Datumet för köpet i formatet YYYY-MM-DD. Om du bara hittar dag och månad, använd innevarande år.
+        - party: Namnet på säljaren/butiken.
+        - description: En kort, generell beskrivning av vad som köpts, t.ex. "Kontorsmaterial" eller "Lunch".
+        - amount: Totalbeloppet på kvittot som en siffra.
+        - categoryId: Föreslå den mest passande utgiftskategorin från denna lista: [${categoryNames}]. Svara med namnet på kategorin.
+
+        Svara med ENDAST ett giltigt JSON-objekt. Exempel:
+        {
+          "date": "2024-08-15",
+          "party": "Staples",
+          "description": "Inköp av kontorsmaterial",
+          "amount": 499.50,
+          "categoryId": "Kontorsmaterial"
+        }
+    `;
+
+    try {
+        const model = 'gemini-pro-vision'; // Använd vision-modellen
+        const visionApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
+
+        const response = await fetch(visionApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { inline_data: { mime_type: mimeType, data: imageBase64 } }
+                    ]
+                }]
+            }),
+        });
+        if (!response.ok) throw new Error(`API-anrop misslyckades med status: ${response.status}`);
+        
+        const data = await response.json();
+        let textResponse = data.candidates[0].content.parts[0].text;
+        textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const parsedData = JSON.parse(textResponse);
+
+        // Mappa kategorinamnet till ett ID
+        const suggestedCategory = categories.find(c => c.name.toLowerCase() === parsedData.categoryId?.toLowerCase());
+        parsedData.categoryId = suggestedCategory ? suggestedCategory.id : null;
+
+        return parsedData;
+
+    } catch (error) {
+        console.error(`Kunde inte hämta AI-förslag för kvitto:`, error);
+        return { date: '', party: '', description: '', amount: 0, categoryId: null };
+    }
+}
+
+
+/**
  * Hämtar ett AI-förslag på KATEGORI för en transaktion.
  */
 export async function getCategorySuggestion(transaction) {
