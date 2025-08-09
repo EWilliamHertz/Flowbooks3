@@ -4,31 +4,21 @@ import { renderSpinner } from './utils.js';
 import { getDocs, query, collection, where } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
-// Håller reda på skapade diagraminstanser
 let monthlyChartInstance = null;
 let categoryChartInstance = null;
 
-/**
- * Huvudfunktion för att rendera hela dashboard-vyn.
- */
 export function renderDashboard() {
-    // Förstör gamla diagraminstanser för att undvika minnesläckor
     if (monthlyChartInstance) monthlyChartInstance.destroy();
     if (categoryChartInstance) categoryChartInstance.destroy();
 
     const { allIncomes, allExpenses, allProducts, currentCompany } = getState();
 
-    // Befintliga beräkningar
     const totalIncome = allIncomes.reduce((sum, doc) => sum + doc.amount, 0);
     const totalExpense = allExpenses.reduce((sum, doc) => sum + doc.amount, 0);
 
-    // NY, KORREKT BERÄKNING:
-    // Hämta den sparade procentuella fördelningen från företagsinställningarna.
-    // Använd 60% för privatkunder som standardvärde om inget är sparat.
     const privateSplitPercent = currentCompany.inventoryProjectionSplit || 60;
     const businessSplitPercent = 100 - privateSplitPercent;
     
-    // Beräkna det totala potentiella värdet av lagret baserat på den sparade fördelningen.
     let calculatedInventoryRevenue = 0;
     allProducts.forEach(product => {
         const stock = product.stock || 0;
@@ -41,7 +31,6 @@ export function renderDashboard() {
         calculatedInventoryRevenue += businessValue + privateValue;
     });
 
-    // Uppdaterad resultatberäkning som inkluderar det nya lagervärdet.
     const projectedProfit = (totalIncome + calculatedInventoryRevenue) - totalExpense;
 
     const mainView = document.getElementById('main-view');
@@ -83,9 +72,6 @@ export function renderDashboard() {
     renderMonthlyAndCategoryCharts();
 }
 
-/**
- * Förbereder data för de primära diagrammen.
- */
 function prepareChartData() {
     const { allIncomes, allExpenses, categories } = getState();
     const monthlyData = {};
@@ -124,9 +110,6 @@ function prepareChartData() {
     };
 }
 
-/**
- * Funktion för att rita de andra diagrammen.
- */
 function renderMonthlyAndCategoryCharts() {
     const data = prepareChartData();
     const monthlyCtx = document.getElementById('monthlyBarChart')?.getContext('2d');
@@ -148,9 +131,6 @@ function renderMonthlyAndCategoryCharts() {
     }
 }
 
-/**
- * Renderar företagsportalen för användare med flera företag.
- */
 export async function renderAllCompaniesDashboard() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = renderSpinner();
@@ -165,24 +145,42 @@ export async function renderAllCompaniesDashboard() {
             ]);
             const totalIncome = incomesSnap.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
             const totalExpenses = expensesSnap.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
+            
+            // Beräkna lagervärde för varje företag
+            let inventoryValue = 0;
+            const privateSplitPercent = company.inventoryProjectionSplit || 60;
+            const businessSplitPercent = 100 - privateSplitPercent;
+            productsSnap.docs.forEach(doc => {
+                const product = doc.data();
+                const stock = product.stock || 0;
+                const businessPrice = product.sellingPriceBusiness || 0;
+                const privatePrice = product.sellingPricePrivate || 0;
+                const businessValue = stock * (businessSplitPercent / 100) * businessPrice;
+                const privateValue = stock * (privateSplitPercent / 100) * privatePrice;
+                inventoryValue += businessValue + privateValue;
+            });
+
             return {
                 ...company,
                 totalIncome,
                 totalExpenses,
-                netProfit: totalIncome - totalExpenses,
+                inventoryValue,
+                projectedProfit: (totalIncome + inventoryValue) - totalExpenses,
                 productCount: productsSnap.size,
                 transactionCount: incomesSnap.size + expensesSnap.size
             };
         });
+
         const companiesData = await Promise.all(companiesDataPromises);
-        const grandTotalProfit = companiesData.reduce((sum, company) => sum + company.netProfit, 0);
+        const grandTotalProjectedProfit = companiesData.reduce((sum, company) => sum + company.projectedProfit, 0);
+        
         mainView.innerHTML = `
             <div class="portal-header">
                 <h1 class="logo">FlowBooks</h1>
                 <p>Välkommen, ${userData.firstName}. Du har tillgång till ${companiesData.length} företag.</p>
                 <div class="portal-total-profit">
-                    <span>Totalt Nettoresultat:</span>
-                    <strong class="${grandTotalProfit >= 0 ? 'green' : 'red'}">${grandTotalProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</strong>
+                    <span>Totalt Projicerat Resultat (inkl. lagervärde):</span>
+                    <strong class="${grandTotalProjectedProfit >= 0 ? 'green' : 'red'}">${grandTotalProjectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</strong>
                 </div>
             </div>
             <div class="company-cards-container">
@@ -193,8 +191,9 @@ export async function renderAllCompaniesDashboard() {
                             <span class="badge ${company.role === 'owner' ? 'badge-owner' : 'badge-member'}">${company.role}</span>
                         </div>
                         <div class="company-card-body">
-                            <div class="stat"><span class="label">Nettoresultat</span><span class="value ${company.netProfit >= 0 ? 'green' : 'red'}">${company.netProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
+                            <div class="stat"><span class="label">Projicerat Resultat</span><span class="value ${company.projectedProfit >= 0 ? 'green' : 'red'}">${company.projectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
                             <div class="stat"><span class="label">Intäkter</span><span class="value green">${company.totalIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
+                             <div class="stat"><span class="label">Lagervärde</span><span class="value green">${company.inventoryValue.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
                             <div class="stat"><span class="label">Utgifter</span><span class="value red">${company.totalExpenses.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
                         </div>
                         <div class="company-card-footer">
