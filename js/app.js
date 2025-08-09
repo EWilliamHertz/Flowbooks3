@@ -1,6 +1,7 @@
 // js/app.js
 import { initializeAuthListener } from './services/auth.js';
 import { initGoogleClient } from './services/google.js';
+import { runRecurringTransactions } from './ui/recurring.js';
 
 function main() {
     // Dynamiskt ladda Google-skripten
@@ -29,8 +30,12 @@ function main() {
     gsiScript.defer = true;
     document.head.appendChild(gsiScript);
 
-    // Starta Firebase-autentisering
-    initializeAuthListener();
+    // Starta Firebase-autentisering och skicka med en callback
+    initializeAuthListener(async () => {
+        // Denna kod körs efter att användaren är inloggad och all data har hämtats.
+        // Kör återkommande transaktioner i "tyst" läge (visar inga toasts om inget händer).
+        await runRecurringTransactions(true);
+    });
 }
 
 main();
