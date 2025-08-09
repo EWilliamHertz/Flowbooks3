@@ -1,5 +1,4 @@
 // js/ui/navigation.js
-// Hanterar all sidnavigering och rendering av sidinnehåll.
 import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
@@ -12,22 +11,45 @@ import { renderSettingsPage } from './settings.js';
 import { renderRecurringPage, renderRecurringTransactionForm } from './recurring.js';
 import { renderImportPage } from './import.js';
 import { renderInvoicesPage, renderInvoiceEditor } from './invoices.js';
+import { renderReceiptsPage } from './receipts.js';
+import { renderReportsPage } from './reports.js';
 
-// Karta över sidor och deras renderingsfunktioner
 const pageRenderers = {
     'Översikt': renderDashboard,
     'Översikt Alla Företag': renderAllCompaniesDashboard,
     'Sammanfattning': () => renderTransactionsPage('summary'),
     'Intäkter': () => renderTransactionsPage('income'),
     'Utgifter': () => renderTransactionsPage('expense'),
+    'Skanna Kvitto': renderReceiptsPage,
     'Produkter': renderProductsPage,
     'Team': renderTeamPage,
     'Inställningar': renderSettingsPage,
     'Återkommande': renderRecurringPage,
     'Importera': renderImportPage,
     'Fakturor': renderInvoicesPage,
-    'Rapporter': () => renderPlaceholderPage('Rapporter'),
+    'Rapporter': renderReportsPage,
 };
+
+const menuConfig = {
+    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
+    member: ['Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Inställningar'],
+    readonly: ['Översikt', 'Sammanfattning', 'Rapporter'], // Exempel på framtida roll
+};
+
+function renderSidebarMenu() {
+    const { currentCompany } = getState();
+    const role = currentCompany?.role || 'member';
+    const allowedPages = menuConfig[role] || menuConfig.member;
+
+    const menuItems = allowedPages.map(page => `
+        <li><a href="#" data-page="${page}">${page}</a></li>
+    `).join('');
+
+    const navList = document.querySelector('.sidebar-nav ul');
+    if (navList) {
+        navList.innerHTML = menuItems;
+    }
+}
 
 function renderPlaceholderPage(title) {
     document.getElementById('main-view').innerHTML = `
@@ -37,38 +59,45 @@ function renderPlaceholderPage(title) {
         </div>`;
 }
 
-// Initierar UI när appen har laddat all nödvändig data.
 export function initializeAppUI() {
     updateProfileIcon();
     setupCompanySelector();
     setupEventListeners();
-    // NYTT: Appen startar nu alltid på företagsportalen.
     navigateTo('Översikt Alla Företag'); 
     document.getElementById('app-container').style.visibility = 'visible';
 }
 
-// Funktion för att byta sida
 export function navigateTo(page) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
     
+    // Uppdatera menyn för att säkerställa att den är korrekt för den aktuella vyn/rollen
+    renderSidebarMenu();
+    
     if (page === 'Översikt Alla Företag') {
         appContainer.classList.add('portal-view');
-        header.style.display = 'none';
+        if(header) header.style.display = 'none';
     } else {
         appContainer.classList.remove('portal-view');
-        header.style.display = 'flex';
+        if(header) header.style.display = 'flex';
     }
 
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const link = document.querySelector(`.sidebar-nav a[data-page="${page}"]`);
-    if (link) link.classList.add('active');
+    if (link) {
+        link.classList.add('active');
+    } else {
+        // Om länken inte finns för rollen, gå till en standardsida
+        const defaultPage = page === 'Översikt Alla Företag' ? 'Översikt Alla Företag' : 'Översikt';
+        const defaultLink = document.querySelector(`.sidebar-nav a[data-page="${defaultPage}"]`);
+        if (defaultLink) defaultLink.classList.add('active');
+        page = defaultPage;
+    }
     
     renderPageContent(page);
     document.querySelector('.sidebar')?.classList.remove('open');
 }
 
-// Renderar innehållet för den valda sidan
 function renderPageContent(page) {
     document.querySelector('.page-title').textContent = page;
     document.getElementById('main-view').innerHTML = ''; 
@@ -84,7 +113,6 @@ function renderPageContent(page) {
         renderPlaceholderPage(page);
     }
     
-    // Setup new item button after page content is rendered
     switch (page) {
         case 'Intäkter':
             newItemBtn.textContent = 'Ny Intäkt';
@@ -114,7 +142,6 @@ function renderPageContent(page) {
     }
 }
 
-// Sätter upp alla globala event listeners
 function setupEventListeners() {
     document.querySelector('.sidebar-nav').addEventListener('click', e => {
         if (e.target.tagName === 'A' && e.target.dataset.page) {
@@ -132,7 +159,6 @@ function setupEventListeners() {
     document.getElementById('hamburger-btn').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
 }
 
-// Uppdaterar profilbilden/initialen
 function updateProfileIcon() {
     const { userData } = getState();
     const profileIcon = document.getElementById('user-profile-icon');
@@ -146,7 +172,6 @@ function updateProfileIcon() {
     }
 }
 
-// Sätter upp företagsväljaren
 function setupCompanySelector() {
     const { userCompanies, currentCompany } = getState();
     const selector = document.getElementById('company-selector');
@@ -155,11 +180,11 @@ function setupCompanySelector() {
         const newCurrentCompany = userCompanies.find(c => c.id === e.target.value);
         setState({ currentCompany: newCurrentCompany });
         await fetchAllCompanyData();
-        renderPageContent(document.querySelector('.sidebar-nav a.active').dataset.page);
+        const currentPage = document.querySelector('.sidebar-nav a.active').dataset.page;
+        navigateTo(currentPage);
     });
 }
 
-// Visar ett allvarligt fel som blockerar appen
 export function showFatalError(message) {
     document.body.innerHTML = `
         <div class="fatal-error-container">
@@ -173,14 +198,13 @@ export function showFatalError(message) {
     document.getElementById('logout-btn-error').addEventListener('click', handleSignOut);
 }
 
-// Gör funktionen globalt tillgänglig så den kan anropas från HTML-onclick i portalvyn
-window.switchToCompany = (companyId) => {
+window.switchToCompany = async (companyId) => {
     const { userCompanies } = getState();
     const newCurrentCompany = userCompanies.find(c => c.id === companyId);
     if (newCurrentCompany) {
         setState({ currentCompany: newCurrentCompany });
+        await fetchAllCompanyData(); 
         document.getElementById('company-selector').value = companyId;
-        // När man byter från portalen ska man alltid landa på dashboarden
         navigateTo('Översikt');
     }
 };
