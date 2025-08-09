@@ -1,7 +1,7 @@
 // js/ui/receipts.js
 import { getAIReceiptDetails } from '../services/ai.js';
 import { saveDocument, fetchAllCompanyData } from '../services/firestore.js';
-import { renderSpinner, showToast, closeModal } from './utils.js';
+import { renderSpinner, showToast, closeModal, showConfirmationModal } from './utils.js';
 import { getState } from '../state.js';
 import { navigateTo } from './navigation.js';
 
@@ -13,7 +13,7 @@ export function renderReceiptsPage() {
             <p>Ladda upp en bild av ditt kvitto. Vår AI kommer att försöka tolka innehållet automatiskt. Vi rekommenderar bilder i formaten JPG, PNG eller WEBP.</p>
             <hr style="margin: 1rem 0;">
             <h4>Ladda upp kvitto</h4>
-            <input type="file" id="receipt-file-input" accept="image/*" style="display: block; margin-top: 1rem;">
+            <input type="file" id="receipt-file-input" accept="image/png, image/jpeg, image/webp" style="display: block; margin-top: 1rem;">
         </div>
     `;
     document.getElementById('receipt-file-input').addEventListener('change', handleReceiptFileSelect, false);
@@ -29,9 +29,11 @@ function handleReceiptFileSelect(event) {
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-        const imageDataBase64 = e.target.result.split(',')[1];
+        // Hämta base64-data och MIME-typ
+        const imageBase64 = e.target.result.split(',')[1];
+        const mimeType = file.type;
         try {
-            const receiptSuggestion = await getAIReceiptDetails(imageDataBase64, file.type);
+            const receiptSuggestion = await getAIReceiptDetails(imageBase64, mimeType);
             showReceiptConfirmationModal(receiptSuggestion);
         } catch (error) {
             closeModal();
@@ -77,7 +79,7 @@ function showReceiptConfirmationModal(suggestion) {
 
 async function saveReceiptHandler(btn) {
     const amount = parseFloat(document.getElementById('receipt-amount').value) || 0;
-    // Förutsätter 25% moms som standard om AI:n inte kan tolka den
+    // Förutsätter 25% moms som standard om AI:n inte kan tolka den, detta kan utvecklas
     const vatRate = 25; 
     const vatAmount = amount - (amount / (1 + vatRate / 100));
 
@@ -97,22 +99,24 @@ async function saveReceiptHandler(btn) {
         showToast("Fyll i datum, motpart och en giltig summa.", "warning");
         return;
     }
-
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Sparar...';
-
-    try {
-        await saveDocument('expenses', expenseData);
-        showToast('Kvittot har sparats som en utgift!', 'success');
-        closeModal();
-        await fetchAllCompanyData();
-        navigateTo('Utgifter');
-    } catch (error) {
-        console.error("Kunde inte spara utgift från kvitto:", error);
-        showToast('Kunde inte spara utgiften.', 'error');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = originalText;
-    }
+    
+    showConfirmationModal(async () => {
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Sparar...';
+    
+        try {
+            await saveDocument('expenses', expenseData);
+            showToast('Kvittot har sparats som en utgift!', 'success');
+            closeModal();
+            await fetchAllCompanyData();
+            navigateTo('Utgifter');
+        } catch (error) {
+            console.error("Kunde inte spara utgift från kvitto:", error);
+            showToast('Kunde inte spara utgiften.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Spara som Utgift';
+        }
+    }, "Bekräfta Bokföring", "Enligt Bokföringslagen är detta en slutgiltig aktion som inte kan tas bort, bara korrigeras.");
 }
