@@ -1,15 +1,13 @@
 // js/ui/products.js
-// KOMPLETT VERSION: Importhanteringen är flyttad till import.js för att centralisera flöden.
 import { getState, setState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { writeBatch, doc, collection, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
-let inventoryChartInstance = null; // Håller reda på diagraminstansen för denna sida
+let inventoryChartInstance = null;
 
 export function renderProductsPage() {
-    // Förstör gammalt diagram om det finns för att undvika dubbletter och minnesläckor
     if (inventoryChartInstance) {
         inventoryChartInstance.destroy();
         inventoryChartInstance = null;
@@ -24,7 +22,7 @@ export function renderProductsPage() {
             <tbody>
                 ${allProducts.map(p => `
                     <tr>
-                        <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail">` : '-'}</td>
+                        <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail" onclick="window.attachProductPageEventListeners.showProductImage('${p.imageUrl}', '${p.name}')">` : '-'}</td>
                         <td><strong>${p.name}</strong></td>
                         <td>${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${(p.sellingPricePrivate || 0).toLocaleString('sv-SE')} kr</td>
@@ -45,17 +43,14 @@ export function renderProductsPage() {
             <div id="table-container">${productsHtml}</div>
         </div>`;
 
-    renderInventoryProjection(); // Anropa funktionen som ritar upp prognosverktyget
+    renderInventoryProjection();
 }
 
-/**
- * Renderar prognosverktyget för inventariets potential på produktsidan.
- */
 function renderInventoryProjection() {
     const { allProducts, currentCompany } = getState();
     const container = document.getElementById('inventory-projection-container');
     
-    const savedPrivateSplit = currentCompany.inventoryProjectionSplit || 60; // Standard 60% privat
+    const savedPrivateSplit = currentCompany.inventoryProjectionSplit || 60;
     
     container.innerHTML = `
         <h3 class="card-title">Prognos för Inventarievärde</h3>
@@ -163,9 +158,6 @@ function updateInventoryChart(data) {
     });
 }
 
-/**
- * Renderar modalen för att skapa eller redigera en enskild produkt.
- */
 function renderProductForm(productId = null) {
     const { allProducts } = getState();
     const product = productId ? allProducts.find(p => p.id === productId) : null;
@@ -202,9 +194,6 @@ function renderProductForm(productId = null) {
     });
 }
 
-/**
- * Sparar en enskild produkt till databasen.
- */
 async function saveProductHandler(btn, productId = null) {
     const productData = {
         name: document.getElementById('product-name').value,
@@ -238,9 +227,6 @@ async function saveProductHandler(btn, productId = null) {
     }
 }
 
-/**
- * Raderar en produkt från databasen.
- */
 function deleteProductHandler(productId) {
     showConfirmationModal(async () => {
         try {
@@ -254,9 +240,30 @@ function deleteProductHandler(productId) {
     }, "Ta bort produkt", "Är du säker på att du vill ta bort denna produkt permanent?");
 }
 
-// Gör funktioner globalt tillgängliga så de kan anropas från HTML-onclick i tabellen.
+function showProductImageModal(imageUrl, productName) {
+    const modalHtml = `
+        <div class="modal-overlay" id="image-modal-overlay">
+            <div class="modal-content image-modal">
+                <h3>${productName}</h3>
+                <img src="${imageUrl}" alt="${productName}" style="max-width: 100%; max-height: 70vh; margin-top: 1rem;">
+                 <div class="modal-actions" style="margin-top: 1.5rem;">
+                    <button id="modal-close" class="btn btn-primary">Stäng</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('modal-container').innerHTML = modalHtml;
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    // Klicka utanför bilden för att stänga
+    document.getElementById('image-modal-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'image-modal-overlay') {
+            closeModal();
+        }
+    });
+}
+
 export const attachProductPageEventListeners = {
     renderProductForm,
     deleteProduct: deleteProductHandler,
+    showProductImage: showProductImageModal,
 };
 window.attachProductPageEventListeners = attachProductPageEventListeners;
