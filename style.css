@@ -591,3 +591,38 @@ tr.corrected td { font-style: italic; }
     flex-grow: 1;
     margin-bottom: 0;
 }
+
+/* =================================================================
+   19. Image Modal
+   ================================================================= */
+
+.image-modal {
+    width: auto;
+    max-width: 90vw;
+    text-align: center;
+}
+.product-thumbnail {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: transform 0.2s ease-in-out;
+}
+.product-thumbnail:hover {
+    transform: scale(1.1);
+}
+
+/* =================================================================
+   20. Badge & Status colors
+   ================================================================= */
+.invoice-status.Skickad { background-color: #e3f2fd; color: #1565c0; }
+.invoice-status.Betald { background-color: #e8f5e9; color: #388e3c; }
+.invoice-status.Förfallen { background-color: #ffebee; color: #d32f2f; }
+.invoice-status.Utkast { background-color: #f5f5f5; color: #616161; }
+
+.btn-success {
+    background-color: var(--success-color);
+    color: white;
+}
