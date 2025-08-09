@@ -5,19 +5,24 @@ import { setState } from '../state.js';
 import { fetchInitialData } from './firestore.js';
 import { initializeAppUI, showFatalError } from '../ui/navigation.js';
 
-export function initializeAuthListener() {
+export function initializeAuthListener(onAppInitializedCallback) {
     onAuthStateChanged(auth, async (user) => {
         if (user && user.emailVerified) {
             setState({ currentUser: user });
             const success = await fetchInitialData(user);
             if (success) {
                 initializeAppUI();
+                if (onAppInitializedCallback) {
+                    await onAppInitializedCallback(); // Kör callback när allt är klart
+                }
             } else {
                 showFatalError("Ditt konto är inte korrekt konfigurerat eller saknar koppling till ett företag.");
             }
         } else if (user && !user.emailVerified) {
+            // Omdirigera till login med status för att visa meddelande om overifierad e-post
             window.location.href = `login.html?status=unverified&email=${encodeURIComponent(user.email)}`;
         } else {
+            // Ingen användare inloggad, omdirigera till login-sidan
             window.location.href = 'login.html';
         }
     });
