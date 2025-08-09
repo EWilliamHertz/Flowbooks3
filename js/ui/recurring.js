@@ -11,14 +11,14 @@ export function renderRecurringPage() {
     mainView.innerHTML = `
         <div class="card">
             <h3>Hantering av Återkommande Transaktioner</h3>
-            <p>Schemalagda intäkter och utgifter som skapas automatiskt.</p>
-            <button id="run-recurring-btn" class="btn btn-secondary" style="margin-top: 1rem;">Simulera månadskörning</button>
+            <p>Schemalagda intäkter och utgifter som skapas automatiskt vid midnatt på sitt förfallodatum. Du kan även köra dem manuellt här.</p>
+            <button id="run-recurring-btn" class="btn btn-secondary" style="margin-top: 1rem;">Kör manuellt nu</button>
         </div>
         <div class="card" style="margin-top: 1.5rem;">
             <h3>Mina Återkommande Transaktioner</h3>
             <div id="recurring-list-container">${renderSpinner()}</div>
         </div>`;
-    document.getElementById('run-recurring-btn').addEventListener('click', runRecurringTransactions);
+    document.getElementById('run-recurring-btn').addEventListener('click', () => runRecurringTransactions(false)); // Manuell körning är inte tyst
     renderRecurringList();
 }
 
@@ -65,7 +65,7 @@ export function renderRecurringTransactionForm() {
         <div class="card" style="max-width: 600px; margin: auto;">
             <h3>Skapa Ny Återkommande Transaktion</h3>
             <div class="input-group"><label>Typ</label><select id="rec-type"><option value="expense">Utgift</option><option value="income">Intäkt</option></select></div>
-            <div class="input-group"><label>Startdatum</label><input id="rec-date" type="date" value="${today}"></div>
+            <div class="input-group"><label>Startdatum (första körning)</label><input id="rec-date" type="date" value="${today}"></div>
             <div class="input-group"><label>Beskrivning</label><input id="rec-desc" type="text"></div>
             <div class="input-group"><label>Motpart</label><input id="rec-party" type="text"></div>
             <div class="input-group"><label>Summa (SEK)</label><input id="rec-amount" type="number" placeholder="0.00"></div>
@@ -101,23 +101,43 @@ async function saveRecurringHandler() {
     }
 }
 
-async function runRecurringTransactions() {
+export async function runRecurringTransactions(isSilent = false) {
     const { recurringTransactions, currentUser, currentCompany } = getState();
     const todayStr = new Date().toISOString().slice(0, 10);
     const toCreate = recurringTransactions.filter(item => item.nextDueDate && item.nextDueDate <= todayStr);
+    
     if (toCreate.length === 0) {
-        showToast("Inga transaktioner att generera idag.", "info");
+        if (!isSilent) {
+            showToast("Inga transaktioner att generera idag.", "info");
+        }
         return;
     }
+    
     const runBtn = document.getElementById('run-recurring-btn');
-    runBtn.disabled = true;
-    runBtn.textContent = 'Genererar...';
+    if(runBtn && !isSilent) {
+        runBtn.disabled = true;
+        runBtn.textContent = 'Genererar...';
+    }
+
     try {
         const batch = writeBatch(db);
         for (const item of toCreate) {
             const collectionName = item.type === 'income' ? 'incomes' : 'expenses';
             const docRef = doc(collection(db, collectionName));
-            const transactionData = {
+            
+            // Beräkna moms för automatiska utgifter (antar 25% som standard)
+            let transactionData;
+            if (item.type === 'expense') {
+                const vatRate = 25;
+                const vatAmount = item.amount - (item.amount / (1 + vatRate / 100));
+                transactionData = {
+                    amountExclVat: item.amount - vatAmount,
+                    vatRate: vatRate,
+                    vatAmount: vatAmount,
+                };
+            }
+            
+            batch.set(docRef, {
                 date: item.nextDueDate,
                 description: item.description,
                 party: item.party,
@@ -126,22 +146,35 @@ async function runRecurringTransactions() {
                 companyId: currentCompany.id,
                 createdAt: new Date(),
                 isCorrection: false,
-                generatedFromRecurringId: item.id // NYTT: Kopplar transaktionen till den återkommande posten
-            };
-            batch.set(docRef, transactionData);
+                generatedFromRecurringId: item.id,
+                ...transactionData
+            });
             const nextDate = new Date(item.nextDueDate);
             nextDate.setMonth(nextDate.getMonth() + 1);
             batch.update(doc(db, 'recurring', item.id), { nextDueDate: nextDate.toISOString().slice(0, 10) });
         }
         await batch.commit();
         await fetchAllCompanyData();
-        renderRecurringList();
-        showToast(`${toCreate.length} transaktion(er) har skapats!`, 'success');
+        
+        if (!isSilent) {
+             renderRecurringList();
+             showToast(`${toCreate.length} transaktion(er) har skapats!`, 'success');
+        } else {
+            showToast(`Automatisk körning: ${toCreate.length} återkommande transaktion(er) har skapats.`, 'info');
+            const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
+            // Om användaren är på en relevant sida, ladda om den för att visa ny data
+            if (['Översikt', 'Sammanfattning', 'Intäkter', 'Utgifter', 'Återkommande'].includes(currentPage)) {
+                 navigateTo(currentPage);
+            }
+        }
     } catch (error) {
-        showToast("Ett fel uppstod vid generering.", "error");
+        if (!isSilent) showToast("Ett fel uppstod vid generering.", "error");
+        console.error("Fel vid automatisk körning av återkommande transaktioner:", error);
     } finally {
-        runBtn.disabled = false;
-        runBtn.textContent = 'Simulera månadskörning';
+        if(runBtn && !isSilent) {
+            runBtn.disabled = false;
+            runBtn.textContent = 'Kör manuellt nu';
+        }
     }
 }
 
