@@ -3,6 +3,7 @@ import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 
+// Importera alla funktioner som renderar de olika sidorna i appen
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage, attachProductPageEventListeners } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
@@ -13,13 +14,16 @@ import { renderImportPage } from './import.js';
 import { renderInvoicesPage, renderInvoiceEditor } from './invoices.js';
 import { renderReceiptsPage } from './receipts.js';
 import { renderReportsPage } from './reports.js';
+import { renderBankingPage } from './banking.js'; // <-- NY IMPORT
 
+// Mappar en sid-sträng till funktionen som ska rendera den sidan.
 const pageRenderers = {
     'Översikt': renderDashboard,
     'Översikt Alla Företag': renderAllCompaniesDashboard,
     'Sammanfattning': () => renderTransactionsPage('summary'),
     'Intäkter': () => renderTransactionsPage('income'),
     'Utgifter': () => renderTransactionsPage('expense'),
+    'Bankavstämning': renderBankingPage, // <-- NY RAD
     'Skanna Kvitto': renderReceiptsPage,
     'Produkter': renderProductsPage,
     'Team': renderTeamPage,
@@ -30,10 +34,11 @@ const pageRenderers = {
     'Rapporter': renderReportsPage,
 };
 
+// Definierar vilka sidor som ska visas i menyn för olika användarroller.
 const menuConfig = {
-    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
-    member: ['Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Inställningar'],
-    readonly: ['Översikt', 'Sammanfattning', 'Rapporter'], // Exempel på framtida roll
+    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
+    member: ['Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Inställningar'],
+    readonly: ['Översikt', 'Sammanfattning', 'Rapporter'],
 };
 
 function renderSidebarMenu() {
@@ -71,7 +76,6 @@ export function navigateTo(page) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
     
-    // Uppdatera menyn för att säkerställa att den är korrekt för den aktuella vyn/rollen
     renderSidebarMenu();
     
     if (page === 'Översikt Alla Företag') {
@@ -87,7 +91,6 @@ export function navigateTo(page) {
     if (link) {
         link.classList.add('active');
     } else {
-        // Om länken inte finns för rollen, gå till en standardsida
         const defaultPage = page === 'Översikt Alla Företag' ? 'Översikt Alla Företag' : 'Översikt';
         const defaultLink = document.querySelector(`.sidebar-nav a[data-page="${defaultPage}"]`);
         if (defaultLink) defaultLink.classList.add('active');
@@ -175,6 +178,7 @@ function updateProfileIcon() {
 function setupCompanySelector() {
     const { userCompanies, currentCompany } = getState();
     const selector = document.getElementById('company-selector');
+    if (!selector) return;
     selector.innerHTML = userCompanies.map(c => `<option value="${c.id}" ${c.id === currentCompany.id ? 'selected' : ''}>${c.name}</option>`).join('');
     selector.addEventListener('change', async (e) => {
         const newCurrentCompany = userCompanies.find(c => c.id === e.target.value);
