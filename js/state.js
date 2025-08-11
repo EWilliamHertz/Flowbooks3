@@ -1,8 +1,4 @@
 // js/state.js
-
-// Detta objekt håller all applikationens data centralt.
-// När data hämtas från databasen eller en extern tjänst (som Tink),
-// sparas den här så att alla delar av programmet kan komma åt den.
 const state = {
     // Användarinformation
     currentUser: null,
@@ -18,13 +14,14 @@ const state = {
     allInvoices: [],
     recurringTransactions: [],
     categories: [],
-    
+    allContacts: [], // <-- NY RAD
+
     // Produkt- och lagerdata
     allProducts: [],
 
-    // NYTT: Bankdata från Tink
-    bankAccounts: [], // Kommer att hålla en lista över anslutna konton
-    bankTransactions: [], // Kommer att hålla transaktioner från det valda kontot
+    // Bankdata från Tink
+    bankAccounts: [],
+    bankTransactions: [],
 };
 
 /**

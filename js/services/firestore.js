@@ -39,7 +39,6 @@ export async function fetchAllCompanyData() {
 
     try {
         const companyId = currentCompany.id;
-        // ... (logik för memberUIDs är oförändrad) ...
         const companyRef = doc(db, 'companies', companyId);
         const companySnap = await getDoc(companyRef);
         
@@ -57,7 +56,8 @@ export async function fetchAllCompanyData() {
             getDocs(query(collection(db, 'recurring'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'products'), where('companyId', '==', companyId), orderBy('name'))),
             getDocs(query(collection(db, 'categories'), where('companyId', '==', companyId), orderBy('name'))),
-            getDocs(query(collection(db, 'invoices'), where('companyId', '==', companyId))), // NYTT: Hämta fakturor
+            getDocs(query(collection(db, 'invoices'), where('companyId', '==', companyId))),
+            getDocs(query(collection(db, 'contacts'), where('companyId', '==', companyId), orderBy('name'))), // <-- NY RAD FÖR KONTAKTER
         ];
         
         if (memberUIDs.length > 0) {
@@ -71,22 +71,23 @@ export async function fetchAllCompanyData() {
         const recurringTransactions = results[2].docs.map(d => ({ id: d.id, ...d.data() }));
         const allProducts = results[3].docs.map(d => ({ id: d.id, ...d.data() }));
         const categories = results[4].docs.map(d => ({ id: d.id, ...d.data() }));
-        const allInvoices = results[5].docs.map(d => ({ id: d.id, ...d.data() })); // NYTT: Spara fakturor i state
-        const teamMembers = results.length > 6 ? results[6].docs.map(d => ({ id: d.id, ...d.data() })) : [];
+        const allInvoices = results[5].docs.map(d => ({ id: d.id, ...d.data() }));
+        const allContacts = results[6].docs.map(d => ({ id: d.id, ...d.data() })); // <-- NY RAD FÖR KONTAKTER
+        const teamMembers = results.length > 7 ? results[7].docs.map(d => ({ id: d.id, ...d.data() })) : []; // <-- ÄNDRAD INDEX
         
         const allTransactions = [
             ...allIncomes.map(t => ({ ...t, type: 'income' })),
             ...allExpenses.map(t => ({ ...t, type: 'expense' }))
         ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, teamMembers, allTransactions });
+        // Lade till allContacts i state
+        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allContacts, teamMembers, allTransactions });
     } catch (error) {
         console.error("Kunde inte ladda all företagsdata:", error);
         showToast("Kunde inte ladda all företagsdata.", "error");
     }
 }
 
-// ... (resten av filen är oförändrad) ...
 export async function saveDocument(collectionName, data, docId = null) {
     const { currentUser, currentCompany } = getState();
     const dataToSave = { ...data, companyId: currentCompany.id };

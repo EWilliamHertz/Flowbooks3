@@ -14,7 +14,8 @@ import { renderImportPage } from './import.js';
 import { renderInvoicesPage, renderInvoiceEditor } from './invoices.js';
 import { renderReceiptsPage } from './receipts.js';
 import { renderReportsPage } from './reports.js';
-import { renderBankingPage } from './banking.js'; // <-- NY IMPORT
+import { renderBankingPage } from './banking.js';
+import { renderContactsPage } from './contacts.js'; // <-- NY IMPORT
 
 // Mappar en sid-sträng till funktionen som ska rendera den sidan.
 const pageRenderers = {
@@ -23,9 +24,10 @@ const pageRenderers = {
     'Sammanfattning': () => renderTransactionsPage('summary'),
     'Intäkter': () => renderTransactionsPage('income'),
     'Utgifter': () => renderTransactionsPage('expense'),
-    'Bankavstämning': renderBankingPage, // <-- NY RAD
+    'Bankavstämning': renderBankingPage,
     'Skanna Kvitto': renderReceiptsPage,
     'Produkter': renderProductsPage,
+    'Kontakter': renderContactsPage, // <-- NY RAD
     'Team': renderTeamPage,
     'Inställningar': renderSettingsPage,
     'Återkommande': renderRecurringPage,
@@ -36,8 +38,8 @@ const pageRenderers = {
 
 // Definierar vilka sidor som ska visas i menyn för olika användarroller.
 const menuConfig = {
-    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
-    member: ['Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Rapporter', 'Inställningar'],
+    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
+    member: ['Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Inställningar'],
     readonly: ['Översikt', 'Sammanfattning', 'Rapporter'],
 };
 
@@ -45,23 +47,9 @@ function renderSidebarMenu() {
     const { currentCompany } = getState();
     const role = currentCompany?.role || 'member';
     const allowedPages = menuConfig[role] || menuConfig.member;
-
-    const menuItems = allowedPages.map(page => `
-        <li><a href="#" data-page="${page}">${page}</a></li>
-    `).join('');
-
+    const menuItems = allowedPages.map(page => `<li><a href="#" data-page="${page}">${page}</a></li>`).join('');
     const navList = document.querySelector('.sidebar-nav ul');
-    if (navList) {
-        navList.innerHTML = menuItems;
-    }
-}
-
-function renderPlaceholderPage(title) {
-    document.getElementById('main-view').innerHTML = `
-        <div class="card">
-            <h3 class="card-title">${title}</h3>
-            <p>Denna sektion är under utveckling.</p>
-        </div>`;
+    if (navList) navList.innerHTML = menuItems;
 }
 
 export function initializeAppUI() {
@@ -75,9 +63,7 @@ export function initializeAppUI() {
 export function navigateTo(page) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
-    
     renderSidebarMenu();
-    
     if (page === 'Översikt Alla Företag') {
         appContainer.classList.add('portal-view');
         if(header) header.style.display = 'none';
@@ -85,7 +71,6 @@ export function navigateTo(page) {
         appContainer.classList.remove('portal-view');
         if(header) header.style.display = 'flex';
     }
-
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const link = document.querySelector(`.sidebar-nav a[data-page="${page}"]`);
     if (link) {
@@ -96,7 +81,6 @@ export function navigateTo(page) {
         if (defaultLink) defaultLink.classList.add('active');
         page = defaultPage;
     }
-    
     renderPageContent(page);
     document.querySelector('.sidebar')?.classList.remove('open');
 }
@@ -104,17 +88,11 @@ export function navigateTo(page) {
 function renderPageContent(page) {
     document.querySelector('.page-title').textContent = page;
     document.getElementById('main-view').innerHTML = ''; 
-    
     const newItemBtn = document.getElementById('new-item-btn');
     newItemBtn.style.display = 'none';
     newItemBtn.onclick = null;
-
     const renderFunction = pageRenderers[page];
-    if (renderFunction) {
-        renderFunction();
-    } else {
-        renderPlaceholderPage(page);
-    }
+    if (renderFunction) renderFunction();
     
     switch (page) {
         case 'Intäkter':
@@ -141,6 +119,11 @@ function renderPageContent(page) {
             newItemBtn.textContent = 'Ny Faktura';
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderInvoiceEditor();
+            break;
+        case 'Kontakter': // <-- NYTT CASE
+            newItemBtn.textContent = 'Ny Kontakt';
+            newItemBtn.style.display = 'block';
+            newItemBtn.onclick = () => window.contactFunctions.renderContactForm();
             break;
     }
 }
@@ -190,15 +173,7 @@ function setupCompanySelector() {
 }
 
 export function showFatalError(message) {
-    document.body.innerHTML = `
-        <div class="fatal-error-container">
-            <div class="card card-danger">
-                <h2 class="logo">FlowBooks</h2>
-                <h3>Ett allvarligt fel har uppstått</h3>
-                <p>${message}</p>
-                <button id="logout-btn-error" class="btn btn-primary">Logga ut</button>
-            </div>
-        </div>`;
+    document.body.innerHTML = `<div class="fatal-error-container"><div class="card card-danger"><h2 class="logo">FlowBooks</h2><h3>Ett allvarligt fel har uppstått</h3><p>${message}</p><button id="logout-btn-error" class="btn btn-primary">Logga ut</button></div></div>`;
     document.getElementById('logout-btn-error').addEventListener('click', handleSignOut);
 }
 
