@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tink Connection Test</title>
+    <!-- Det kritiska skriptet som laddar Tinks bibliotek -->
     <script src="https://link.tink.com/1.0.0/tink-link.js" defer></script>
     <style>
         body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; }
@@ -12,12 +13,17 @@
     </style>
 </head>
 <body>
+
     <h1>Tink Integration Test</h1>
-    <button id="connect-button">Starta Bankanslutning</button>
-    <div id="log">Väntar på åtgärd...<br></div>
+    <button id="connect-button" disabled>Väntar på att sidan ska laddas...</button>
+    <div id="log">Startar diagnostik...<br></div>
+
     <script type="module">
+        // Importera nödvändiga Firebase-delar
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
+
+        // Din Firebase-konfiguration
         const firebaseConfig = {
             apiKey: "AIzaSyDGamRgGYt-Bl2Mj0znqAG7uFWM9TC0VgU",
             authDomain: "flowbooks-73cd9.firebaseapp.com",
@@ -26,59 +32,55 @@
             messagingSenderId: "226642349583",
             appId: "1:226642349583:web:e2376d9283d2d3c33ddd7a"
         };
+
         const app = initializeApp(firebaseConfig);
         const functions = getFunctions(app);
         const exchangeCodeFunction = httpsCallable(functions, 'exchangeCodeForToken');
-        const fetchBankDataFunction = httpsCallable(functions, 'fetchBankData');
+        
         const logElement = document.getElementById('log');
         const button = document.getElementById('connect-button');
+
         function log(message) {
             logElement.innerHTML += message + '<br>';
             logElement.scrollTop = logElement.scrollHeight;
         }
-        button.addEventListener('click', async () => {
-            log('Knappen klickad. Startar processen...');
-            button.disabled = true;
-            button.textContent = 'Arbetar...';
-            try {
-                log('Försöker öppna Tink Link...');
-                const code = await new Promise((resolve, reject) => {
-                    try {
-                        const tinkLink = TinkLink.create({
-                            clientId: "3062b812f1d340b986a70df838755c29",
-                            // KORRIGERAD RAD: Använder stort 'F'
-                            redirectUri: "https://ewilliamhertz.github.io/Flowbooks3/tink_test.html",
-                            market: 'SE',
-                            locale: 'sv_SE',
-                            onSuccess: (data) => resolve(data.code),
-                            onError: (error) => reject(error)
-                        });
-                        tinkLink.open();
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
-                log('Tink Link lyckades! Fick auktoriseringskod.');
-                log('Skickar kod till Firebase-funktion...');
-                const tokenResult = await exchangeCodeFunction({ code: code });
-                const accessToken = tokenResult.data.accessToken;
-                if (!accessToken) throw new Error("Fick ingen access token från backend.");
-                log('Fick access token från backend!');
-                log('Hämtar bankdata med access token...');
-                const bankDataResult = await fetchBankDataFunction({ accessToken: accessToken });
-                log('Hämtade bankdata!');
-                log('SUCCESS! Antal konton: ' + bankDataResult.data.accounts.length);
-                log('Antal transaktioner: ' + bankDataResult.data.transactions.length);
-                alert("GRATTIS! Hela flödet fungerade!");
-            } catch (error) {
-                log('ETT FEL INTRÄFFADE: ' + error.message);
-                console.error(error);
-                alert("Ett fel inträffade. Kontrollera loggen på testsidan för detaljer.");
-            } finally {
-                button.disabled = false;
+
+        // KÖR EN KONTROLL NÄR HELA SIDAN HAR LADDATS KLART
+        window.onload = () => {
+            log('Sidan har laddats klart. Kontrollerar Tink-biblioteket...');
+            if (typeof TinkLink !== 'undefined') {
+                log('✅ SUCCÉ: TinkLink-biblioteket har laddats korrekt!');
                 button.textContent = 'Starta Bankanslutning';
+                button.disabled = false;
+            } else {
+                log('❌ KRITISKT FEL: TinkLink-biblioteket kunde INTE laddas.');
+                log('Detta betyder att skript-taggen i HTML-koden antingen saknas, blockeras eller att du ser en gammal version av sidan.');
+                button.textContent = 'Fel: Kan ej ladda Tink';
+            }
+        };
+
+        button.addEventListener('click', async () => {
+            // Denna kod körs bara om biblioteket har laddats korrekt
+            log('Knappen klickad. Försöker öppna Tink Link...');
+            try {
+                const code = await new Promise((resolve, reject) => {
+                    const tinkLink = TinkLink.create({
+                        clientId: "3062b812f1d340b986a70df838755c29",
+                        redirectUri: "https://ewilliamhertz.github.io/Flowbooks3/tink_test.html",
+                        market: 'SE',
+                        locale: 'sv_SE',
+                        onSuccess: (data) => resolve(data.code),
+                        onError: (error) => reject(error)
+                    });
+                    tinkLink.open();
+                });
+                log('✅ SUCCÉ: Tink Link öppnades och stängdes korrekt!');
+                alert("GRATTIS! Anslutningen fungerade!");
+            } catch (error) {
+                log('❌ FEL: Tink Link kunde inte öppnas. Fel: ' + error.message);
             }
         });
     </script>
+
 </body>
 </html>
