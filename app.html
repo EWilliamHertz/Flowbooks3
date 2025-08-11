@@ -6,14 +6,16 @@
     <title>Dashboard | FlowBooks</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Externa bibliotek för diagram och PDF-generering -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 
     <!-- =================================================================== -->
     <!-- DEN VIKTIGA RADEN: Denna rad laddar Tinks anslutningsbibliotek. -->
-    <!-- Den måste finnas här för att anslutningen ska fungera. -->
-    <script src="https://link.tink.com/1.0.0/tink-link.js"></script>
+    <!-- 'defer' säkerställer att skriptet körs först när sidan är redo. -->
+    <script src="https://link.tink.com/1.0.0/tink-link.js" defer></script>
     <!-- =================================================================== -->
 
 </head>
@@ -56,6 +58,7 @@
     <div id="modal-container"></div>
     <div id="toast-container"></div>
     
+    <!-- Din applikationslogik laddas sist av allt -->
     <script src="js/app.js" type="module"></script>
 </body>
 </html>
