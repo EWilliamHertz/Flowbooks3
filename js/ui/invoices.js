@@ -106,6 +106,8 @@ export function renderInvoiceEditor(invoiceId = null) {
                     <button id="save-send-btn" class="btn btn-primary">Bokför och Skicka</button>
                 ` : `
                     <button id="back-btn" class="btn btn-secondary">Tillbaka till översikt</button>
+                    <button onclick="window.invoiceFunctions.generatePDF('${invoiceId}')" class="btn btn-secondary">Ladda ned PDF</button>
+                    <button onclick="window.invoiceFunctions.sendByEmail('${invoiceId}')" class="btn btn-primary">Skicka via E-post</button>
                 `}
             </div>
         </div>`;
@@ -367,6 +369,39 @@ async function generateInvoicePDF(invoiceId) {
     doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
 }
 
+/**
+ * Öppnar användarens e-postklient med ett förifyllt meddelande för fakturan.
+ * @param {string} invoiceId - ID på fakturan som ska skickas.
+ */
+function sendByEmail(invoiceId) {
+    const { allInvoices, currentCompany } = getState();
+    const invoice = allInvoices.find(inv => inv.id === invoiceId);
+    if (!invoice) {
+        showToast("Kunde inte hitta fakturadata.", "error");
+        return;
+    }
+
+    showConfirmationModal(() => {
+        generateInvoicePDF(invoiceId);
+
+        const subject = `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`;
+        const body = `
+Hej,
+
+Här kommer faktura #${invoice.invoiceNumber}.
+Den finns bifogad i detta mail.
+
+Med vänliga hälsningar,
+${currentCompany.name}
+        `;
+        
+        const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        
+        window.location.href = mailtoLink;
+
+    }, "Förbered E-post", "Först, ladda ner PDF-fakturan för att kunna bifoga den. Klicka på 'Bekräfta' för att starta nedladdningen.");
+}
+
 async function createPdfContent(doc, invoice, company) {
     // Lägg till logotyp
     if (company.logoUrl) {
@@ -480,4 +515,5 @@ window.invoiceFunctions = {
     editInvoice: renderInvoiceEditor,
     generatePDF: generateInvoicePDF,
     markAsPaid: markAsPaid,
+    sendByEmail: sendByEmail,
 };
