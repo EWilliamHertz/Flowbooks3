@@ -1,8 +1,10 @@
 // js/ui/banking.js
 import { getState, setState } from '../state.js';
-import { renderSpinner, showToast, closeModal } from './utils.js';
+import { renderSpinner, showToast, closeModal, showConfirmationModal } from './utils.js';
 import { getCategorySuggestion } from '../services/ai.js';
 import { saveDocument, fetchAllCompanyData } from '../services/firestore.js';
+import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { db } from '../../firebase-config.js';
 
 // Huvudfunktion för att rendera sidan
 export function renderBankingPage() {
@@ -37,7 +39,6 @@ function handleFileSelect(event) {
     reader.onload = (e) => {
         try {
             const text = e.target.result;
-            // Försök att automatiskt detektera bank och tolka filen
             const transactions = parseCsv(text);
             if (transactions.length > 0) {
                 renderReconciliationView(transactions);
@@ -51,16 +52,13 @@ function handleFileSelect(event) {
     reader.readAsText(file, 'ISO-8859-1'); // Vanlig teckenkodning för svenska banker
 }
 
-// Enkel CSV-tolkare (kan behöva anpassas för specifik bank)
+// Enkel CSV-tolkare
 function parseCsv(text) {
     const lines = text.split('\n').filter(line => line.trim() !== '');
     if (lines.length < 2) return [];
 
-    // Antaganden om kolumnordning (detta är den svåra delen att generalisera)
-    // Vi antar: Datum, Beskrivning, Belopp
-    // Detta kan vi senare göra konfigurerbart för användaren.
     const transactions = lines.slice(1).map((line, index) => {
-        const columns = line.split(';'); // Ofta semikolon i svenska filer
+        const columns = line.split(';');
         if (columns.length < 3) return null;
         
         return {
@@ -68,27 +66,26 @@ function parseCsv(text) {
             date: columns[0]?.trim().replace(/"/g, ''),
             description: columns[1]?.trim().replace(/"/g, ''),
             amount: parseFloat(columns[2]?.trim().replace(/"/g, '').replace(',', '.').replace(/\s/g, '')) || 0,
-            status: 'unmatched' // unmatched, matched, ignored
+            status: 'unmatched'
         };
     }).filter(t => t && t.date && t.description && t.amount !== 0);
     
     return transactions;
 }
 
-// Rendera vyn för avstämning med de inlästa transaktionerna
+// Rendera vyn för avstämning
 async function renderReconciliationView(transactions) {
     const container = document.getElementById('reconciliation-container');
     container.innerHTML = renderSpinner();
 
-    // Anropa AI för att få kategoriförslag
     for (const t of transactions) {
-        if (t.amount < 0) { // Bara för utgifter
+        if (t.amount < 0) {
             const suggestion = await getCategorySuggestion({ description: t.description, party: t.description });
             t.suggestedCategoryId = suggestion;
         }
     }
     
-    setState({ bankTransactions: transactions }); // Spara i state
+    setState({ bankTransactions: transactions });
     
     const { categories } = getState();
     const categoryOptions = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -139,11 +136,99 @@ async function renderReconciliationView(transactions) {
             </table>
         </div>`;
         
-    // Lägg till event listeners för knapparna efter att de renderats
     container.querySelectorAll('button[data-action="approve-expense"]').forEach(btn => {
         btn.addEventListener('click', handleApproveExpense);
     });
+    // NY EVENT LISTENER FÖR FAKTURAMATCHNING
+    container.querySelectorAll('button[data-action="match-invoice"]').forEach(btn => {
+        btn.addEventListener('click', showInvoiceMatchingModal);
+    });
 }
+
+// NY FUNKTION: Visar en modal för att matcha mot fakturor
+function showInvoiceMatchingModal(event) {
+    const transactionId = event.target.dataset.id;
+    const { bankTransactions, allInvoices } = getState();
+    const transaction = bankTransactions.find(t => t.id === transactionId);
+
+    const openInvoices = allInvoices.filter(inv => inv.status === 'Skickad');
+
+    const invoiceRows = openInvoices.map(inv => {
+        const amountDifference = Math.abs(inv.grandTotal - transaction.amount);
+        const isSuggested = amountDifference < 1; // Föreslå om beloppet är nära
+
+        return `
+            <tr class="${isSuggested ? 'suggested-match' : ''}">
+                <td>#${inv.invoiceNumber}</td>
+                <td>${inv.customerName}</td>
+                <td>${inv.dueDate}</td>
+                <td class="text-right">${inv.grandTotal.toLocaleString('sv-SE')} kr</td>
+                <td><button class="btn btn-sm btn-primary" onclick="window.bankingFunctions.handleMatchInvoice('${transactionId}', '${inv.id}')">Välj</button></td>
+            </tr>
+        `;
+    }).join('');
+
+    const modalHtml = `
+        <div class="modal-overlay">
+            <div class="modal-content" style="max-width: 800px;">
+                <h3>Matcha Inbetalning mot Faktura</h3>
+                <p>Inbetalning på <strong>${transaction.amount.toLocaleString('sv-SE')} kr</strong> den ${transaction.date}. Välj vilken faktura betalningen gäller.</p>
+                <table class="data-table" style="margin-top: 1rem;">
+                    <thead><tr><th>Fakturanr.</th><th>Kund</th><th>Förfallodatum</th><th class="text-right">Belopp</th><th>Åtgärd</th></tr></thead>
+                    <tbody>${invoiceRows.length > 0 ? invoiceRows : `<tr><td colspan="5" class="text-center">Inga obetalda fakturor hittades.</td></tr>`}</tbody>
+                </table>
+                 <div class="modal-actions" style="margin-top: 1.5rem;">
+                    <button id="modal-close" class="btn btn-secondary">Avbryt</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modal-container').innerHTML = modalHtml;
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+}
+
+// NY FUNKTION: Hanterar själva matchningen
+async function handleMatchInvoice(transactionId, invoiceId) {
+    const { bankTransactions, allInvoices } = getState();
+    const transaction = bankTransactions.find(t => t.id === transactionId);
+    const invoice = allInvoices.find(inv => inv.id === invoiceId);
+
+    const confirmMessage = `Är du säker på att du vill matcha inbetalningen på ${transaction.amount.toLocaleString('sv-SE')} kr mot faktura #${invoice.invoiceNumber}?`;
+
+    showConfirmationModal(async () => {
+        try {
+            // 1. Uppdatera fakturastatus
+            const invoiceRef = doc(db, 'invoices', invoiceId);
+            await updateDoc(invoiceRef, { status: 'Betald' });
+
+            // 2. Skapa intäktspost
+            const incomeData = {
+                date: transaction.date,
+                description: `Betalning för faktura #${invoice.invoiceNumber}`,
+                party: invoice.customerName,
+                amount: invoice.grandTotal, // Använd fakturans totalbelopp
+                amountExclVat: invoice.subtotal,
+                vatAmount: invoice.totalVat,
+                generatedFromInvoiceId: invoiceId,
+                reconciled: true,
+                isCorrection: false,
+            };
+            await saveDocument('incomes', incomeData);
+
+            await fetchAllCompanyData();
+            showToast("Fakturan har markerats som betald och en intäkt har skapats!", "success");
+            
+            // Ta bort raden från vyn och stäng modalen
+            document.getElementById(`row-${transactionId}`).style.display = 'none';
+            closeModal();
+
+        } catch (error) {
+            showToast("Ett fel uppstod vid matchningen.", "error");
+            console.error("Fakturmatchningsfel:", error);
+        }
+    }, "Bekräfta Matchning", confirmMessage);
+}
+
 
 // Hantera när användaren klickar "Bokför" på en utgift
 async function handleApproveExpense(event) {
@@ -182,7 +267,6 @@ async function handleApproveExpense(event) {
         await saveDocument('expenses', expenseData);
         showToast("Utgiften har bokförts!", "success");
         
-        // Ta bort raden från vyn
         document.getElementById(`row-${transactionId}`).style.display = 'none';
 
     } catch (error) {
@@ -191,75 +275,8 @@ async function handleApproveExpense(event) {
         event.target.textContent = 'Bokför';
     }
 }
-```
 
-**2. `app.html` (Rensad från onödiga script)**
-
-```html
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard | FlowBooks</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Externa bibliotek för diagram och PDF-generering -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
-
-    <!-- Inga fler script för Tink eller Plaid behövs här -->
-
-</head>
-<body>
-    <div id="app-container" style="visibility: hidden;">
-        <aside class="sidebar">
-            <div class="sidebar-header"><h2 class="logo">FlowBooks</h2></div>
-            <nav class="sidebar-nav">
-                <ul></ul>
-            </nav>
-        </aside>
-        <div class="main-content">
-            <header class="main-header">
-                <div class="header-left">
-                    <button id="hamburger-btn" class="hamburger-menu">
-                        <span class="bar"></span>
-                        <span class="bar"></span>
-                        <span class="bar"></span>
-                    </button>
-                    <h1 class="page-title">Översikt</h1>
-                </div>
-                <div class="header-right">
-                    <div class="company-selector" style="margin-right: 15px;">
-                        <select id="company-selector" class="form-input" style="min-width: 200px;"></select>
-                    </div>
-                    <button id="new-item-btn" class="btn btn-primary" style="display: none;"></button>
-                    <div class="profile-container">
-                        <div id="user-profile-icon" class="user-profile"></div>
-                        <div id="profile-dropdown" class="profile-dropdown">
-                            <a href="#" id="settings-link">Inställningar</a>
-                            <a href="#" id="logout-btn">Logga ut</a>
-                        </div>
-                    </div>
-                </div>
-            </header>
-            <main id="main-view"></main>
-        </div>
-    </div>
-
-    <div id="modal-container"></div>
-    <div id="toast-container"></div>
-    
-    <!-- Din applikationslogik laddas sist av allt -->
-    <script src="js/app.js" type="module"></script>
-</body>
-</html>
-```
-
-**3. `js/services/banking.js` (Raderas)**
-
-Denna fil behövs inte längre. Du kan ta bort den från ditt projekt. Logiken har flyttats till `js/ui/banking.js` för att hålla det enkelt.
-
-Jag är övertygad om att denna nya strategi kommer att fungera för dig och ge dig den automatiserade hjälp du är ute efter. Prova att implementera dessa ändring
+// Gör nya funktioner tillgängliga globalt
+window.bankingFunctions = {
+    handleMatchInvoice,
+};
