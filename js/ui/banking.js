@@ -3,13 +3,12 @@ import { getState, setState } from '../state.js';
 import { renderSpinner, showToast } from './utils.js';
 
 // === KONFIGURATION ===
-// Dina URL:er är nu inklistrade
 const EXCHANGE_TOKEN_URL = 'https://tink-exchange-token-226642349583.europe-west1.run.app';
 const FETCH_DATA_URL = 'https://tink-fetch-data-226642349583.europe-west1.run.app';
-
-// Dessa är offentliga och kan ligga kvar
 const TINK_CLIENT_ID = '3062b812f1d340b986a70df838755c29';
-const REDIRECT_URI = 'https://ewilliamhertz.github.io/Flowbooks3/Flowbooks3-174dae249a9b4cfb7bf4b2836511342befd53bc9/app.html';
+
+// UPPDATERAD REDIRECT_URI FÖR FIREBASE HOSTING
+const REDIRECT_URI = 'https://flowbooks-73cd9.firebaseapp.com/app.html';
 
 // Huvudfunktion som anropas från navigation.js
 export function renderBankingPage() {
