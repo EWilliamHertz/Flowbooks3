@@ -1,282 +1,156 @@
 // js/ui/banking.js
 import { getState, setState } from '../state.js';
-import { renderSpinner, showToast, closeModal, showConfirmationModal } from './utils.js';
-import { getCategorySuggestion } from '../services/ai.js';
-import { saveDocument, fetchAllCompanyData } from '../services/firestore.js';
-import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
-import { db } from '../../firebase-config.js';
+import { renderSpinner, showToast } from './utils.js';
 
-// Huvudfunktion för att rendera sidan
+// === KONFIGURATION ===
+// Dina URL:er är nu inklistrade
+const EXCHANGE_TOKEN_URL = 'https://tink-exchange-token-226642349583.europe-west1.run.app';
+const FETCH_DATA_URL = 'https://tink-fetch-data-226642349583.europe-west1.run.app';
+
+// Dessa är offentliga och kan ligga kvar
+const TINK_CLIENT_ID = '3062b812f1d340b986a70df838755c29';
+const REDIRECT_URI = 'https://ewilliamhertz.github.io/Flowbooks3/Flowbooks3-174dae249a9b4cfb7bf4b2836511342befd53bc9/app.html';
+
+// Huvudfunktion som anropas från navigation.js
 export function renderBankingPage() {
     const mainView = document.getElementById('main-view');
-
     mainView.innerHTML = `
         <div class="card">
-            <div class="card-title-container" style="display: flex; justify-content: space-between; align-items: center;">
-                <h3>Bankavstämning via Fil</h3>
-                <button id="upload-csv-btn" class="btn btn-primary">Läs in Kontoutdrag (CSV)</button>
-            </div>
-            <p>Ladda ner ett kontoutdrag som en CSV-fil från din internetbank. Ladda sedan upp filen här för att automatiskt analysera och bokföra dina transaktioner.</p>
-            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+            <h3>Bankavstämning</h3>
+            <p>Anslut ditt företagskonto via Tink för att automatiskt hämta transaktioner.</p>
+            <button id="connect-bank-btn" class="btn btn-primary">Anslut Bank</button>
         </div>
-        <div id="reconciliation-container" style="margin-top: 1.5rem;">
-             <div class="card text-center"><p>Väntar på att en CSV-fil ska laddas upp.</p></div>
+        <div id="banking-content-container" style="margin-top: 1.5rem;">
+            ${renderSpinner()}
         </div>`;
 
-    document.getElementById('upload-csv-btn').addEventListener('click', () => {
-        document.getElementById('csv-file-input').click();
+    document.getElementById('connect-bank-btn').addEventListener('click', redirectToTink);
+    
+    handleTinkCallback();
+}
+
+function redirectToTink() {
+    const params = new URLSearchParams({
+        client_id: TINK_CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        scope: 'accounts:read,transactions:read',
+        response_type: 'code',
+        market: 'SE',
+        locale: 'sv_SE'
+    });
+    window.location.href = `https://link.tink.com/1.0/authorize?${params.toString()}`;
+}
+
+async function handleTinkCallback() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const error = urlParams.get('error');
+    const container = document.getElementById('banking-content-container');
+
+    if (error) {
+        showToast(`Fel från Tink: ${error}`, 'error');
+        container.innerHTML = `<div class="card text-center"><p>Autentiseringen misslyckades.</p></div>`;
+        return;
+    }
+
+    if (!code) {
+        container.innerHTML = `<div class="card text-center"><p>Inget bankkonto är anslutet än.</p></div>`;
+        return;
+    }
+
+    try {
+        showToast("Verifierar anslutning...", "info");
+        const tokenResponse = await fetch(EXCHANGE_TOKEN_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code })
+        });
+
+        if (!tokenResponse.ok) {
+            const errorData = await tokenResponse.json();
+            throw new Error(errorData.details?.error_description || 'Okänt fel vid token-utbyte');
+        }
+
+        const tokenData = await tokenResponse.json();
+        const accessToken = tokenData.access_token;
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showToast("Anslutning lyckades! Hämtar konton...", "success");
+
+        const accountsResponse = await fetch(FETCH_DATA_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: accessToken, data_type: 'accounts' })
+        });
+        const accountsData = await accountsResponse.json();
+        setState({ bankAccounts: accountsData.accounts });
+        
+        const transactionsResponse = await fetch(FETCH_DATA_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: accessToken, data_type: 'transactions' })
+        });
+        const transactionsData = await transactionsResponse.json();
+        setState({ bankTransactions: transactionsData.transactions });
+
+        renderAccountAndTransactionViews();
+
+    } catch (err) {
+        console.error("Callback error:", err);
+        showToast(`Ett fel uppstod: ${err.message}`, "error");
+        container.innerHTML = `<div class="card text-center"><p>Kunde inte slutföra anslutningen.</p></div>`;
+    }
+}
+
+function renderAccountAndTransactionViews() {
+    const { bankAccounts } = getState();
+    const container = document.getElementById('banking-content-container');
+
+    const accountTabs = bankAccounts.map(acc => `
+        <button class="btn filter-btn" data-account-id="${acc.id}">
+            ${acc.name} (${acc.balances.booked.amount.value.toLocaleString('sv-SE', {style: 'currency', currency: acc.balances.booked.amount.currency})})
+        </button>
+    `).join('');
+
+    container.innerHTML = `
+        <div class="card">
+            <h4>Välj konto att stämma av:</h4>
+            <div class="filter-container" style="margin-top: 1rem;">${accountTabs}</div>
+        </div>
+        <div id="transaction-list-container" style="margin-top: 1.5rem;"></div>`;
+
+    const accountButtons = container.querySelectorAll('.filter-btn');
+    accountButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            accountButtons.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            renderTransactionsForAccount(e.target.dataset.accountId);
+        });
     });
 
-    document.getElementById('csv-file-input').addEventListener('change', handleFileSelect);
-}
-
-// Hanterar den valda filen
-function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const text = e.target.result;
-            const transactions = parseCsv(text);
-            if (transactions.length > 0) {
-                renderReconciliationView(transactions);
-            } else {
-                showToast("Kunde inte hitta några transaktioner i filen.", "error");
-            }
-        } catch (error) {
-            showToast(`Fel vid tolkning av fil: ${error.message}`, "error");
-        }
-    };
-    reader.readAsText(file, 'ISO-8859-1'); // Vanlig teckenkodning för svenska banker
-}
-
-// Enkel CSV-tolkare
-function parseCsv(text) {
-    const lines = text.split('\n').filter(line => line.trim() !== '');
-    if (lines.length < 2) return [];
-
-    const transactions = lines.slice(1).map((line, index) => {
-        const columns = line.split(';');
-        if (columns.length < 3) return null;
-        
-        return {
-            id: `csv-${index}`,
-            date: columns[0]?.trim().replace(/"/g, ''),
-            description: columns[1]?.trim().replace(/"/g, ''),
-            amount: parseFloat(columns[2]?.trim().replace(/"/g, '').replace(',', '.').replace(/\s/g, '')) || 0,
-            status: 'unmatched'
-        };
-    }).filter(t => t && t.date && t.description && t.amount !== 0);
-    
-    return transactions;
-}
-
-// Rendera vyn för avstämning
-async function renderReconciliationView(transactions) {
-    const container = document.getElementById('reconciliation-container');
-    container.innerHTML = renderSpinner();
-
-    for (const t of transactions) {
-        if (t.amount < 0) {
-            const suggestion = await getCategorySuggestion({ description: t.description, party: t.description });
-            t.suggestedCategoryId = suggestion;
-        }
+    if (accountButtons.length > 0) {
+        accountButtons[0].classList.add('active');
+        renderTransactionsForAccount(accountButtons[0].dataset.accountId);
     }
+}
+
+function renderTransactionsForAccount(accountId) {
+    const container = document.getElementById('transaction-list-container');
+    const { bankTransactions } = getState();
+    const transactionsForAccount = bankTransactions.filter(t => t.accountId === accountId);
     
-    setState({ bankTransactions: transactions });
-    
-    const { categories } = getState();
-    const categoryOptions = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-
-    const rows = transactions.map(t => {
-        const isIncome = t.amount > 0;
-        let actionHtml = '';
-
-        if (isIncome) {
-            actionHtml = `<button class="btn btn-sm btn-primary" data-id="${t.id}" data-action="match-invoice">Matcha mot Faktura</button>`;
-        } else {
-            const suggestedCategory = categories.find(c => c.id === t.suggestedCategoryId);
-            actionHtml = `
-                <div style="display: flex; gap: 0.5rem; align-items: center;">
-                    <select class="form-input form-input-sm" data-id="${t.id}" data-action="categorize">
-                        <option value="">Välj kategori...</option>
-                        ${suggestedCategory ? `<option value="${suggestedCategory.id}" selected>Förslag: ${suggestedCategory.name}</option>` : ''}
-                        <option value="" disabled>---</option>
-                        ${categoryOptions}
-                    </select>
-                    <button class="btn btn-sm btn-success" data-id="${t.id}" data-action="approve-expense">Bokför</button>
-                </div>`;
-        }
-
-        return `
-            <tr id="row-${t.id}">
-                <td>${t.date}</td>
-                <td>${t.description}</td>
-                <td class="text-right ${isIncome ? 'green' : 'red'}">${t.amount.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</td>
-                <td>${actionHtml}</td>
-            </tr>`;
+    const rows = transactionsForAccount.map(t => {
+        const amount = t.amount.value;
+        const type = t.type;
+        return `<tr><td>${t.dates.booked}</td><td>${t.descriptions.display}</td><td class="text-right ${type === 'CREDIT' ? 'green' : 'red'}">${amount.toLocaleString('sv-SE', {style: 'currency', currency: t.amount.currency})}</td><td><button class="btn btn-sm btn-secondary">Matcha</button></td></tr>`;
     }).join('');
 
     container.innerHTML = `
         <div class="card">
             <h3 class="card-title">Transaktioner att stämma av</h3>
-            <p>${transactions.length} transaktioner har lästs in. Välj en åtgärd för varje rad nedan.</p>
             <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Datum</th>
-                        <th>Beskrivning</th>
-                        <th class="text-right">Belopp</th>
-                        <th>Åtgärd</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
+                <thead><tr><th>Datum</th><th>Beskrivning</th><th class="text-right">Belopp</th><th>Åtgärd</th></tr></thead>
+                <tbody>${rows.length > 0 ? rows : '<tr><td colspan="4" class="text-center">Inga transaktioner att visa.</td></tr>'}</tbody>
             </table>
         </div>`;
-        
-    container.querySelectorAll('button[data-action="approve-expense"]').forEach(btn => {
-        btn.addEventListener('click', handleApproveExpense);
-    });
-    // NY EVENT LISTENER FÖR FAKTURAMATCHNING
-    container.querySelectorAll('button[data-action="match-invoice"]').forEach(btn => {
-        btn.addEventListener('click', showInvoiceMatchingModal);
-    });
 }
-
-// NY FUNKTION: Visar en modal för att matcha mot fakturor
-function showInvoiceMatchingModal(event) {
-    const transactionId = event.target.dataset.id;
-    const { bankTransactions, allInvoices } = getState();
-    const transaction = bankTransactions.find(t => t.id === transactionId);
-
-    const openInvoices = allInvoices.filter(inv => inv.status === 'Skickad');
-
-    const invoiceRows = openInvoices.map(inv => {
-        const amountDifference = Math.abs(inv.grandTotal - transaction.amount);
-        const isSuggested = amountDifference < 1; // Föreslå om beloppet är nära
-
-        return `
-            <tr class="${isSuggested ? 'suggested-match' : ''}">
-                <td>#${inv.invoiceNumber}</td>
-                <td>${inv.customerName}</td>
-                <td>${inv.dueDate}</td>
-                <td class="text-right">${inv.grandTotal.toLocaleString('sv-SE')} kr</td>
-                <td><button class="btn btn-sm btn-primary" onclick="window.bankingFunctions.handleMatchInvoice('${transactionId}', '${inv.id}')">Välj</button></td>
-            </tr>
-        `;
-    }).join('');
-
-    const modalHtml = `
-        <div class="modal-overlay">
-            <div class="modal-content" style="max-width: 800px;">
-                <h3>Matcha Inbetalning mot Faktura</h3>
-                <p>Inbetalning på <strong>${transaction.amount.toLocaleString('sv-SE')} kr</strong> den ${transaction.date}. Välj vilken faktura betalningen gäller.</p>
-                <table class="data-table" style="margin-top: 1rem;">
-                    <thead><tr><th>Fakturanr.</th><th>Kund</th><th>Förfallodatum</th><th class="text-right">Belopp</th><th>Åtgärd</th></tr></thead>
-                    <tbody>${invoiceRows.length > 0 ? invoiceRows : `<tr><td colspan="5" class="text-center">Inga obetalda fakturor hittades.</td></tr>`}</tbody>
-                </table>
-                 <div class="modal-actions" style="margin-top: 1.5rem;">
-                    <button id="modal-close" class="btn btn-secondary">Avbryt</button>
-                </div>
-            </div>
-        </div>
-    `;
-    document.getElementById('modal-container').innerHTML = modalHtml;
-    document.getElementById('modal-close').addEventListener('click', closeModal);
-}
-
-// NY FUNKTION: Hanterar själva matchningen
-async function handleMatchInvoice(transactionId, invoiceId) {
-    const { bankTransactions, allInvoices } = getState();
-    const transaction = bankTransactions.find(t => t.id === transactionId);
-    const invoice = allInvoices.find(inv => inv.id === invoiceId);
-
-    const confirmMessage = `Är du säker på att du vill matcha inbetalningen på ${transaction.amount.toLocaleString('sv-SE')} kr mot faktura #${invoice.invoiceNumber}?`;
-
-    showConfirmationModal(async () => {
-        try {
-            // 1. Uppdatera fakturastatus
-            const invoiceRef = doc(db, 'invoices', invoiceId);
-            await updateDoc(invoiceRef, { status: 'Betald' });
-
-            // 2. Skapa intäktspost
-            const incomeData = {
-                date: transaction.date,
-                description: `Betalning för faktura #${invoice.invoiceNumber}`,
-                party: invoice.customerName,
-                amount: invoice.grandTotal, // Använd fakturans totalbelopp
-                amountExclVat: invoice.subtotal,
-                vatAmount: invoice.totalVat,
-                generatedFromInvoiceId: invoiceId,
-                reconciled: true,
-                isCorrection: false,
-            };
-            await saveDocument('incomes', incomeData);
-
-            await fetchAllCompanyData();
-            showToast("Fakturan har markerats som betald och en intäkt har skapats!", "success");
-            
-            // Ta bort raden från vyn och stäng modalen
-            document.getElementById(`row-${transactionId}`).style.display = 'none';
-            closeModal();
-
-        } catch (error) {
-            showToast("Ett fel uppstod vid matchningen.", "error");
-            console.error("Fakturmatchningsfel:", error);
-        }
-    }, "Bekräfta Matchning", confirmMessage);
-}
-
-
-// Hantera när användaren klickar "Bokför" på en utgift
-async function handleApproveExpense(event) {
-    const transactionId = event.target.dataset.id;
-    const { bankTransactions } = getState();
-    const transaction = bankTransactions.find(t => t.id === transactionId);
-    
-    const selectElement = document.querySelector(`select[data-id="${transactionId}"]`);
-    const categoryId = selectElement.value;
-
-    if (!categoryId) {
-        showToast("Vänligen välj en kategori innan du bokför.", "warning");
-        return;
-    }
-
-    const amount = Math.abs(transaction.amount);
-    const vatRate = 25; // Antagande, kan utvecklas
-    const vatAmount = amount - (amount / (1 + vatRate / 100));
-
-    const expenseData = {
-        date: transaction.date,
-        description: transaction.description,
-        party: transaction.description.split(' ').slice(0, 3).join(' '), // Förenklad motpart
-        amount: amount,
-        amountExclVat: amount - vatAmount,
-        vatRate: vatRate,
-        vatAmount: vatAmount,
-        categoryId: categoryId,
-        isCorrection: false,
-        reconciled: true // Markera som avstämd
-    };
-
-    try {
-        event.target.disabled = true;
-        event.target.textContent = 'Sparar...';
-        await saveDocument('expenses', expenseData);
-        showToast("Utgiften har bokförts!", "success");
-        
-        document.getElementById(`row-${transactionId}`).style.display = 'none';
-
-    } catch (error) {
-        showToast("Kunde inte bokföra utgiften.", "error");
-        event.target.disabled = false;
-        event.target.textContent = 'Bokför';
-    }
-}
-
-// Gör nya funktioner tillgängliga globalt
-window.bankingFunctions = {
-    handleMatchInvoice,
-};
