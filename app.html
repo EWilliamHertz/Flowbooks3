@@ -4,30 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard | FlowBooks</title>
+    
+    <!-- Stylesheets and Fonts -->
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- Externa bibliotek för diagram och PDF-generering -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
-
-    <!-- =================================================================== -->
-    <!-- DEN VIKTIGA RADEN: Denna rad laddar Tinks anslutningsbibliotek. -->
-    <!-- 'defer' säkerställer att skriptet körs först när sidan är redo. -->
+    <!-- External Libraries -->
+    <!-- The 'defer' attribute ensures these scripts are executed in order after the document is parsed -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js" defer></script>
     <script src="https://link.tink.com/1.0.0/tink-link.js" defer></script>
-    <!-- =================================================================== -->
 
 </head>
 <body>
+    <!-- Main Application Container -->
+    <!-- Initially hidden to prevent flash of unstyled content; made visible by JavaScript -->
     <div id="app-container" style="visibility: hidden;">
+        
+        <!-- Sidebar Navigation -->
         <aside class="sidebar">
-            <div class="sidebar-header"><h2 class="logo">FlowBooks</h2></div>
+            <div class="sidebar-header">
+                <h2 class="logo">FlowBooks</h2>
+            </div>
             <nav class="sidebar-nav">
+                <!-- Navigation links will be dynamically inserted here by js/ui/navigation.js -->
                 <ul></ul>
             </nav>
         </aside>
+        
+        <!-- Main Content Area -->
         <div class="main-content">
+            
+            <!-- Main Header -->
             <header class="main-header">
                 <div class="header-left">
                     <button id="hamburger-btn" class="hamburger-menu">
@@ -35,7 +44,7 @@
                         <span class="bar"></span>
                         <span class="bar"></span>
                     </button>
-                    <h1 class="page-title">Översikt</h1>
+                    <h1 class="page-title">Laddar...</h1>
                 </div>
                 <div class="header-right">
                     <div class="company-selector" style="margin-right: 15px;">
@@ -51,14 +60,24 @@
                     </div>
                 </div>
             </header>
-            <main id="main-view"></main>
+            
+            <!-- Main View for Page Content -->
+            <main id="main-view">
+                <!-- Initial loading spinner, content is rendered here by JavaScript -->
+                <div class="spinner-container">
+                    <div class="spinner"></div>
+                </div>
+            </main>
         </div>
     </div>
 
+    <!-- Containers for Modals and Toasts -->
     <div id="modal-container"></div>
     <div id="toast-container"></div>
     
-    <!-- Din applikationslogik laddas sist av allt -->
-    <script src="js/app.js" type="module"></script>
+    <!-- Application Entry Point -->
+    <!-- 'type="module"' enables ES6 modules. 'defer' ensures it runs after the HTML is parsed and other deferred scripts. -->
+    <script src="js/app.js" type="module" defer></script>
+
 </body>
 </html>
