@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlowBooks | Automatiserad Bokföring för Moderna Konsulter</title>
+    <title>FlowBooks | Smart Bokföring för Företagare</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,47 +23,79 @@
     </header>
 
     <main>
+        <!-- Hero Section -->
         <section id="hero" class="hero-section">
             <div class="container text-center">
-                <h1 class="hero-title">Bokföring på 15 minuter i månaden.</h1>
-                <p class="hero-subtitle">FlowBooks är den AI-drivna co-piloten för dig som modern konsult. Vi automatiserar din administration så att du kan fokusera på det du gör bäst, och vägleder dig aktivt till smartare finansiella beslut.</p>
-                <a href="register.html" class="btn btn-primary btn-large">Kom igång – Helt gratis</a>
+                <h1 class="hero-title">Din finansiella co-pilot.</h1>
+                <p class="hero-subtitle">FlowBooks automatiserar din bokföring med hjälp av AI så att du kan lägga mindre tid på pappersarbete och mer tid på din verksamhet. Skapat för den moderna företagaren.</p>
+                <a href="register.html" class="btn btn-primary btn-large">Testa FlowBooks gratis</a>
+                <div class="hero-image-container">
+                    <img src="https://placehold.co/1000x600/EFEFEF/333333?text=FlowBooks+Dashboard" alt="Skärmdump av FlowBooks översiktspanel" class="hero-image">
+                </div>
             </div>
         </section>
 
-        <section id="features" style="padding: 4rem 0;">
+        <!-- Features Section -->
+        <section id="features" class="features-section">
             <div class="container">
-                <div class="text-center" style="margin-bottom: 3rem;">
-                    <h2 style="font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem;">Mer än bara bokföring. En finansiell co-pilot.</h2>
-                    <p style="font-size: 1.1rem; color: var(--text-color-light); max-width: 700px; margin: auto;">Vi har designat FlowBooks från grunden för att vara ett proaktivt verktyg som inte bara registrerar vad som hänt, utan ger dig framåtblickande råd och insikter.</p>
+                <div class="section-header text-center">
+                    <h2>Allt du behöver. Inget du inte behöver.</h2>
+                    <p>Vi har byggt verktygen som faktiskt löser dina problem, utan onödig komplexitet.</p>
                 </div>
 
                 <div class="features-grid">
-                    <div class="card">
-                        <h3 class="card-title">Skanna-och-släng Kvitton</h3>
-                        <p>Tack vare den nya lagen från 1 juli 2024, kan du fota kvittot och slänga pappret direkt. Vår mobilapp använder AI för omedelbar tolkning och kontering.</p>
+                    <!-- Feature Card 1: Bank Reconciliation -->
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </div>
+                        <h3>Smart Bankavstämning</h3>
+                        <p>Ladda upp ett kontoutdrag (CSV) från din bank. Vår AI analyserar, matchar inbetalningar mot fakturor och föreslår kategorier för utgifter. Godkänn med ett klick.</p>
                     </div>
-                    <div class="card">
-                        <h3 class="card-title">Automatisk Bankavstämning</h3>
-                        <p>Med en sömlös koppling till din bank matchar systemet automatiskt transaktioner mot fakturor och kvitton. Du behöver bara godkänna.</p>
+
+                    <!-- Feature Card 2: AI Receipt Scanning -->
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                        </div>
+                        <h3>AI-Kvittoskanning</h3>
+                        <p>Fota ett kvitto och låt vår AI tolka datum, belopp, motpart och föreslå en bokföringskategori. Spara tid och undvik manuella fel.</p>
                     </div>
-                    <div class="card">
-                        <h3 class="card-title">Enkel Fakturering</h3>
-                        <p>Skapa och skicka professionella fakturor på sekunder. Systemet skickar sedan automatiska påminnelser för obetalda fakturor så att du slipper.</p>
+
+                    <!-- Feature Card 3: Invoicing -->
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        </div>
+                        <h3>Enkel Fakturering</h3>
+                        <p>Skapa och skicka professionella fakturor på under en minut. Systemet håller reda på vilka som är obetalda, betalda och förfallna.</p>
                     </div>
-                     <div class="card">
-                        <h3 class="card-title">Förenklat Årsbokslut</h3>
-                        <p>Vi har som mål att perfektionera arbetsflödet för enskilda näringsidkare, med stöd för Skatteverkets e-tjänst för "Förenklat årsbokslut".</p>
+
+                    <!-- Feature Card 4: Products & Inventory -->
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                        </div>
+                        <h3>Produkt- & Lagerhantering</h3>
+                        <p>Håll koll på dina produkter, inköpspriser och lagersaldon. Få en prognos på ditt lagers potentiella försäljningsvärde.</p>
                     </div>
                 </div>
             </div>
         </section>
 
+        <!-- Final CTA Section -->
+        <section class="cta-section">
+            <div class="container text-center">
+                <h2>Redo att förenkla din bokföring?</h2>
+                <p>Skapa ett konto och upptäck hur smidigt det kan vara. Det är gratis att komma igång.</p>
+                <a href="register.html" class="btn btn-primary btn-large">Börja din resa med FlowBooks</a>
+            </div>
+        </section>
     </main>
 
     <footer class="landing-footer">
         <div class="container">
-            <p>&copy; 2025 FlowBooks.</p>
+            <p>&copy; 2025 FlowBooks. Byggt för företagare, av företagare.</p>
         </div>
     </footer>
 </body>
