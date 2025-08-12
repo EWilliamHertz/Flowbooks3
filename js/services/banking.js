@@ -10,8 +10,7 @@ function getAuthorizationCode() {
     return new Promise((resolve, reject) => {
         console.log("Försöker skapa Tink Link med korrekt URI...");
         const tinkLink = TinkLink.create({
-            clientId: "3062b812f1d340b986a70df838755c29", 
-            // KORRIGERAD RAD: Använder stort 'F' för att matcha GitHub-projektet
+            clientId: "3062b812f1d340b986a70df838755c29", // Din Tink Client ID
             redirectUri: "https://ewilliamhertz.github.io/Flowbooks3/app.html",
             market: 'SE',
             locale: 'sv_SE',
