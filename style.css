@@ -23,16 +23,42 @@ body { font-family: var(--font-family); background-color: var(--background-color
 .container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 1rem; }
 .text-center { text-align: center; }
 
-/* --- 2. Landningssida (Oförändrad) --- */
-.landing-header { padding: 1rem 0; background-color: var(--card-background); border-bottom: 1px solid var(--border-color); }
+/* --- 2. Landningssida (NY DESIGN) --- */
+.landing-header { padding: 1rem 0; background-color: var(--card-background); border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 100; background: rgba(255,255,255,0.8); backdrop-filter: blur(10px); }
 .main-nav { display: flex; justify-content: space-between; align-items: center; }
-.nav-links { display: flex; align-items: center; gap: 1.5rem; }
-.nav-links a { text-decoration: none; color: var(--text-color-light); font-weight: 500; }
-.hero-section { padding: 4rem 0 6rem 0; }
-.hero-title { font-size: 3.2rem; font-weight: 800; line-height: 1.2; margin-bottom: 1rem; }
-.hero-subtitle { font-size: 1.2rem; color: var(--text-color-light); max-width: 650px; margin: 0 auto 2rem auto; }
-.landing-footer { padding: 2rem 0; text-align: center; color: var(--text-color-light); }
+.nav-links { display: flex; align-items: center; gap: 1rem; }
+.nav-links a { text-decoration: none; font-weight: 500; }
+
+.hero-section { padding: 5rem 0 6rem 0; }
+.hero-title { font-size: 3.5rem; font-weight: 800; line-height: 1.2; margin-bottom: 1.5rem; color: #111; }
+.hero-subtitle { font-size: 1.2rem; color: var(--text-color-light); max-width: 650px; margin: 0 auto 2.5rem auto; }
+.hero-image-container { margin-top: 4rem; }
+.hero-image { max-width: 100%; border-radius: var(--border-radius); box-shadow: 0 20px 40px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }
+
+.features-section { padding: 6rem 0; background-color: var(--background-color); }
+.section-header { margin-bottom: 4rem; max-width: 700px; margin-left: auto; margin-right: auto; }
+.section-header h2 { font-size: 2.5rem; font-weight: 700; margin-bottom: 1rem; }
+.section-header p { font-size: 1.1rem; color: var(--text-color-light); }
+
 .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+.feature-card { background: var(--card-background); padding: 2rem; border-radius: var(--border-radius); border: 1px solid var(--border-color); text-align: center; }
+.feature-icon { display: inline-flex; justify-content: center; align-items: center; width: 50px; height: 50px; border-radius: 50%; background-color: #e9f2fe; color: var(--primary-color); margin-bottom: 1.5rem; }
+.feature-icon svg { width: 24px; height: 24px; }
+.feature-card h3 { font-size: 1.25rem; margin-bottom: 0.75rem; }
+.feature-card p { color: var(--text-color-light); }
+
+.cta-section { padding: 6rem 0; }
+.cta-section h2 { font-size: 2.5rem; font-weight: 700; margin-bottom: 1rem; }
+.cta-section p { font-size: 1.1rem; color: var(--text-color-light); margin-bottom: 2rem; }
+
+.landing-footer { padding: 3rem 0; text-align: center; color: var(--text-color-light); background: var(--background-color); }
+
+@media (max-width: 768px) {
+    .hero-title { font-size: 2.5rem; }
+    .hero-subtitle { font-size: 1.1rem; }
+    .features-section, .cta-section { padding: 4rem 0; }
+    .section-header h2, .cta-section h2 { font-size: 2rem; }
+}
 
 /* --- 3. Autentiserings-sidor (Oförändrad) --- */
 .auth-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
