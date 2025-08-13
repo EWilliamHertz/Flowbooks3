@@ -2,18 +2,13 @@
 import { getState } from '../state.js';
 
 export function renderReportsPage() {
-    const { allIncomes, allExpenses } = getState();
+    const { allIncomes, allExpenses, allProducts, allContacts, allInvoices } = getState();
     const mainView = document.getElementById('main-view');
 
-    // Beräkningar för momsrapport
+    // Momsrapport
     const totalSalesInclVat = allIncomes.reduce((sum, t) => sum + t.amount, 0);
-
-    // Utgående moms (förenklad, antar att all försäljning har 25% moms)
-    // En mer avancerad version skulle titta på varje intäktspost
     const outgoingVatTotal = totalSalesInclVat - (totalSalesInclVat / 1.25);
     const totalSalesExclVat = totalSalesInclVat / 1.25;
-
-    // Ingående moms från utgifter
     const vatRates = [25, 12, 6, 0];
     let incomingVatTotal = 0;
     const incomingVatByRate = vatRates.reduce((acc, rate) => {
@@ -22,31 +17,50 @@ export function renderReportsPage() {
         const totalExclVatForRate = expensesForRate.reduce((sum, e) => sum + e.amountExclVat, 0);
         const vatForRate = expensesForRate.reduce((sum, e) => sum + e.vatAmount, 0);
         incomingVatTotal += vatForRate;
-        acc[rate] = {
-            base: totalExclVatForRate,
-            vat: vatForRate,
-        };
+        acc[rate] = { base: totalExclVatForRate, vat: vatForRate };
         return acc;
     }, {});
-    
     const vatToPayOrReceive = outgoingVatTotal - incomingVatTotal;
 
-    // Beräkningar för förenklat årsbokslut
-    const totalRevenue = totalSalesExclVat; // Intäkter är försäljning exklusive moms
-    const totalCosts = allExpenses.reduce((sum, t) => sum + t.amountExclVat, 0); // Kostnader är inköp exklusive moms
+    // Förenklat årsbokslut
+    const totalRevenue = totalSalesExclVat;
+    const totalCosts = allExpenses.reduce((sum, t) => sum + t.amountExclVat, 0);
     const profitBeforeTax = totalRevenue - totalCosts;
+
+    // Lagerrapport
+    const inventoryReport = allProducts.map(p => `
+        <tr>
+            <td>${p.name}</td>
+            <td class="text-right">${p.stock}</td>
+            <td class="text-right">${(p.purchasePrice || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
+            <td class="text-right">${((p.stock || 0) * (p.purchasePrice || 0)).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
+        </tr>
+    `).join('');
+    const totalInventoryValue = allProducts.reduce((sum, p) => sum + (p.stock || 0) * (p.purchasePrice || 0), 0);
+
+    // Kundrapport
+    const customerReport = allContacts.filter(c => c.type === 'customer').map(c => {
+        const customerInvoices = allInvoices.filter(i => i.customerName === c.name && i.status === 'Betald');
+        const totalBilled = customerInvoices.reduce((sum, i) => sum + i.grandTotal, 0);
+        return { name: c.name, totalBilled };
+    }).sort((a,b) => b.totalBilled - a.totalBilled).map(c => `
+        <tr>
+            <td>${c.name}</td>
+            <td class="text-right">${c.totalBilled.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
+        </tr>
+    `).join('');
 
     mainView.innerHTML = `
         <div class="settings-grid">
             <div class="card">
                 <h3>Momsrapport (Underlag)</h3>
-                <p>Detta är en förenklad sammanställning för hela den registrerade perioden. Konsultera alltid med en redovisningsekonom för korrekt momsredovisning.</p>
+                <p>En förenklad sammanställning för hela perioden. Konsultera alltid med en redovisningsekonom.</p>
                 <div class="report-result">
-                    <h4>Utgående moms (moms på din försäljning)</h4>
+                    <h4>Utgående moms (på din försäljning)</h4>
                     <p><span>Total försäljning (exkl. moms):</span> <strong>${totalSalesExclVat.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                     <p><span>Beräknad utgående moms (25%):</span> <strong class="red">${outgoingVatTotal.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                     <hr>
-                    <h4>Ingående moms (avdragsgill moms på dina inköp)</h4>
+                    <h4>Ingående moms (på dina inköp)</h4>
                     ${Object.keys(incomingVatByRate).map(rate => `
                         <p><span>Underlag för ${rate}% moms:</span> <strong>${(incomingVatByRate[rate].base || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                         <p><span>Ingående moms (${rate}%):</span> <strong class="green">${(incomingVatByRate[rate].vat || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
@@ -60,7 +74,7 @@ export function renderReportsPage() {
             </div>
             <div class="card">
                 <h3>Förenklat Årsbokslut (Underlag)</h3>
-                <p>Detta är ett underlag baserat på dina registrerade transaktioner. Värdeminskningar, periodiseringar och andra justeringar är inte medräknade.</p>
+                <p>Ett underlag baserat på dina transaktioner. Värdeminskningar och periodiseringar är inte medräknade.</p>
                  <div class="report-result">
                     <h4>Resultaträkning</h4>
                     <p><span>Summa rörelsens intäkter:</span> <strong>${totalRevenue.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
@@ -68,6 +82,21 @@ export function renderReportsPage() {
                     <hr>
                     <p><span><strong>Rörelseresultat före finansiella poster:</strong></span> <strong>${profitBeforeTax.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                  </div>
+            </div>
+            <div class="card" style="grid-column: 1 / -1;">
+                <h3>Lagerrapport</h3>
+                <table class="data-table">
+                    <thead><tr><th>Produkt</th><th class="text-right">Antal i lager</th><th class="text-right">Inköpspris</th><th class="text-right">Totalt värde</th></tr></thead>
+                    <tbody>${inventoryReport}</tbody>
+                    <tfoot><tr><td colspan="3" class="text-right"><strong>Totalt lagervärde</strong></td><td class="text-right"><strong>${totalInventoryValue.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></td></tr></tfoot>
+                </table>
+            </div>
+            <div class="card" style="grid-column: 1 / -1;">
+                <h3>Kundrapport (baserat på betalda fakturor)</h3>
+                <table class="data-table">
+                    <thead><tr><th>Kund</th><th class="text-right">Totalt fakturerat</th></tr></thead>
+                    <tbody>${customerReport}</tbody>
+                </table>
             </div>
         </div>
     `;

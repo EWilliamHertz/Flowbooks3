@@ -17,7 +17,7 @@ export function renderTeamPage() {
             </div>
             <div class="card">
                 <h3 class="card-title" data-i18n-key="inviteNewMember">Bjud in ny medlem</h3>
-                <p data-i18n-key="inviteNewMemberDescription">Skapa en unik engångslänk som du kan skicka till personen du vill bjuda in. Länken leder till en anpassad registreringssida.</p>
+                <p data-i18n-key="inviteNewMemberDescription">Skapa en unik engångslänk som du kan skicka till personen du vill bjudin. Länken leder till en anpassad registreringssida.</p>
                 <button id="create-invite-btn" class="btn btn-primary" style="margin-top: 1rem;" data-i18n-key="createInviteLink">Skapa Inbjudningslänk</button>
             </div>
         </div>`;
@@ -65,7 +65,7 @@ async function handleCreateInvitationLink() {
             createdAt: serverTimestamp()
         });
 
-        const inviteLink = `${window.location.origin}${window.location.pathname.replace('app.html', '')}register.html?invite=${newInviteRef.id}`;
+        const inviteLink = new URL(`register.html?invite=${newInviteRef.id}`, window.location.href).href;
         
         showInvitationLinkModal(inviteLink);
 

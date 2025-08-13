@@ -6,10 +6,12 @@ import { db } from '../../firebase-config.js';
 
 let monthlyChartInstance = null;
 let categoryChartInstance = null;
+let cashFlowChartInstance = null;
 
 export function renderDashboard() {
     if (monthlyChartInstance) monthlyChartInstance.destroy();
     if (categoryChartInstance) categoryChartInstance.destroy();
+    if (cashFlowChartInstance) cashFlowChartInstance.destroy();
 
     const { allIncomes, allExpenses, allProducts, currentCompany } = getState();
 
@@ -59,21 +61,27 @@ export function renderDashboard() {
 
         <div class="dashboard-charts">
             <div class="card chart-container">
-                <h3 class="card-title">Intäkter vs Utgifter (Senaste 12 mån)</h3>
-                <canvas id="monthlyBarChart"></canvas>
+                <h3 class="card-title">Kassaflödesprognos (Nästa 6 mån)</h3>
+                <canvas id="cashFlowChart"></canvas>
             </div>
             <div class="card chart-container">
                 <h3 class="card-title">Utgifter per Kategori</h3>
                 <canvas id="categoryPieChart"></canvas>
             </div>
+            <div class="card chart-container" style="grid-column: 1 / -1;">
+                <h3 class="card-title">Intäkter vs Utgifter (Senaste 12 mån)</h3>
+                <canvas id="monthlyBarChart"></canvas>
+            </div>
         </div>
     `;
 
-    renderMonthlyAndCategoryCharts();
+    renderAllCharts();
 }
 
 function prepareChartData() {
-    const { allIncomes, allExpenses, categories } = getState();
+    const { allIncomes, allExpenses, categories, recurringTransactions } = getState();
+    
+    // Monthly income/expense data
     const monthlyData = {};
     const monthLabels = [];
     for (let i = 11; i >= 0; i--) {
@@ -94,6 +102,8 @@ function prepareChartData() {
     });
     const incomeValues = Object.values(monthlyData).map(d => d.income);
     const expenseValues = Object.values(monthlyData).map(d => d.expense);
+
+    // Category data
     const categoryData = {};
     allExpenses.forEach(expense => {
         const categoryId = expense.categoryId || 'uncategorized';
@@ -104,14 +114,38 @@ function prepareChartData() {
         return categories.find(c => c.id === id)?.name || 'Okänd Kategori';
     });
     const categoryValues = Object.values(categoryData);
+
+    // Cash flow data
+    const cashFlowLabels = [];
+    const cashFlowData = { income: [], expense: [] };
+    for (let i = 0; i < 6; i++) {
+        const d = new Date();
+        d.setMonth(d.getMonth() + i);
+        cashFlowLabels.push(d.toLocaleString('sv-SE', { month: 'short' }));
+        
+        const recurringIncome = recurringTransactions
+            .filter(t => t.type === 'income')
+            .reduce((sum, t) => sum + t.amount, 0);
+            
+        const recurringExpense = recurringTransactions
+            .filter(t => t.type === 'expense')
+            .reduce((sum, t) => sum + t.amount, 0);
+
+        cashFlowData.income.push(recurringIncome);
+        cashFlowData.expense.push(recurringExpense);
+    }
+
     return {
         monthly: { labels: monthLabels, incomeData: incomeValues, expenseData: expenseValues },
-        category: { labels: categoryLabels, data: categoryValues }
+        category: { labels: categoryLabels, data: categoryValues },
+        cashFlow: { labels: cashFlowLabels, data: cashFlowData }
     };
 }
 
-function renderMonthlyAndCategoryCharts() {
+function renderAllCharts() {
     const data = prepareChartData();
+
+    // Monthly Bar Chart
     const monthlyCtx = document.getElementById('monthlyBarChart')?.getContext('2d');
     if (monthlyCtx) {
         monthlyChartInstance = new Chart(monthlyCtx, {
@@ -121,12 +155,43 @@ function renderMonthlyAndCategoryCharts() {
         });
     }
 
+    // Category Pie Chart
     const categoryCtx = document.getElementById('categoryPieChart')?.getContext('2d');
     if (categoryCtx) {
         categoryChartInstance = new Chart(categoryCtx, {
             type: 'pie',
             data: { labels: data.category.labels, datasets: [{ label: 'Utgifter', data: data.category.data, backgroundColor: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'], hoverOffset: 4 }] },
             options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    // Cash Flow Line Chart
+    const cashFlowCtx = document.getElementById('cashFlowChart')?.getContext('2d');
+    if(cashFlowCtx) {
+        cashFlowChartInstance = new Chart(cashFlowCtx, {
+            type: 'line',
+            data: {
+                labels: data.cashFlow.labels,
+                datasets: [
+                    {
+                        label: 'Prognostiserade intäkter',
+                        data: data.cashFlow.data.income,
+                        borderColor: 'rgba(46, 204, 113, 1)',
+                        backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Prognostiserade utgifter',
+                        data: data.cashFlow.data.expense,
+                        borderColor: 'rgba(231, 76, 60, 1)',
+                        backgroundColor: 'rgba(231, 76, 60, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
     }
 }
@@ -146,7 +211,6 @@ export async function renderAllCompaniesDashboard() {
             const totalIncome = incomesSnap.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
             const totalExpenses = expensesSnap.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
             
-            // Beräkna lagervärde för varje företag
             let inventoryValue = 0;
             const privateSplitPercent = company.inventoryProjectionSplit || 60;
             const businessSplitPercent = 100 - privateSplitPercent;

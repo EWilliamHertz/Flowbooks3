@@ -2,7 +2,7 @@
 import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
-import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 import { editors } from './editors.js';
 
@@ -27,6 +27,7 @@ function renderInvoiceList() {
 
     const rows = allInvoices.sort((a, b) => b.invoiceNumber - a.invoiceNumber).map(invoice => `
         <tr data-invoice-id="${invoice.id}">
+            <td><input type="checkbox" class="invoice-select-checkbox" data-id="${invoice.id}"></td>
             <td><span class="invoice-status ${invoice.status || 'Utkast'}">${invoice.status || 'Utkast'}</span></td>
             <td>#${invoice.invoiceNumber}</td>
             <td>${invoice.customerName}</td>
@@ -43,10 +44,14 @@ function renderInvoiceList() {
     `).join('');
 
     container.innerHTML = `
-        <h3 class="card-title">Fakturor</h3>
+        <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="card-title" style="margin: 0;">Fakturor</h3>
+            <button id="delete-selected-invoices-btn" class="btn btn-danger" style="display: none;">Ta bort valda</button>
+        </div>
         <table class="data-table" id="invoices-table">
             <thead>
                 <tr>
+                    <th><input type="checkbox" id="select-all-invoices"></th>
                     <th>Status</th>
                     <th>Fakturanr.</th>
                     <th>Kund</th>
@@ -56,7 +61,7 @@ function renderInvoiceList() {
                 </tr>
             </thead>
             <tbody>
-                ${allInvoices.length > 0 ? rows : '<tr><td colspan="6" class="text-center">Du har inga fakturor än.</td></tr>'}
+                ${allInvoices.length > 0 ? rows : '<tr><td colspan="7" class="text-center">Du har inga fakturor än.</td></tr>'}
             </tbody>
         </table>`;
     
@@ -76,9 +81,46 @@ function attachInvoiceListEventListeners() {
         } else if (e.target.classList.contains('btn-pdf-invoice')) {
             editors.generateInvoicePDF(invoiceId);
         } else if (e.target.classList.contains('btn-paid-invoice')) {
-            editors.markAsPaid(invoiceId);
+            markAsPaid(invoiceId);
         }
     });
+
+    const allCheckbox = document.getElementById('select-all-invoices');
+    const checkboxes = document.querySelectorAll('.invoice-select-checkbox');
+    const deleteBtn = document.getElementById('delete-selected-invoices-btn');
+
+    const toggleDeleteButton = () => {
+        const selected = document.querySelectorAll('.invoice-select-checkbox:checked');
+        deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
+        deleteBtn.textContent = `Ta bort valda (${selected.length})`;
+    };
+
+    if(allCheckbox){
+        allCheckbox.addEventListener('change', (e) => {
+            checkboxes.forEach(cb => cb.checked = e.target.checked);
+            toggleDeleteButton();
+        });
+    }
+
+    checkboxes.forEach(cb => cb.addEventListener('change', toggleDeleteButton));
+
+    if(deleteBtn){
+        deleteBtn.addEventListener('click', () => {
+            const selectedIds = Array.from(document.querySelectorAll('.invoice-select-checkbox:checked')).map(cb => cb.dataset.id);
+            if (selectedIds.length > 0) {
+                showConfirmationModal(async () => {
+                    const batch = writeBatch(db);
+                    selectedIds.forEach(id => {
+                        batch.delete(doc(db, 'invoices', id));
+                    });
+                    await batch.commit();
+                    await fetchAllCompanyData();
+                    renderInvoiceList();
+                    showToast(`${selectedIds.length} fakturor har tagits bort!`, 'success');
+                }, "Ta bort fakturor", `Är du säker på att du vill ta bort ${selectedIds.length} fakturor permanent?`);
+            }
+        });
+    }
 }
 
 export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
@@ -152,8 +194,8 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Skickad'));
     } else {
         document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Fakturor'));
-        document.getElementById('pdf-btn').addEventListener('click', () => editors.generateInvoicePDF(invoiceId));
-        document.getElementById('email-btn').addEventListener('click', () => editors.sendByEmail(invoiceId));
+        document.getElementById('pdf-btn').addEventListener('click', () => generateInvoicePDF(invoiceId));
+        document.getElementById('email-btn').addEventListener('click', () => sendByEmail(invoiceId));
     }
 }
 

@@ -3,13 +3,14 @@ import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { t } from '../i18n.js';
+import { checkNotifications } from './notifications.js';
 
 // Import all page renderers
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
 import { renderTeamPage } from './team.js';
-import { renderSettingsPage } from './settings.js'; // <<< THIS LINE IS THE FIX
+import { renderSettingsPage } from './settings.js';
 import { renderRecurringPage, renderRecurringTransactionForm } from './recurring.js';
 import { renderImportPage } from './import.js';
 import { renderInvoicesPage } from './invoices.js';
@@ -58,6 +59,7 @@ export function initializeAppUI() {
     updateProfileIcon();
     setupCompanySelector();
     setupEventListeners();
+    checkNotifications();
     navigateTo('allCompaniesOverview'); 
     document.getElementById('app-container').style.visibility = 'visible';
 }
@@ -176,7 +178,7 @@ function handleGlobalSearch() {
         return;
     }
 
-    const { allContacts, allInvoices, allProducts, allQuotes } = getState();
+    const { allContacts, allInvoices, allProducts, allQuotes, allTransactions } = getState();
     let resultsHtml = '';
 
     const contactResults = allContacts.filter(c => c.name.toLowerCase().includes(searchTerm));
@@ -211,6 +213,14 @@ function handleGlobalSearch() {
         });
     }
 
+    const transactionResults = allTransactions.filter(t => t.description.toLowerCase().includes(searchTerm) || (t.party && t.party.toLowerCase().includes(searchTerm)));
+    if (transactionResults.length > 0) {
+        resultsHtml += `<div class="search-category">${t('summary')}</div>`;
+        transactionResults.slice(0, 5).forEach(t => {
+            resultsHtml += `<a href="#" class="search-result-item" data-type="transaction" data-id="${t.id}">${t.date}: ${t.description}</a>`;
+        });
+    }
+
     if (resultsHtml) {
         resultsContainer.innerHTML = resultsHtml;
         resultsContainer.style.display = 'block';
@@ -236,6 +246,9 @@ function handleGlobalSearch() {
                         break;
                     case 'product':
                         editors.renderProductForm(id);
+                        break;
+                    case 'transaction':
+                        navigateTo('summary');
                         break;
                 }
             });

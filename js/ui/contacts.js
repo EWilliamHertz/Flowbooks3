@@ -3,14 +3,19 @@ import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { editors } from './editors.js';
+import { writeBatch, doc } from 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js';
+import { db } from '../../firebase-config.js';
 
 export function renderContactsPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
         <div class="card">
-            <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem;">
+            <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
                  <h3 class="card-title" style="margin: 0;">Kontakter</h3>
-                 <button id="email-selected-btn" class="btn btn-secondary" style="display: none;">Skicka e-post till valda</button>
+                 <div>
+                    <button id="email-selected-btn" class="btn btn-secondary" style="display: none; margin-right: 10px;">Skicka e-post till valda</button>
+                    <button id="delete-selected-contacts-btn" class="btn btn-danger" style="display: none;">Ta bort valda</button>
+                 </div>
             </div>
             <p>Hantera dina kunder och leverantörer. Klicka på en kontakt för att se detaljerad historik.</p>
             <div id="contacts-list-container" style="margin-top: 1.5rem;"></div>
@@ -26,7 +31,7 @@ function renderContactsList() {
 
     const rows = allContacts.map(contact => `
         <tr data-contact-id="${contact.id}" style="cursor: pointer;">
-            <td><input type="checkbox" class="contact-select-checkbox" data-email="${contact.email || ''}" onclick="event.stopPropagation();"></td>
+            <td><input type="checkbox" class="contact-select-checkbox" data-id="${contact.id}" data-email="${contact.email || ''}" onclick="event.stopPropagation();"></td>
             <td><strong>${contact.name}</strong></td>
             <td>${contact.type === 'customer' ? 'Kund' : 'Leverantör'}</td>
             <td>${contact.orgNumber || '-'}</td>
@@ -60,30 +65,57 @@ function renderContactsList() {
     const allCheckbox = document.getElementById('select-all-contacts');
     const checkboxes = document.querySelectorAll('.contact-select-checkbox');
     const emailBtn = document.getElementById('email-selected-btn');
+    const deleteBtn = document.getElementById('delete-selected-contacts-btn');
 
-    const toggleEmailButton = () => {
+    const toggleActionButtons = () => {
         const selected = document.querySelectorAll('.contact-select-checkbox:checked');
         emailBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
+        deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
+        if(selected.length > 0) {
+            deleteBtn.textContent = `Ta bort valda (${selected.length})`;
+        }
     };
 
-    allCheckbox.addEventListener('change', (e) => {
-        checkboxes.forEach(cb => cb.checked = e.target.checked);
-        toggleEmailButton();
-    });
+    if(allCheckbox){
+        allCheckbox.addEventListener('change', (e) => {
+            checkboxes.forEach(cb => cb.checked = e.target.checked);
+            toggleActionButtons();
+        });
+    }
 
-    checkboxes.forEach(cb => cb.addEventListener('change', toggleEmailButton));
+    checkboxes.forEach(cb => cb.addEventListener('change', toggleActionButtons));
 
-    emailBtn.addEventListener('click', () => {
-        const selectedEmails = Array.from(document.querySelectorAll('.contact-select-checkbox:checked'))
-            .map(cb => cb.dataset.email)
-            .filter(email => email);
-        
-        if (selectedEmails.length > 0) {
-            window.location.href = `mailto:?bcc=${selectedEmails.join(',')}`;
-        } else {
-            showToast("Inga kontakter med e-postadresser valda.", "warning");
-        }
-    });
+    if(emailBtn){
+        emailBtn.addEventListener('click', () => {
+            const selectedEmails = Array.from(document.querySelectorAll('.contact-select-checkbox:checked'))
+                .map(cb => cb.dataset.email)
+                .filter(email => email);
+            
+            if (selectedEmails.length > 0) {
+                window.location.href = `mailto:?bcc=${selectedEmails.join(',')}`;
+            } else {
+                showToast("Inga kontakter med e-postadresser valda.", "warning");
+            }
+        });
+    }
+
+    if(deleteBtn){
+        deleteBtn.addEventListener('click', () => {
+            const selectedIds = Array.from(document.querySelectorAll('.contact-select-checkbox:checked')).map(cb => cb.dataset.id);
+            if (selectedIds.length > 0) {
+                showConfirmationModal(async () => {
+                    const batch = writeBatch(db);
+                    selectedIds.forEach(id => {
+                        batch.delete(doc(db, 'contacts', id));
+                    });
+                    await batch.commit();
+                    await fetchAllCompanyData();
+                    renderContactsList();
+                    showToast(`${selectedIds.length} kontakter har tagits bort!`, 'success');
+                }, "Ta bort kontakter", `Är du säker på att du vill ta bort ${selectedIds.length} kontakter permanent?`);
+            }
+        });
+    }
 }
 
 export function renderContactDetailView(contactId) {

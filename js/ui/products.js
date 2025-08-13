@@ -2,7 +2,7 @@
 import { getState, setState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
-import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 import { editors } from './editors.js';
 
@@ -19,10 +19,21 @@ export function renderProductsPage() {
     
     const productsHtml = allProducts.length > 0 ? `
         <table class="data-table" id="products-table">
-            <thead><tr><th>Bild</th><th>Namn</th><th>Pris Företag (exkl. moms)</th><th>Pris Privat</th><th>Lager</th><th>Åtgärder</th></tr></thead>
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="select-all-products"></th>
+                    <th>Bild</th>
+                    <th>Namn</th>
+                    <th>Pris Företag (exkl. moms)</th>
+                    <th>Pris Privat</th>
+                    <th>Lager</th>
+                    <th>Åtgärder</th>
+                </tr>
+            </thead>
             <tbody>
                 ${allProducts.map(p => `
                     <tr data-product-id="${p.id}">
+                        <td><input type="checkbox" class="product-select-checkbox" data-id="${p.id}"></td>
                         <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail">` : '-'}</td>
                         <td><strong>${p.name}</strong></td>
                         <td>${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr</td>
@@ -40,7 +51,10 @@ export function renderProductsPage() {
     mainView.innerHTML = `
         <div id="inventory-projection-container" class="card" style="margin-bottom: 1.5rem;"></div>
         <div class="card">
-            <h3 class="card-title">Produktregister</h3>
+            <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="card-title" style="margin: 0;">Produktregister</h3>
+                <button id="delete-selected-products-btn" class="btn btn-danger" style="display: none;">Ta bort valda</button>
+            </div>
             <div id="table-container">${productsHtml}</div>
         </div>`;
     
@@ -68,6 +82,43 @@ function attachProductPageEventListeners() {
             editors.showProductImage(imageUrl, productName);
         }
     });
+
+    const allCheckbox = document.getElementById('select-all-products');
+    const checkboxes = document.querySelectorAll('.product-select-checkbox');
+    const deleteBtn = document.getElementById('delete-selected-products-btn');
+
+    const toggleDeleteButton = () => {
+        const selected = document.querySelectorAll('.product-select-checkbox:checked');
+        deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
+        deleteBtn.textContent = `Ta bort valda (${selected.length})`;
+    };
+
+    if (allCheckbox) {
+        allCheckbox.addEventListener('change', (e) => {
+            checkboxes.forEach(cb => cb.checked = e.target.checked);
+            toggleDeleteButton();
+        });
+    }
+
+    checkboxes.forEach(cb => cb.addEventListener('change', toggleDeleteButton));
+
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            const selectedIds = Array.from(document.querySelectorAll('.product-select-checkbox:checked')).map(cb => cb.dataset.id);
+            if (selectedIds.length > 0) {
+                showConfirmationModal(async () => {
+                    const batch = writeBatch(db);
+                    selectedIds.forEach(id => {
+                        batch.delete(doc(db, 'products', id));
+                    });
+                    await batch.commit();
+                    await fetchAllCompanyData();
+                    renderProductsPage();
+                    showToast(`${selectedIds.length} produkter har tagits bort!`, 'success');
+                }, "Ta bort produkter", `Är du säker på att du vill ta bort ${selectedIds.length} produkter permanent?`);
+            }
+        });
+    }
 }
 
 function renderInventoryProjection() {
