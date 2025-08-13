@@ -1,7 +1,7 @@
 // js/ui/components.js
 import { getState } from '../state.js';
 import { renderTransactionForm } from './transactions.js';
-import { attachProductPageEventListeners } from './products.js'; // Importera för att länka
+// REMOVED: import { attachProductPageEventListeners } from './products.js'; // This import was causing the error
 
 export function getControlsHTML() {
     const { categories } = getState();
