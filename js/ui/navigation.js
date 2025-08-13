@@ -4,12 +4,12 @@ import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { t } from '../i18n.js';
 
-// Importera alla sid-renderare
+// Import all page renderers
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
 import { renderTeamPage } from './team.js';
-import { renderSettingsPage } from './settings.js';
+import { renderSettingsPage } from './settings.js'; // <<< THIS LINE IS THE FIX
 import { renderRecurringPage, renderRecurringTransactionForm } from './recurring.js';
 import { renderImportPage } from './import.js';
 import { renderInvoicesPage } from './invoices.js';
