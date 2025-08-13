@@ -2,6 +2,7 @@
 import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
+import { t } from '../i18n.js';
 
 // Importera alla sid-renderare
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
@@ -20,35 +21,35 @@ import { renderQuotesPage } from './quotes.js';
 import { editors } from './editors.js';
 
 const pageRenderers = {
-    'Översikt': renderDashboard,
-    'Översikt Alla Företag': renderAllCompaniesDashboard,
-    'Sammanfattning': () => renderTransactionsPage('summary'),
-    'Intäkter': () => renderTransactionsPage('income'),
-    'Utgifter': () => renderTransactionsPage('expense'),
-    'Bankavstämning': renderBankingPage,
-    'Skanna Kvitto': renderReceiptsPage,
-    'Produkter': renderProductsPage,
-    'Kontakter': renderContactsPage,
-    'Team': renderTeamPage,
-    'Inställningar': renderSettingsPage,
-    'Återkommande': renderRecurringPage,
-    'Importera': renderImportPage,
-    'Fakturor': renderInvoicesPage,
-    'Offerter': renderQuotesPage,
-    'Rapporter': renderReportsPage,
+    'overview': renderDashboard,
+    'allCompaniesOverview': renderAllCompaniesDashboard,
+    'summary': () => renderTransactionsPage('summary'),
+    'income': () => renderTransactionsPage('income'),
+    'expenses': () => renderTransactionsPage('expense'),
+    'banking': renderBankingPage,
+    'scanReceipt': renderReceiptsPage,
+    'products': renderProductsPage,
+    'contacts': renderContactsPage,
+    'team': renderTeamPage,
+    'settings': renderSettingsPage,
+    'recurring': renderRecurringPage,
+    'import': renderImportPage,
+    'invoices': renderInvoicesPage,
+    'quotes': renderQuotesPage,
+    'reports': renderReportsPage,
 };
 
 const menuConfig = {
-    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Offerter', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
-    member: ['Översikt', 'Sammanfattning', 'Offerter', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Inställningar'],
-    readonly: ['Översikt', 'Sammanfattning', 'Rapporter'],
+    owner: ['allCompaniesOverview', 'overview', 'summary', 'quotes', 'invoices', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
+    member: ['overview', 'summary', 'quotes', 'invoices', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
+    readonly: ['overview', 'summary', 'reports'],
 };
 
 function renderSidebarMenu() {
     const { currentCompany } = getState();
     const role = currentCompany?.role || 'member';
     const allowedPages = menuConfig[role] || menuConfig.member;
-    const menuItems = allowedPages.map(page => `<li><a href="#" data-page="${page}">${page}</a></li>`).join('');
+    const menuItems = allowedPages.map(pageKey => `<li><a href="#" data-page="${pageKey}">${t(pageKey)}</a></li>`).join('');
     const navList = document.querySelector('.sidebar-nav ul');
     if (navList) navList.innerHTML = menuItems;
 }
@@ -57,15 +58,15 @@ export function initializeAppUI() {
     updateProfileIcon();
     setupCompanySelector();
     setupEventListeners();
-    navigateTo('Översikt Alla Företag'); 
+    navigateTo('allCompaniesOverview'); 
     document.getElementById('app-container').style.visibility = 'visible';
 }
 
-function navigateTo(page, id = null) {
+function navigateTo(pageKey, id = null) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
     renderSidebarMenu();
-    if (page === 'Översikt Alla Företag') {
+    if (pageKey === 'allCompaniesOverview') {
         appContainer.classList.add('portal-view');
         if(header) header.style.display = 'none';
     } else {
@@ -73,64 +74,64 @@ function navigateTo(page, id = null) {
         if(header) header.style.display = 'flex';
     }
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-    const link = document.querySelector(`.sidebar-nav a[data-page="${page}"]`);
+    const link = document.querySelector(`.sidebar-nav a[data-page="${pageKey}"]`);
     if (link) link.classList.add('active');
     
-    renderPageContent(page, id);
+    renderPageContent(pageKey, id);
     document.querySelector('.sidebar')?.classList.remove('open');
 }
 window.navigateTo = navigateTo;
 
-function renderPageContent(page, id = null) {
+function renderPageContent(pageKey, id = null) {
     const pageTitleEl = document.querySelector('.page-title');
-    if (pageTitleEl) pageTitleEl.textContent = page;
+    if (pageTitleEl) pageTitleEl.textContent = t(pageKey);
 
     document.getElementById('main-view').innerHTML = ''; 
     const newItemBtn = document.getElementById('new-item-btn');
     newItemBtn.style.display = 'none';
     newItemBtn.onclick = null;
     
-    if (page === 'Kontakter' && id) {
+    if (pageKey === 'contacts' && id) {
         renderContactDetailView(id);
         return;
     }
 
-    const renderFunction = pageRenderers[page];
+    const renderFunction = pageRenderers[pageKey];
     if (renderFunction) renderFunction();
     
-    switch (page) {
-        case 'Intäkter':
-            newItemBtn.textContent = 'Ny Intäkt';
+    switch (pageKey) {
+        case 'income':
+            newItemBtn.textContent = t('newIncome');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderTransactionForm('income');
             break;
-        case 'Utgifter':
-            newItemBtn.textContent = 'Ny Utgift';
+        case 'expenses':
+            newItemBtn.textContent = t('newExpense');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderTransactionForm('expense');
             break;
-        case 'Återkommande':
-            newItemBtn.textContent = 'Ny Återkommande';
+        case 'recurring':
+            newItemBtn.textContent = t('newRecurring');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderRecurringTransactionForm();
             break;
-        case 'Produkter':
-            newItemBtn.textContent = 'Ny Produkt';
+        case 'products':
+            newItemBtn.textContent = t('newProduct');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => editors.renderProductForm();
             break;
-        case 'Fakturor':
-            newItemBtn.textContent = 'Ny Faktura';
+        case 'invoices':
+            newItemBtn.textContent = t('newInvoice');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => editors.renderInvoiceEditor();
             break;
-        case 'Offerter':
-            newItemBtn.textContent = 'Ny Offert';
+        case 'quotes':
+            newItemBtn.textContent = t('newQuote');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => editors.renderQuoteEditor();
             break;
-        case 'Kontakter':
-            newItemBtn.textContent = 'Ny Kontakt';
+        case 'contacts':
+            newItemBtn.textContent = t('newContact');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => editors.renderContactForm();
             break;
@@ -149,7 +150,7 @@ function setupEventListeners() {
     document.getElementById('settings-link').addEventListener('click', e => {
         e.preventDefault();
         document.getElementById('profile-dropdown').classList.remove('show');
-        navigateTo('Inställningar');
+        navigateTo('settings');
     });
     document.getElementById('hamburger-btn').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
 
@@ -180,7 +181,7 @@ function handleGlobalSearch() {
 
     const contactResults = allContacts.filter(c => c.name.toLowerCase().includes(searchTerm));
     if (contactResults.length > 0) {
-        resultsHtml += '<div class="search-category">Kontakter</div>';
+        resultsHtml += `<div class="search-category">${t('contacts')}</div>`;
         contactResults.forEach(c => {
             resultsHtml += `<a href="#" class="search-result-item" data-type="contact" data-id="${c.id}">${c.name}</a>`;
         });
@@ -188,7 +189,7 @@ function handleGlobalSearch() {
 
     const invoiceResults = allInvoices.filter(i => i.customerName.toLowerCase().includes(searchTerm) || String(i.invoiceNumber).includes(searchTerm));
      if (invoiceResults.length > 0) {
-        resultsHtml += '<div class="search-category">Fakturor</div>';
+        resultsHtml += `<div class="search-category">${t('invoices')}</div>`;
         invoiceResults.forEach(i => {
             resultsHtml += `<a href="#" class="search-result-item" data-type="invoice" data-id="${i.id}">#${i.invoiceNumber} - ${i.customerName}</a>`;
         });
@@ -196,15 +197,15 @@ function handleGlobalSearch() {
 
     const quoteResults = allQuotes.filter(q => q.customerName.toLowerCase().includes(searchTerm) || String(q.quoteNumber).includes(searchTerm));
     if (quoteResults.length > 0) {
-        resultsHtml += '<div class="search-category">Offerter</div>';
+        resultsHtml += `<div class="search-category">${t('quotes')}</div>`;
         quoteResults.forEach(q => {
-            resultsHtml += `<a href="#" class="search-result-item" data-type="quote" data-id="${q.id}">Offert #${q.quoteNumber} - ${q.customerName}</a>`;
+            resultsHtml += `<a href="#" class="search-result-item" data-type="quote" data-id="${q.id}">${t('quoteNumber')} #${q.quoteNumber} - ${q.customerName}</a>`;
         });
     }
 
     const productResults = allProducts.filter(p => p.name.toLowerCase().includes(searchTerm));
     if (productResults.length > 0) {
-        resultsHtml += '<div class="search-category">Produkter</div>';
+        resultsHtml += `<div class="search-category">${t('products')}</div>`;
         productResults.forEach(p => {
             resultsHtml += `<a href="#" class="search-result-item" data-type="product" data-id="${p.id}">${p.name}</a>`;
         });
@@ -225,7 +226,7 @@ function handleGlobalSearch() {
 
                 switch(type) {
                     case 'contact':
-                        navigateTo('Kontakter', id);
+                        navigateTo('contacts', id);
                         break;
                     case 'invoice':
                         editors.renderInvoiceEditor(id);
@@ -241,7 +242,7 @@ function handleGlobalSearch() {
         });
 
     } else {
-        resultsContainer.innerHTML = '<div class="search-no-results">Inga träffar</div>';
+        resultsContainer.innerHTML = `<div class="search-no-results">${t('noHits')}</div>`;
         resultsContainer.style.display = 'block';
     }
 }
@@ -274,7 +275,7 @@ function setupCompanySelector() {
 }
 
 export function showFatalError(message) {
-    document.body.innerHTML = `<div class="fatal-error-container"><div class="card card-danger"><h2 class="logo">FlowBooks</h2><h3>Ett allvarligt fel har uppstått</h3><p>${message}</p><button id="logout-btn-error" class="btn btn-primary">Logga ut</button></div></div>`;
+    document.body.innerHTML = `<div class="fatal-error-container"><div class="card card-danger"><h2 class="logo">FlowBooks</h2><h3 data-i18n-key="fatalErrorTitle">Ett allvarligt fel har uppstått</h3><p>${message}</p><button id="logout-btn-error" class="btn btn-primary" data-i18n-key="logout">Logga ut</button></div></div>`;
     document.getElementById('logout-btn-error').addEventListener('click', handleSignOut);
 }
 
@@ -285,6 +286,6 @@ window.switchToCompany = async (companyId) => {
         setState({ currentCompany: newCurrentCompany });
         await fetchAllCompanyData(); 
         document.getElementById('company-selector').value = companyId;
-        navigateTo('Översikt');
+        navigateTo('overview');
     }
 };

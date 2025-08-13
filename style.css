@@ -712,3 +712,30 @@ tr.corrected td { font-style: italic; }
     color: var(--text-color-light);
     text-align: center;
 }
+/* --- 22. Language Switcher --- */
+.language-switcher {
+    text-align: center;
+    padding: 2rem 1rem 1rem 1rem;
+    margin-top: 2rem;
+    color: var(--text-color-light);
+}
+
+.auth-page .language-switcher {
+     border-top: 1px solid var(--border-color);
+}
+
+.landing-footer .language-switcher {
+    padding-top: 1rem;
+}
+
+.language-switcher a {
+    color: var(--text-color-light);
+    text-decoration: none;
+    margin: 0 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.language-switcher a:hover {
+    color: var(--primary-color);
+}

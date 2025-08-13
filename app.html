@@ -5,11 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard | FlowBooks</title>
     
-    <!-- Stylesheets and Fonts -->
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js" defer></script>
@@ -17,24 +15,19 @@
 
 </head>
 <body>
-    <!-- Main Application Container -->
     <div id="app-container" style="visibility: hidden;">
         
-        <!-- Sidebar Navigation -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2 class="logo">FlowBooks</h2>
             </div>
             <nav class="sidebar-nav">
-                <!-- Navigation links will be dynamically inserted here by js/ui/navigation.js -->
                 <ul></ul>
             </nav>
         </aside>
         
-        <!-- Main Content Area -->
         <div class="main-content">
             
-            <!-- Main Header -->
             <header class="main-header">
                 <div class="header-left">
                     <button id="hamburger-btn" class="hamburger-menu">
@@ -42,9 +35,8 @@
                         <span class="bar"></span>
                         <span class="bar"></span>
                     </button>
-                    <!-- NYTT: Global sökfunktion -->
                     <div class="global-search-container">
-                        <input type="text" id="global-search-input" placeholder="Sök allt (kunder, fakturor, produkter)...">
+                        <input type="text" id="global-search-input" data-i18n-key="searchPlaceholder" placeholder="Sök allt (kunder, fakturor, produkter)...">
                         <div id="global-search-results" class="global-search-results-dropdown"></div>
                     </div>
                 </div>
@@ -56,29 +48,32 @@
                     <div class="profile-container">
                         <div id="user-profile-icon" class="user-profile"></div>
                         <div id="profile-dropdown" class="profile-dropdown">
-                            <a href="#" id="settings-link">Inställningar</a>
-                            <a href="#" id="logout-btn">Logga ut</a>
+                            <a href="#" id="settings-link" data-i18n-key="settings">Inställningar</a>
+                            <a href="#" id="logout-btn" data-i18n-key="logout">Logga ut</a>
                         </div>
                     </div>
                 </div>
             </header>
             
-            <!-- Main View for Page Content -->
             <main id="main-view">
-                <!-- Initial loading spinner, content is rendered here by JavaScript -->
                 <div class="spinner-container">
                     <div class="spinner"></div>
                 </div>
             </main>
+
+            <footer class="language-switcher">
+                <a href="#sv">Svenska</a> |
+                <a href="#en">English</a> |
+                <a href="#zh">中文</a>
+            </footer>
         </div>
     </div>
 
-    <!-- Containers for Modals and Toasts -->
     <div id="modal-container"></div>
     <div id="toast-container"></div>
     
-    <!-- Application Entry Point -->
-    <script src="js/app.js" type="module" defer></script>
+    <script src="js/i18n.js" type="module"></script>
+    <script src="js/app.js" type="module"></script>
 
 </body>
 </html>

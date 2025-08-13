@@ -2,9 +2,14 @@
 import { initializeAuthListener } from './services/auth.js';
 import { initGoogleClient } from './services/google.js';
 import { runRecurringTransactions } from './ui/recurring.js';
+import { initializeLanguageSwitcher, loadInitialLanguage } from './i18n.js';
 
 function main() {
-    // Dynamiskt ladda Google-skripten
+    // Initialize language switcher and load language
+    initializeLanguageSwitcher();
+    loadInitialLanguage();
+
+    // Dynamically load Google scripts
     const gapiScript = document.createElement('script');
     gapiScript.src = 'https://apis.google.com/js/api.js';
     gapiScript.async = true;
