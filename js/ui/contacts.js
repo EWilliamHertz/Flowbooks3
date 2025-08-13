@@ -3,8 +3,6 @@ import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { navigateTo } from './navigation.js';
-import './invoices.js';      // <--- VIKTIG FIX: Ladda fakturafunktioner
-import './quote-editor.js'; // <--- VIKTIG FIX: Ladda offertfunktioner
 
 // Renders the main contacts page (list view)
 export function renderContactsPage() {

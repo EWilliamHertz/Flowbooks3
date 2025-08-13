@@ -18,6 +18,12 @@ import { renderBankingPage } from './banking.js';
 import { renderContactsPage, renderContactDetailView } from './contacts.js';
 import { renderQuotesPage } from './quotes.js';
 
+// ---- VIKTIG FIX: Importera ALLA redigerare som kan anropas från andra sidor ----
+import './invoices.js';
+import './quote-editor.js';
+import './products.js';
+// --------------------------------------------------------------------------------
+
 // Mappar en sid-sträng till funktionen som ska rendera den sidan.
 const pageRenderers = {
     'Översikt': renderDashboard,
