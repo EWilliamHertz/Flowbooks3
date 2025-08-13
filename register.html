@@ -12,17 +12,17 @@
     <div class="auth-container">
         <div class="auth-box">
             <a href="index.html" class="logo-link"><h2 class="logo">FlowBooks</h2></a>
-            <h3>Skapa ditt konto</h3>
+            <h3 data-i18n-key="createAccount">Skapa ditt konto</h3>
             <p id="auth-error" class="error-message"></p>
-            <div class="input-group"><label for="firstName">Förnamn</label><input type="text" id="firstName" required></div>
-            <div class="input-group"><label for="lastName">Efternamn</label><input type="text" id="lastName" required></div>
+            <div class="input-group"><label for="firstName" data-i18n-key="firstName">Förnamn</label><input type="text" id="firstName" required></div>
+            <div class="input-group"><label for="lastName" data-i18n-key="lastName">Efternamn</label><input type="text" id="lastName" required></div>
             <div class="input-group"><label for="position">Position/Roll</label><input type="text" id="position" placeholder="T.ex. VD, Konsult..." required></div>
             <hr style="border: none; border-top: 1px solid var(--border-color); margin: 1.5rem 0;">
-            <div class="input-group"><label for="companyName">Ditt Företagsnamn</label><input type="text" id="companyName" required></div>
-            <div class="input-group"><label for="email">E-post</label><input type="email" id="email" required></div>
-            <div class="input-group"><label for="password">Lösenord</label><input type="password" id="password" placeholder="Minst 6 tecken" required></div>
-            <button id="register-btn" class="btn btn-primary btn-full-width">Skapa konto</button>
-            <p class="auth-switch">Har du redan ett konto? <a href="login.html">Logga in här</a></p>
+            <div class="input-group"><label for="companyName" data-i18n-key="companyName">Ditt Företagsnamn</label><input type="text" id="companyName" required></div>
+            <div class="input-group"><label for="email" data-i18n-key="email">E-post</label><input type="email" id="email" required></div>
+            <div class="input-group"><label for="password" data-i18n-key="password">Lösenord</label><input type="password" id="password" placeholder="Minst 6 tecken" required></div>
+            <button id="register-btn" class="btn btn-primary btn-full-width" data-i18n-key="createAccount">Skapa konto</button>
+            <p class="auth-switch"><span data-i18n-key="alreadyHaveAccount">Har du redan ett konto?</span> <a href="login.html" data-i18n-key="loginHere">Logga in här</a></p>
         </div>
         <div class="language-switcher">
             <a href="#sv">Svenska</a> |
@@ -31,10 +31,16 @@
         </div>
     </div>
 
+    <script src="js/i18n.js" type="module"></script>
     <script type="module">
+        import { initializeLanguageSwitcher, loadInitialLanguage } from './js/i18n.js';
         import { createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
         import { doc, setDoc, collection, serverTimestamp, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
         import { auth, db } from './firebase-config.js';
+        
+        // Initialize i18n
+        initializeLanguageSwitcher();
+        loadInitialLanguage();
 
         const registerBtn = document.getElementById('register-btn');
         const emailInput = document.getElementById('email');
@@ -45,9 +51,8 @@
         const positionInput = document.getElementById('position');
         const errorEl = document.getElementById('auth-error');
 
-        let invitationData = null; // Lagrar data från inbjudningslänken
+        let invitationData = null;
 
-        // Läs inbjudnings-ID från URL när sidan laddas
         document.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const inviteId = urlParams.get('invite');
@@ -59,7 +64,7 @@
                 if (inviteSnap.exists()) {
                     invitationData = inviteSnap.data();
                     companyNameInput.value = invitationData.companyName;
-                    companyNameInput.disabled = true; // Lås fältet så det inte kan ändras
+                    companyNameInput.disabled = true;
                     errorEl.textContent = `Välkommen! Du har bjudits in till ${invitationData.companyName}. Fyll i resten av dina uppgifter.`;
                     errorEl.style.color = 'green';
                 } else {
@@ -93,11 +98,9 @@
                 let finalCompanyName;
 
                 if (invitationData) {
-                    // Användaren kom från en inbjudningslänk
                     companyId = invitationData.companyId;
                     finalCompanyName = invitationData.companyName;
                     
-                    // Ta bort inbjudan så den inte kan användas igen
                     const urlParams = new URLSearchParams(window.location.search);
                     const inviteId = urlParams.get('invite');
                     if (inviteId) {
@@ -105,7 +108,6 @@
                     }
 
                 } else {
-                    // Ingen inbjudan, skapa ett nytt företag
                     const newCompanyRef = doc(collection(db, 'companies'));
                     companyId = newCompanyRef.id;
                     await setDoc(newCompanyRef, {
@@ -116,7 +118,6 @@
                     finalCompanyName = companyName;
                 }
 
-                // Skapa användarens dokument
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
                     firstName: firstName,

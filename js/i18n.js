@@ -18,7 +18,7 @@ async function fetchLanguageFile(lang) {
 }
 
 // Function to apply translations to the DOM
-function applyTranslations() {
+export function applyTranslations() {
     document.querySelectorAll('[data-i18n-key]').forEach(element => {
         const key = element.dataset.i18nKey;
         const translation = translations[key];

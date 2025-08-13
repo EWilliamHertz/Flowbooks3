@@ -11,27 +11,27 @@
     <div class="auth-container">
         <div class="auth-box">
             <a href="index.html" class="logo-link"><h2 class="logo">FlowBooks</h2></a>
-            <h3>Välkommen tillbaka!</h3>
+            <h3 data-i18n-key="welcomeBack">Välkommen tillbaka!</h3>
             
             <p id="auth-message" class="error-message"></p>
             
             <div class="input-group">
-                <label for="email">E-post</label>
+                <label for="email" data-i18n-key="email">E-post</label>
                 <input type="email" id="email" required>
             </div>
             <div class="input-group">
-                <label for="password">Lösenord</label>
+                <label for="password" data-i18n-key="password">Lösenord</label>
                 <input type="password" id="password" required>
             </div>
             
-            <button id="login-btn" class="btn btn-primary btn-full-width">Logga in</button>
+            <button id="login-btn" class="btn btn-primary btn-full-width" data-i18n-key="login">Logga in</button>
             
             <div class="auth-links">
-                 <a href="#" id="forgot-password-link">Glömt lösenord?</a>
+                 <a href="#" id="forgot-password-link" data-i18n-key="forgotPassword">Glömt lösenord?</a>
                  <a href="#" id="resend-verification-link" style="display: none; margin-left: 10px;">Skicka nytt bekräftelsemejl</a>
             </div>
             
-            <p class="auth-switch">Har du inget konto? <a href="register.html">Skapa ett här</a></p>
+            <p class="auth-switch"><span data-i18n-key="noAccount">Har du inget konto?</span> <a href="register.html" data-i18n-key="registerHere">Skapa ett här</a></p>
         </div>
          <div class="language-switcher">
             <a href="#sv">Svenska</a> |
@@ -40,10 +40,16 @@
         </div>
     </div>
     
+    <script src="js/i18n.js" type="module"></script>
     <script type="module">
+        import { initializeLanguageSwitcher, loadInitialLanguage } from './js/i18n.js';
         import { signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
         import { auth } from './firebase-config.js';
 
+        // Initialize i18n
+        initializeLanguageSwitcher();
+        loadInitialLanguage();
+        
         // Hämta element från DOM
         const loginBtn = document.getElementById('login-btn');
         const emailInput = document.getElementById('email');
@@ -52,7 +58,7 @@
         const forgotPasswordLink = document.getElementById('forgot-password-link');
         const resendVerificationLink = document.getElementById('resend-verification-link');
 
-        // NYTT: Kolla efter meddelanden i URL:en när sidan laddas
+        // Kolla efter meddelanden i URL:en när sidan laddas
         document.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const status = urlParams.get('status');
@@ -60,7 +66,7 @@
 
             if (status === 'registered' && email) {
                 messageEl.textContent = `Ett verifieringsmejl har skickats till ${decodeURIComponent(email)}. Klicka på länken i mejlet och logga sedan in.`;
-                messageEl.style.color = 'green'; // Grön färg för framgång
+                messageEl.style.color = 'green';
             }
         });
 
@@ -75,8 +81,8 @@
         // Funktion som hanterar inloggningslogiken
         const handleLogin = async () => {
             messageEl.textContent = '';
-            messageEl.style.color = '#e74c3c'; // Röd färg för fel
-            resendVerificationLink.style.display = 'none'; // Göm länken vid varje nytt försök
+            messageEl.style.color = '#e74c3c';
+            resendVerificationLink.style.display = 'none';
 
             const email = emailInput.value;
             const password = passwordInput.value;
@@ -91,23 +97,20 @@
                 
                 if (!userCredential.user.emailVerified) {
                     messageEl.textContent = 'Verifiera din e-post innan du loggar in. Klicka på länken för att skicka ett nytt mejl.';
-                    messageEl.style.color = '#f39c12'; // Gul färg för varning
+                    messageEl.style.color = '#f39c12';
                     
-                    // Visa länken för att skicka nytt mejl
                     resendVerificationLink.style.display = 'inline';
                     
-                    // Klonar och ersätter länken för att undvika flera event listeners
                     const newLink = resendVerificationLink.cloneNode(true);
                     resendVerificationLink.parentNode.replaceChild(newLink, resendVerificationLink);
 
-                    // Lägg till event listener för att skicka nytt mejl
                     newLink.addEventListener('click', async (e) => {
                         e.preventDefault();
                         try {
                             await sendEmailVerification(userCredential.user);
                             messageEl.textContent = `Ett nytt bekräftelsemejl har skickats till ${email}.`;
-                            messageEl.style.color = 'green'; // Grön färg för framgång
-                            newLink.style.display = 'none'; // Göm länken igen
+                            messageEl.style.color = 'green';
+                            newLink.style.display = 'none';
                         } catch (error) {
                             console.error("Fel vid sändning av verifieringsmejl:", error);
                             messageEl.textContent = 'Kunde inte skicka nytt bekräftelsemejl. Försök igen om en stund.';
@@ -115,10 +118,8 @@
                         }
                     });
 
-                    // Logga ut den overifierade användaren så de inte fastnar
                     await auth.signOut();
                 } else {
-                    // Användaren är verifierad, skicka till appen
                     window.location.href = 'app.html';
                 }
             } catch (error) {
@@ -131,7 +132,6 @@
             }
         };
 
-        // Event listener för "Glömt lösenord?"
         const handlePasswordReset = async (e) => {
             e.preventDefault();
             messageEl.textContent = '';
@@ -155,7 +155,6 @@
             }
         };
 
-        // Koppla alla event listeners
         loginBtn.addEventListener('click', handleLogin);
         forgotPasswordLink.addEventListener('click', handlePasswordReset);
         

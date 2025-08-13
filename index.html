@@ -15,8 +15,8 @@
             <nav class="main-nav">
                 <h2 class="logo">FlowBooks</h2>
                 <div class="nav-links">
-                    <a href="login.html" class="btn btn-secondary">Logga in</a>
-                    <a href="register.html" class="btn btn-primary">Skapa konto gratis</a>
+                    <a href="login.html" class="btn btn-secondary" data-i18n-key="login">Logga in</a>
+                    <a href="register.html" class="btn btn-primary" data-i18n-key="register">Skapa konto gratis</a>
                 </div>
             </nav>
         </div>
@@ -25,9 +25,9 @@
     <main>
         <section id="hero" class="hero-section">
             <div class="container text-center">
-                <h1 class="hero-title">Din kompletta finansiella co-pilot.</h1>
-                <p class="hero-subtitle">Från första offert till betald faktura och automatisk bokföring. FlowBooks är AI-plattformen som samlar hela din ekonomi, så du kan fokusera på det du gör bäst.</p>
-                <a href="register.html" class="btn btn-primary btn-large">Testa FlowBooks gratis</a>
+                <h1 class="hero-title" data-i18n-key="heroTitle">Din kompletta finansiella co-pilot.</h1>
+                <p class="hero-subtitle" data-i18n-key="heroSubtitle">Från första offert till betald faktura och automatisk bokföring. FlowBooks är AI-plattformen som samlar hela din ekonomi, så du kan fokusera på det du gör bäst.</p>
+                <a href="register.html" class="btn btn-primary btn-large" data-i18n-key="startForFree">Testa FlowBooks gratis</a>
                 <div class="hero-image-container">
                     <img src="https://i.imgur.com/YiGzW1q.jpeg" alt="Skärmdump av FlowBooks översiktspanel" class="hero-image">
                 </div>
@@ -97,7 +97,7 @@
             <div class="container text-center">
                 <h2>Redo att förenkla din bokföring?</h2>
                 <p>Skapa ett konto och upptäck hur smidigt det kan vara. Det är gratis att komma igång.</p>
-                <a href="register.html" class="btn btn-primary btn-large">Börja din resa med FlowBooks</a>
+                <a href="register.html" class="btn btn-primary btn-large" data-i18n-key="startForFree">Börja din resa med FlowBooks</a>
             </div>
         </section>
     </main>
@@ -112,5 +112,13 @@
             </div>
         </div>
     </footer>
+    <script src="js/i18n.js" type="module"></script>
+    <script type="module">
+        import { initializeLanguageSwitcher, loadInitialLanguage } from './js/i18n.js';
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeLanguageSwitcher();
+            loadInitialLanguage();
+        });
+    </script>
 </body>
 </html>
