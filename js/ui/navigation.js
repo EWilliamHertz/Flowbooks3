@@ -15,8 +15,8 @@ import { renderInvoicesPage, renderInvoiceEditor } from './invoices.js';
 import { renderReceiptsPage } from './receipts.js';
 import { renderReportsPage } from './reports.js';
 import { renderBankingPage } from './banking.js';
-import { renderContactsPage, renderContactDetailView } from './contacts.js'; // Uppdaterad import
-import { renderQuotesPage, renderQuoteEditor } from './quotes.js'; // NY IMPORT för offerter
+import { renderContactsPage, renderContactDetailView } from './contacts.js';
+import { renderQuotesPage, renderQuoteEditor } from './quotes.js';
 
 // Mappar en sid-sträng till funktionen som ska rendera den sidan.
 const pageRenderers = {
@@ -34,7 +34,7 @@ const pageRenderers = {
     'Återkommande': renderRecurringPage,
     'Importera': renderImportPage,
     'Fakturor': renderInvoicesPage,
-    'Offerter': renderQuotesPage, // NY RAD för offerter
+    'Offerter': renderQuotesPage,
     'Rapporter': renderReportsPage,
 };
 
@@ -62,7 +62,8 @@ export function initializeAppUI() {
     document.getElementById('app-container').style.visibility = 'visible';
 }
 
-export function navigateTo(page, id = null) {
+// KORRIGERING: Gör navigateTo tillgänglig globalt för att undvika cirkulära importer
+function navigateTo(page, id = null) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
     renderSidebarMenu();
@@ -84,7 +85,6 @@ export function navigateTo(page, id = null) {
         page = defaultPage;
     }
     
-    // Specialhantering för sidor som kräver ett ID, t.ex. en specifik kontakt
     if (id) {
         renderPageContent(page, id);
     } else {
@@ -93,18 +93,20 @@ export function navigateTo(page, id = null) {
     
     document.querySelector('.sidebar')?.classList.remove('open');
 }
+window.navigateTo = navigateTo; // <-- VIKTIG ÄNDRING!
 
 function renderPageContent(page, id = null) {
-    document.querySelector('.page-title').textContent = page;
+    const pageTitleEl = document.querySelector('.page-title');
+    if (pageTitleEl) pageTitleEl.textContent = page;
+
     document.getElementById('main-view').innerHTML = ''; 
     const newItemBtn = document.getElementById('new-item-btn');
     newItemBtn.style.display = 'none';
     newItemBtn.onclick = null;
     
-    // Om det är en detaljvy, anropa dess specifika render-funktion
     if (page === 'Kontakter' && id) {
         renderContactDetailView(id);
-        return; // Avsluta här för att inte köra den generella renderaren
+        return;
     }
 
     const renderFunction = pageRenderers[page];
@@ -136,7 +138,7 @@ function renderPageContent(page, id = null) {
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderInvoiceEditor();
             break;
-        case 'Offerter': // NYTT CASE
+        case 'Offerter':
             newItemBtn.textContent = 'Ny Offert';
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderQuoteEditor();
@@ -165,13 +167,11 @@ function setupEventListeners() {
     });
     document.getElementById('hamburger-btn').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
 
-    // NYTT: Event listeners för global sökning
     const searchInput = document.getElementById('global-search-input');
     const searchResults = document.getElementById('global-search-results');
     
     searchInput.addEventListener('input', handleGlobalSearch);
     
-    // Dölj sökresultat när man klickar utanför
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.global-search-container')) {
             searchResults.style.display = 'none';
@@ -179,7 +179,6 @@ function setupEventListeners() {
     });
 }
 
-// NY FUNKTION: Hanterar global sökning
 function handleGlobalSearch() {
     const input = document.getElementById('global-search-input');
     const resultsContainer = document.getElementById('global-search-results');
@@ -193,7 +192,6 @@ function handleGlobalSearch() {
     const { allContacts, allInvoices, allProducts, allQuotes } = getState();
     let resultsHtml = '';
 
-    // Sök bland kontakter
     const contactResults = allContacts.filter(c => c.name.toLowerCase().includes(searchTerm));
     if (contactResults.length > 0) {
         resultsHtml += '<div class="search-category">Kontakter</div>';
@@ -202,7 +200,6 @@ function handleGlobalSearch() {
         });
     }
 
-    // Sök bland fakturor
     const invoiceResults = allInvoices.filter(i => i.customerName.toLowerCase().includes(searchTerm) || String(i.invoiceNumber).includes(searchTerm));
      if (invoiceResults.length > 0) {
         resultsHtml += '<div class="search-category">Fakturor</div>';
@@ -211,7 +208,6 @@ function handleGlobalSearch() {
         });
     }
 
-    // Sök bland offerter
     const quoteResults = allQuotes.filter(q => q.customerName.toLowerCase().includes(searchTerm) || String(q.quoteNumber).includes(searchTerm));
     if (quoteResults.length > 0) {
         resultsHtml += '<div class="search-category">Offerter</div>';
@@ -220,7 +216,6 @@ function handleGlobalSearch() {
         });
     }
 
-    // Sök bland produkter
     const productResults = allProducts.filter(p => p.name.toLowerCase().includes(searchTerm));
     if (productResults.length > 0) {
         resultsHtml += '<div class="search-category">Produkter</div>';
@@ -233,7 +228,6 @@ function handleGlobalSearch() {
         resultsContainer.innerHTML = resultsHtml;
         resultsContainer.style.display = 'block';
         
-        // Lägg till klickhanterare för sökresultaten
         resultsContainer.querySelectorAll('.search-result-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -265,7 +259,6 @@ function handleGlobalSearch() {
         resultsContainer.style.display = 'block';
     }
 }
-
 
 function updateProfileIcon() {
     const { userData } = getState();

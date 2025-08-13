@@ -1,14 +1,11 @@
 // js/ui/quote-editor.js
-// NY FIL: Hanterar redigeringsvyn för en enskild offert.
 import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
-import { navigateTo } from './navigation.js';
-import { renderInvoiceEditor } from './invoices.js'; // För att kunna konvertera
+import { renderInvoiceEditor } from './invoices.js';
 
-let quoteItems = []; // Lokal state för offertens rader
+let quoteItems = [];
 
-// Huvudfunktion för att rendera redigeringsvyn
 export function renderQuoteEditor(quoteId = null) {
     const { allQuotes, currentCompany } = getState();
     const quote = quoteId ? allQuotes.find(q => q.id === quoteId) : null;
@@ -18,14 +15,14 @@ export function renderQuoteEditor(quoteId = null) {
     const mainView = document.getElementById('main-view');
     const today = new Date();
     const validUntil = new Date();
-    validUntil.setDate(today.getDate() + 30); // Giltig i 30 dagar som standard
+    validUntil.setDate(today.getDate() + 30);
 
     const todayStr = today.toISOString().slice(0, 10);
     const validUntilStr = validUntil.toISOString().slice(0, 10);
     const defaultNotes = quote ? (quote.notes || '') : (currentCompany.defaultQuoteText || 'Offerten är giltig i 30 dagar om inget annat anges.');
 
     mainView.innerHTML = `
-        <div class="invoice-editor"> <!-- Återanvänder CSS-klasser från faktura -->
+        <div class="invoice-editor">
             <div class="card">
                 <h3>${quoteId ? `Offert #${quote.quoteNumber}` : 'Skapa Ny Offert'}</h3>
                 ${quote ? `<p><strong>Status:</strong> <span class="invoice-status ${quote.status}">${quote.status}</span></p>` : ''}
@@ -71,11 +68,10 @@ export function renderQuoteEditor(quoteId = null) {
             quoteItems.push({ productId: null, description: '', quantity: 1, price: 0, vatRate: 25 });
             renderQuoteItems(false);
         });
-        // Länk till produktväljare (återanvänd från faktura) behövs här
         document.getElementById('save-draft-btn').addEventListener('click', (e) => saveQuote(e.target, quoteId, 'Utkast'));
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveQuote(e.target, quoteId, 'Skickad'));
     } else {
-        document.getElementById('back-btn').addEventListener('click', () => navigateTo('Offerter'));
+        document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Offerter')); // KORRIGERAD
         document.getElementById('convert-to-invoice-btn').addEventListener('click', () => convertToInvoice(quote));
     }
 }
@@ -160,7 +156,7 @@ async function saveQuote(btn, quoteId, status) {
         await saveDocument('quotes', quoteData, quoteId);
         await fetchAllCompanyData();
         showToast(status === 'Skickad' ? 'Offerten har sparats och låsts!' : 'Utkast sparat!', 'success');
-        navigateTo('Offerter');
+        window.navigateTo('Offerter'); // KORRIGERAD
     } catch (error) {
         console.error("Kunde inte spara offert:", error);
         showToast('Kunde inte spara offerten.', 'error');
@@ -170,17 +166,18 @@ async function saveQuote(btn, quoteId, status) {
     }
 }
 
-// NY FUNKTION: Omvandlar en offert till en faktura
 function convertToInvoice(quote) {
-    showConfirmationModal(() => {
-        // Skapa ett objekt med data som ska föras över till fakturaeditorn
+    showConfirmationModal(async () => {
         const invoiceDataFromQuote = {
             customerName: quote.customerName,
             items: quote.items,
             notes: quote.notes,
-            // Andra fält som fakturadatum och förfallodatum kan sättas till default i editorn
         };
-        // Anropa fakturaeditorn och skicka med datan
+        // Markera offerten som accepterad
+        await saveDocument('quotes', { status: 'Accepterad' }, quote.id);
+        await fetchAllCompanyData();
+        // Skicka användaren till fakturaeditorn med förifylld data
         renderInvoiceEditor(null, invoiceDataFromQuote);
+        showToast("Offerten har accepterats. Fyll i fakturadetaljer.", "success");
     }, "Omvandla till Faktura", "En ny faktura kommer att skapas baserat på denna offert. Offerten kommer att markeras som 'Accepterad'. Är du säker?");
 }

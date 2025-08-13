@@ -1,11 +1,9 @@
 // js/ui/quotes.js
-// NY FIL: Hanterar listvyn för offerter.
 import { getState } from '../state.js';
-import { renderSpinner, showConfirmationModal } from './utils.js';
-import { renderQuoteEditor } from './quotes.js'; // Egen referens
+import { renderSpinner, showConfirmationModal, showToast } from './utils.js';
+import { renderQuoteEditor } from './quote-editor.js'; // KORRIGERAD IMPORT
 import { deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 
-// Huvudfunktion för att rendera offertsidan
 export function renderQuotesPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
@@ -17,7 +15,6 @@ export function renderQuotesPage() {
     renderQuoteList();
 }
 
-// Renderar själva listan med offerter
 function renderQuoteList() {
     const { allQuotes } = getState();
     const container = document.getElementById('quote-list-container');
@@ -57,7 +54,6 @@ function renderQuoteList() {
         </table>`;
 }
 
-// Funktion för att ta bort en offert
 async function deleteQuote(quoteId) {
     showConfirmationModal(async () => {
         try {
@@ -72,7 +68,6 @@ async function deleteQuote(quoteId) {
     }, "Ta bort offert", "Är du säker på att du vill ta bort denna offert permanent?");
 }
 
-// Gör funktioner tillgängliga globalt för att kunna anropas från HTML
 window.quoteFunctions = {
     editQuote: renderQuoteEditor,
     deleteQuote: deleteQuote,
