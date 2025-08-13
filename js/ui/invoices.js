@@ -59,7 +59,7 @@ function renderInvoiceList() {
         </table>`;
 }
 
-export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
+function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
     const { allInvoices, currentCompany } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
     

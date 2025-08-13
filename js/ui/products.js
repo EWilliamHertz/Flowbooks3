@@ -49,6 +49,7 @@ export function renderProductsPage() {
 function renderInventoryProjection() {
     const { allProducts, currentCompany } = getState();
     const container = document.getElementById('inventory-projection-container');
+    if (!container) return;
     
     const savedPrivateSplit = currentCompany.inventoryProjectionSplit || 60;
     
@@ -260,7 +261,7 @@ function showProductImageModal(imageUrl, productName) {
     });
 }
 
-// Gör funktioner globalt tillgängliga
+// KORRIGERING: Använd det globala objektet som skapas i app.js
 window.app.editors.renderProductForm = renderProductForm;
 window.app.editors.deleteProduct = deleteProductHandler;
 window.app.editors.showProductImage = showProductImageModal;

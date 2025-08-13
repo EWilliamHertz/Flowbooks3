@@ -223,7 +223,6 @@ function handleGlobalSearch() {
                 resultsContainer.style.display = 'none';
                 input.value = '';
 
-                // ANROPAR GLOBALA FUNKTIONER ISTÄLLET FÖR IMPORTER
                 switch(type) {
                     case 'contact':
                         navigateTo('Kontakter', id);
@@ -269,8 +268,8 @@ function setupCompanySelector() {
         const newCurrentCompany = userCompanies.find(c => c.id === e.target.value);
         setState({ currentCompany: newCurrentCompany });
         await fetchAllCompanyData();
-        const currentPage = document.querySelector('.sidebar-nav a.active').dataset.page;
-        navigateTo(currentPage);
+        const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
+        if (currentPage) navigateTo(currentPage);
     });
 }
 
