@@ -22,14 +22,14 @@ export function renderProductsPage() {
             <tbody>
                 ${allProducts.map(p => `
                     <tr>
-                        <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail" onclick="window.attachProductPageEventListeners.showProductImage('${p.imageUrl}', '${p.name}')">` : '-'}</td>
+                        <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail" onclick="window.app.editors.showProductImage('${p.imageUrl}', '${p.name}')">` : '-'}</td>
                         <td><strong>${p.name}</strong></td>
                         <td>${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${(p.sellingPricePrivate || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${p.stock || 0}</td>
                         <td>
-                            <button class="btn btn-sm btn-secondary" onclick="window.attachProductPageEventListeners.renderProductForm('${p.id}')">Redigera</button>
-                            <button class="btn btn-sm btn-danger" onclick="window.attachProductPageEventListeners.deleteProduct('${p.id}')">Ta bort</button>
+                            <button class="btn btn-sm btn-secondary" onclick="window.app.editors.renderProductForm('${p.id}')">Redigera</button>
+                            <button class="btn btn-sm btn-danger" onclick="window.app.editors.deleteProduct('${p.id}')">Ta bort</button>
                         </td>
                     </tr>`).join('')}
             </tbody>
@@ -253,7 +253,6 @@ function showProductImageModal(imageUrl, productName) {
         </div>`;
     document.getElementById('modal-container').innerHTML = modalHtml;
     document.getElementById('modal-close').addEventListener('click', closeModal);
-    // Klicka utanför bilden för att stänga
     document.getElementById('image-modal-overlay').addEventListener('click', (e) => {
         if (e.target.id === 'image-modal-overlay') {
             closeModal();
@@ -261,9 +260,7 @@ function showProductImageModal(imageUrl, productName) {
     });
 }
 
-export const attachProductPageEventListeners = {
-    renderProductForm,
-    deleteProduct: deleteProductHandler,
-    showProductImage: showProductImageModal,
-};
-window.attachProductPageEventListeners = attachProductPageEventListeners;
+// Gör funktioner globalt tillgängliga
+window.app.editors.renderProductForm = renderProductForm;
+window.app.editors.deleteProduct = deleteProductHandler;
+window.app.editors.showProductImage = showProductImageModal;

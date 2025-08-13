@@ -2,8 +2,6 @@
 import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
-import { navigateTo } from './navigation.js';
-import { attachProductPageEventListeners } from './products.js';
 import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
@@ -34,7 +32,7 @@ function renderInvoiceList() {
             <td class="text-right">${(invoice.grandTotal || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
             <td>
                 <div class="action-menu" style="display: flex; gap: 0.5rem;">
-                    <button class="btn btn-sm btn-secondary" onclick="window.invoiceFunctions.editInvoice('${invoice.id}')">Visa / Redigera</button>
+                    <button class="btn btn-sm btn-secondary" onclick="window.app.editors.renderInvoiceEditor('${invoice.id}')">Visa / Redigera</button>
                     <button class="btn btn-sm btn-secondary" onclick="window.invoiceFunctions.generatePDF('${invoice.id}')">PDF</button>
                     ${invoice.status === 'Skickad' ? `<button class="btn btn-sm btn-success" onclick="window.invoiceFunctions.markAsPaid('${invoice.id}')">Markera Betald</button>` : ''}
                 </div>
@@ -61,15 +59,30 @@ function renderInvoiceList() {
         </table>`;
 }
 
-export function renderInvoiceEditor(invoiceId = null) {
+export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
     const { allInvoices, currentCompany } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
-    invoiceItems = invoice ? JSON.parse(JSON.stringify(invoice.items)) : [];
+    
+    if (dataFromQuote) {
+        invoiceItems = dataFromQuote.items || [];
+    } else {
+        invoiceItems = invoice ? JSON.parse(JSON.stringify(invoice.items)) : [];
+    }
+    
     const isLocked = invoice && invoice.status !== 'Utkast';
 
     const mainView = document.getElementById('main-view');
     const today = new Date().toISOString().slice(0, 10);
-    const defaultNotes = invoice ? (invoice.notes || '') : (currentCompany.defaultInvoiceText || '');
+    
+    let customerName = '';
+    if (dataFromQuote) customerName = dataFromQuote.customerName;
+    else if (invoice) customerName = invoice.customerName;
+
+    let notes = '';
+    if (dataFromQuote) notes = dataFromQuote.notes;
+    else if (invoice) notes = invoice.notes;
+    else notes = currentCompany.defaultInvoiceText || '';
+
 
     mainView.innerHTML = `
         <div class="invoice-editor">
@@ -78,7 +91,7 @@ export function renderInvoiceEditor(invoiceId = null) {
                 ${invoice ? `<p><strong>Status:</strong> <span class="invoice-status ${invoice.status}">${invoice.status}</span></p>` : ''}
                 <div class="input-group">
                     <label>Kundnamn</label>
-                    <input id="customerName" class="form-input" value="${invoice?.customerName || ''}" ${isLocked ? 'disabled' : ''}>
+                    <input id="customerName" class="form-input" value="${customerName}" ${isLocked ? 'disabled' : ''}>
                 </div>
                 <div class="invoice-form-grid" style="margin-top: 1rem;">
                     <div class="input-group"><label>Fakturadatum</label><input id="invoiceDate" type="date" class="form-input" value="${invoice?.invoiceDate || today}" ${isLocked ? 'disabled' : ''}></div>
@@ -97,7 +110,7 @@ export function renderInvoiceEditor(invoiceId = null) {
             
             <div class="card">
                 <h3 class="card-title">Villkor och Kommentarer</h3>
-                <textarea id="invoice-notes" class="form-input" rows="4" placeholder="T.ex. information om betalningsvillkor..." ${isLocked ? 'disabled' : ''}>${defaultNotes}</textarea>
+                <textarea id="invoice-notes" class="form-input" rows="4" placeholder="T.ex. information om betalningsvillkor..." ${isLocked ? 'disabled' : ''}>${notes}</textarea>
             </div>
             
             <div class="invoice-actions-footer">
@@ -123,7 +136,7 @@ export function renderInvoiceEditor(invoiceId = null) {
         document.getElementById('save-draft-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Utkast'));
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Skickad'));
     } else {
-        document.getElementById('back-btn').addEventListener('click', () => navigateTo('Fakturor'));
+        document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Fakturor'));
     }
 }
 
@@ -194,7 +207,7 @@ function renderInvoiceItems(isLocked = false) {
         container.querySelectorAll('.link-to-product').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                attachProductPageEventListeners.renderProductForm(e.target.dataset.productId);
+                window.app.editors.renderProductForm(e.target.dataset.productId);
             });
         });
     }
@@ -313,7 +326,7 @@ async function saveInvoice(btn, invoiceId, status) {
             await saveDocument('invoices', invoiceData, invoiceId);
             await fetchAllCompanyData();
             showToast(status === 'Skickad' ? 'Fakturan har bokförts och låsts!' : 'Utkast sparat!', 'success');
-            navigateTo('Fakturor');
+            window.navigateTo('Fakturor');
         } catch (error) {
             console.error("Kunde inte spara faktura:", error);
             showToast('Kunde inte spara fakturan.', 'error');
@@ -330,7 +343,7 @@ async function markAsPaid(invoiceId) {
             const invoiceRef = doc(db, 'invoices', invoiceId);
             await updateDoc(invoiceRef, { status: 'Betald' });
             
-            const { allInvoices, currentUser, currentCompany } = getState();
+            const { allInvoices } = getState();
             const invoice = allInvoices.find(inv => inv.id === invoiceId);
             
             const incomeData = {
@@ -369,10 +382,6 @@ async function generateInvoicePDF(invoiceId) {
     doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
 }
 
-/**
- * Öppnar användarens e-postklient med ett förifyllt meddelande för fakturan.
- * @param {string} invoiceId - ID på fakturan som ska skickas.
- */
 function sendByEmail(invoiceId) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
@@ -403,7 +412,6 @@ ${currentCompany.name}
 }
 
 async function createPdfContent(doc, invoice, company) {
-    // Lägg till logotyp
     if (company.logoUrl) {
         try {
             const response = await fetch(company.logoUrl);
@@ -429,11 +437,9 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(company.name || 'FlowBooks', 15, 20);
     }
     
-    // Sidhuvud
     doc.setFontSize(22);
     doc.text('Faktura', 200, 20, { align: 'right' });
 
-    // Företagsinformation
     doc.setFontSize(10);
     let startY = 50;
     doc.text(`Från:`, 15, startY);
@@ -442,14 +448,12 @@ async function createPdfContent(doc, invoice, company) {
     doc.setFont(undefined, 'normal');
     doc.text(`Org.nr: ${company.orgNumber || ''}`, 15, startY += 5);
 
-    // Kundinformation
     startY = 50;
     doc.text('Faktura till:', 130, startY);
     doc.setFont(undefined, 'bold');
     doc.text(invoice.customerName, 130, startY += 5);
     doc.setFont(undefined, 'normal');
     
-    // Fakturadetaljer
     startY += 10;
     doc.text(`Fakturanummer:`, 130, startY);
     doc.text(`${invoice.invoiceNumber}`, 200, startY, { align: 'right' });
@@ -460,13 +464,12 @@ async function createPdfContent(doc, invoice, company) {
     doc.text(invoice.dueDate, 200, startY, { align: 'right' });
     doc.setFont(undefined, 'normal');
 
-    // Fakturarader
     const tableBody = invoice.items.map(item => [
         item.description,
         item.quantity,
         item.price.toFixed(2),
         `${item.vatRate}%`,
-        (item.quantity * item.price * (1 + item.vatRate/100)).toFixed(2) // Summa inkl. moms
+        (item.quantity * item.price * (1 + item.vatRate/100)).toFixed(2)
     ]);
 
     doc.autoTable({
@@ -486,7 +489,6 @@ async function createPdfContent(doc, invoice, company) {
 
     const finalY = doc.autoTable.previous.finalY;
     
-    // Sammanställning
     const summaryX = 130;
     let summaryY = finalY + 10;
     doc.setFontSize(10);
@@ -500,7 +502,6 @@ async function createPdfContent(doc, invoice, company) {
     doc.text(`Att betala:`, summaryX, summaryY += 7);
     doc.text(`${(invoice.grandTotal || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}`, 200, summaryY, { align: 'right' });
     
-    // Kommentarer
     let finalYWithTotals = summaryY + 15;
     if (invoice.notes) {
         doc.setFontSize(9);
@@ -511,9 +512,10 @@ async function createPdfContent(doc, invoice, company) {
     }
 }
 
+// Gör funktionerna globalt tillgängliga
 window.invoiceFunctions = {
-    editInvoice: renderInvoiceEditor,
     generatePDF: generateInvoicePDF,
     markAsPaid: markAsPaid,
     sendByEmail: sendByEmail,
 };
+window.app.editors.renderInvoiceEditor = renderInvoiceEditor;

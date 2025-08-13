@@ -3,20 +3,20 @@ import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 
-// Importera alla funktioner som renderar de olika sidorna i appen
+// Importera render-funktioner för HELA SIDOR
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
-import { renderProductsPage, attachProductPageEventListeners } from './products.js';
+import { renderProductsPage } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
 import { renderTeamPage } from './team.js';
 import { renderSettingsPage } from './settings.js';
 import { renderRecurringPage, renderRecurringTransactionForm } from './recurring.js';
 import { renderImportPage } from './import.js';
-import { renderInvoicesPage, renderInvoiceEditor } from './invoices.js';
+import { renderInvoicesPage } from './invoices.js';
 import { renderReceiptsPage } from './receipts.js';
 import { renderReportsPage } from './reports.js';
 import { renderBankingPage } from './banking.js';
 import { renderContactsPage, renderContactDetailView } from './contacts.js';
-import { renderQuotesPage, renderQuoteEditor } from './quotes.js';
+import { renderQuotesPage } from './quotes.js';
 
 // Mappar en sid-sträng till funktionen som ska rendera den sidan.
 const pageRenderers = {
@@ -62,7 +62,6 @@ export function initializeAppUI() {
     document.getElementById('app-container').style.visibility = 'visible';
 }
 
-// KORRIGERING: Gör navigateTo tillgänglig globalt för att undvika cirkulära importer
 function navigateTo(page, id = null) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
@@ -93,7 +92,7 @@ function navigateTo(page, id = null) {
     
     document.querySelector('.sidebar')?.classList.remove('open');
 }
-window.navigateTo = navigateTo; // <-- VIKTIG ÄNDRING!
+window.navigateTo = navigateTo;
 
 function renderPageContent(page, id = null) {
     const pageTitleEl = document.querySelector('.page-title');
@@ -131,17 +130,17 @@ function renderPageContent(page, id = null) {
         case 'Produkter':
             newItemBtn.textContent = 'Ny Produkt';
             newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => attachProductPageEventListeners.renderProductForm();
+            newItemBtn.onclick = () => window.app.editors.renderProductForm();
             break;
         case 'Fakturor':
             newItemBtn.textContent = 'Ny Faktura';
             newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderInvoiceEditor();
+            newItemBtn.onclick = () => window.app.editors.renderInvoiceEditor();
             break;
         case 'Offerter':
             newItemBtn.textContent = 'Ny Offert';
             newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderQuoteEditor();
+            newItemBtn.onclick = () => window.app.editors.renderQuoteEditor();
             break;
         case 'Kontakter':
             newItemBtn.textContent = 'Ny Kontakt';
@@ -237,18 +236,19 @@ function handleGlobalSearch() {
                 resultsContainer.style.display = 'none';
                 input.value = '';
 
+                // ANROPAR GLOBALA FUNKTIONER ISTÄLLET FÖR IMPORTER
                 switch(type) {
                     case 'contact':
                         navigateTo('Kontakter', id);
                         break;
                     case 'invoice':
-                        renderInvoiceEditor(id);
+                        window.app.editors.renderInvoiceEditor(id);
                         break;
                     case 'quote':
-                        renderQuoteEditor(id);
+                        window.app.editors.renderQuoteEditor(id);
                         break;
                     case 'product':
-                        attachProductPageEventListeners.renderProductForm(id);
+                        window.app.editors.renderProductForm(id);
                         break;
                 }
             });
@@ -301,4 +301,9 @@ window.switchToCompany = async (companyId) => {
         document.getElementById('company-selector').value = companyId;
         navigateTo('Översikt');
     }
+};
+
+// Skapa ett globalt objekt för att hålla redigeringsfunktioner
+window.app = {
+    editors: {}
 };

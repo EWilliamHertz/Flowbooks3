@@ -1,7 +1,7 @@
 // js/ui/quotes.js
 import { getState } from '../state.js';
 import { renderSpinner, showConfirmationModal, showToast } from './utils.js';
-import { renderQuoteEditor } from './quote-editor.js'; // KORRIGERAD IMPORT
+import { renderQuoteEditor } from './quote-editor.js';
 import { deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 
 export function renderQuotesPage() {
@@ -18,6 +18,7 @@ export function renderQuotesPage() {
 function renderQuoteList() {
     const { allQuotes } = getState();
     const container = document.getElementById('quote-list-container');
+    if (!container) return;
 
     const rows = allQuotes.sort((a, b) => b.quoteNumber - a.quoteNumber).map(quote => `
         <tr>
@@ -28,7 +29,7 @@ function renderQuoteList() {
             <td class="text-right">${(quote.grandTotal || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
             <td>
                 <div class="action-menu" style="display: flex; gap: 0.5rem;">
-                    <button class="btn btn-sm btn-secondary" onclick="window.quoteFunctions.editQuote('${quote.id}')">Visa / Redigera</button>
+                    <button class="btn btn-sm btn-secondary" onclick="window.app.editors.renderQuoteEditor('${quote.id}')">Visa / Redigera</button>
                     <button class="btn btn-sm btn-danger" onclick="window.quoteFunctions.deleteQuote('${quote.id}')">Ta bort</button>
                 </div>
             </td>
@@ -68,7 +69,8 @@ async function deleteQuote(quoteId) {
     }, "Ta bort offert", "Är du säker på att du vill ta bort denna offert permanent?");
 }
 
+// Exponera funktioner globalt
 window.quoteFunctions = {
-    editQuote: renderQuoteEditor,
     deleteQuote: deleteQuote,
 };
+window.app.editors.renderQuoteEditor = renderQuoteEditor;
