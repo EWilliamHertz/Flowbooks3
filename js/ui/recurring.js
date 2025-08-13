@@ -2,7 +2,6 @@
 import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
-import { navigateTo } from './navigation.js';
 import { writeBatch, doc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
@@ -18,7 +17,7 @@ export function renderRecurringPage() {
             <h3>Mina Återkommande Transaktioner</h3>
             <div id="recurring-list-container">${renderSpinner()}</div>
         </div>`;
-    document.getElementById('run-recurring-btn').addEventListener('click', () => runRecurringTransactions(false)); // Manuell körning är inte tyst
+    document.getElementById('run-recurring-btn').addEventListener('click', () => runRecurringTransactions(false));
     renderRecurringList();
 }
 
@@ -64,18 +63,18 @@ export function renderRecurringTransactionForm() {
     mainView.innerHTML = `
         <div class="card" style="max-width: 600px; margin: auto;">
             <h3>Skapa Ny Återkommande Transaktion</h3>
-            <div class="input-group"><label>Typ</label><select id="rec-type"><option value="expense">Utgift</option><option value="income">Intäkt</option></select></div>
-            <div class="input-group"><label>Startdatum (första körning)</label><input id="rec-date" type="date" value="${today}"></div>
-            <div class="input-group"><label>Beskrivning</label><input id="rec-desc" type="text"></div>
-            <div class="input-group"><label>Motpart</label><input id="rec-party" type="text"></div>
-            <div class="input-group"><label>Summa (SEK)</label><input id="rec-amount" type="number" placeholder="0.00"></div>
+            <div class="input-group"><label>Typ</label><select id="rec-type" class="form-input"><option value="expense">Utgift</option><option value="income">Intäkt</option></select></div>
+            <div class="input-group"><label>Startdatum (första körning)</label><input id="rec-date" type="date" class="form-input" value="${today}"></div>
+            <div class="input-group"><label>Beskrivning</label><input id="rec-desc" type="text" class="form-input"></div>
+            <div class="input-group"><label>Motpart</label><input id="rec-party" type="text" class="form-input"></div>
+            <div class="input-group"><label>Summa (SEK)</label><input id="rec-amount" type="number" class="form-input" placeholder="0.00"></div>
             <div class="modal-actions">
                 <button id="cancel-btn" class="btn btn-secondary">Avbryt</button>
                 <button id="save-btn" class="btn btn-primary">Spara</button>
             </div>
         </div>`;
     document.getElementById('save-btn').addEventListener('click', saveRecurringHandler);
-    document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('Återkommande'));
+    document.getElementById('cancel-btn').addEventListener('click', () => window.navigateTo('Återkommande'));
 }
 
 async function saveRecurringHandler() {
@@ -94,7 +93,7 @@ async function saveRecurringHandler() {
     try {
         await saveDocument('recurring', data);
         await fetchAllCompanyData();
-        navigateTo('Återkommande');
+        window.navigateTo('Återkommande');
         showToast('Sparad!', 'success');
     } catch (error) {
         showToast('Ett fel uppstod.', 'error');
@@ -123,9 +122,7 @@ export async function runRecurringTransactions(isSilent = false) {
         const batch = writeBatch(db);
         for (const item of toCreate) {
             const collectionName = item.type === 'income' ? 'incomes' : 'expenses';
-            const docRef = doc(collection(db, collectionName));
             
-            // Beräkna moms för automatiska utgifter (antar 25% som standard)
             let transactionData;
             if (item.type === 'expense') {
                 const vatRate = 25;
@@ -137,7 +134,7 @@ export async function runRecurringTransactions(isSilent = false) {
                 };
             }
             
-            batch.set(docRef, {
+            batch.set(doc(collection(db, collectionName)), {
                 date: item.nextDueDate,
                 description: item.description,
                 party: item.party,
@@ -160,11 +157,9 @@ export async function runRecurringTransactions(isSilent = false) {
              renderRecurringList();
              showToast(`${toCreate.length} transaktion(er) har skapats!`, 'success');
         } else {
-            showToast(`Automatisk körning: ${toCreate.length} återkommande transaktion(er) har skapats.`, 'info');
             const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
-            // Om användaren är på en relevant sida, ladda om den för att visa ny data
             if (['Översikt', 'Sammanfattning', 'Intäkter', 'Utgifter', 'Återkommande'].includes(currentPage)) {
-                 navigateTo(currentPage);
+                 window.navigateTo(currentPage);
             }
         }
     } catch (error) {
@@ -178,9 +173,6 @@ export async function runRecurringTransactions(isSilent = false) {
     }
 }
 
-/**
- * NY FUNKTION: Visar en modal med historik för en återkommande transaktion.
- */
 async function showHistoryModal(recurringId, description) {
     const modalContainer = document.getElementById('modal-container');
     modalContainer.innerHTML = `

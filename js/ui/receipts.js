@@ -3,7 +3,6 @@ import { getAIReceiptDetails } from '../services/ai.js';
 import { saveDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { renderSpinner, showToast, closeModal, showConfirmationModal } from './utils.js';
 import { getState } from '../state.js';
-import { navigateTo } from './navigation.js';
 
 export function renderReceiptsPage() {
     const mainView = document.getElementById('main-view');
@@ -23,13 +22,11 @@ function handleReceiptFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Visa en laddningsmodal medan AI:n arbetar
     const modalContainer = document.getElementById('modal-container');
     modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Analyserar kvitto med AI...</h3><p>Detta kan ta en liten stund.</p>${renderSpinner()}</div></div>`;
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-        // Hämta base64-data och MIME-typ
         const imageBase64 = e.target.result.split(',')[1];
         const mimeType = file.type;
         try {
@@ -79,7 +76,6 @@ function showReceiptConfirmationModal(suggestion) {
 
 async function saveReceiptHandler(btn) {
     const amount = parseFloat(document.getElementById('receipt-amount').value) || 0;
-    // Förutsätter 25% moms som standard om AI:n inte kan tolka den, detta kan utvecklas
     const vatRate = 25; 
     const vatAmount = amount - (amount / (1 + vatRate / 100));
 
@@ -110,7 +106,7 @@ async function saveReceiptHandler(btn) {
             showToast('Kvittot har sparats som en utgift!', 'success');
             closeModal();
             await fetchAllCompanyData();
-            navigateTo('Utgifter');
+            window.navigateTo('Utgifter');
         } catch (error) {
             console.error("Kunde inte spara utgift från kvitto:", error);
             showToast('Kunde inte spara utgiften.', 'error');

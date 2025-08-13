@@ -4,7 +4,6 @@ import { db } from '../../firebase-config.js';
 import { getState } from '../state.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, renderSpinner } from './utils.js';
-import { navigateTo } from './navigation.js';
 import { getAIProductDetails } from '../services/ai.js';
 
 let parsedCsvData = { headers: [], rows: [] };
@@ -125,9 +124,8 @@ async function handleStartAiAnalysis() {
     const productSuggestions = await Promise.all(
         productsToAnalyze.map(async (baseProduct) => {
             const aiDetails = await getAIProductDetails(baseProduct.name);
-            // Slå samman data: AI-data är grund, men data från CSV (om det finns) skriver över.
             return {
-                name: baseProduct.name, // Namnet från CSV är alltid det som gäller
+                name: baseProduct.name,
                 purchasePrice: baseProduct.purchasePrice ?? aiDetails.purchasePrice,
                 stock: baseProduct.stock ?? aiDetails.stock,
                 imageUrl: baseProduct.imageUrl ?? aiDetails.imageUrl,
@@ -157,7 +155,7 @@ function showImportConfirmationModal(products) {
 
     modalContainer.innerHTML = `
         <div class="modal-overlay">
-            <div class.modal-content" style="max-width: 1200px; width: 95%;">
+            <div class="modal-content" style="max-width: 1200px; width: 95%;">
                 <h3>Granska AI-förslag</h3>
                 <p>AI:n har fyllt i produktdata baserat på din mappning. Du kan redigera alla fält nedan innan du importerar.</p>
                 <div style="max-height: 60vh; overflow-y: auto;">
@@ -234,7 +232,7 @@ async function handleImportConfirm(btn) {
         await fetchAllCompanyData();
         showToast(`${productsToSave.length} produkter har importerats!`, 'success');
         closeModal();
-        navigateTo('Produkter');
+        window.navigateTo('Produkter');
     } catch (error) {
         showToast("Ett fel uppstod vid importen.", "error");
         console.error("Import error:", error);

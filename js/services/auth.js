@@ -19,10 +19,8 @@ export function initializeAuthListener(onAppInitializedCallback) {
                 showFatalError("Ditt konto är inte korrekt konfigurerat eller saknar koppling till ett företag.");
             }
         } else if (user && !user.emailVerified) {
-            // Omdirigera till login med status för att visa meddelande om overifierad e-post
             window.location.href = `login.html?status=unverified&email=${encodeURIComponent(user.email)}`;
         } else {
-            // Ingen användare inloggad, omdirigera till login-sidan
             window.location.href = 'login.html';
         }
     });

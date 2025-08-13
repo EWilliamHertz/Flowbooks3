@@ -68,7 +68,6 @@ async function deleteQuote(quoteId) {
     }, "Ta bort offert", "Är du säker på att du vill ta bort denna offert permanent?");
 }
 
-// Exponera funktioner globalt
 window.quoteFunctions = {
     deleteQuote: deleteQuote,
 };

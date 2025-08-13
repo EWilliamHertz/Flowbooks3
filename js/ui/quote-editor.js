@@ -179,5 +179,4 @@ async function convertToInvoice(quote) {
     }, "Omvandla till Faktura", "En ny faktura kommer att skapas baserat på denna offert. Offerten kommer att markeras som 'Accepterad'. Är du säker?");
 }
 
-// Lägg till redigeringsfunktionen till det globala objektet
 window.app.editors.renderQuoteEditor = renderQuoteEditor;

@@ -512,7 +512,6 @@ async function createPdfContent(doc, invoice, company) {
     }
 }
 
-// Gör funktionerna globalt tillgängliga
 window.invoiceFunctions = {
     generatePDF: generateInvoicePDF,
     markAsPaid: markAsPaid,

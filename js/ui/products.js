@@ -2,7 +2,7 @@
 import { getState, setState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
-import { writeBatch, doc, collection, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
 let inventoryChartInstance = null;
@@ -261,7 +261,6 @@ function showProductImageModal(imageUrl, productName) {
     });
 }
 
-// KORRIGERING: Använd det globala objektet som skapas i app.js
 window.app.editors.renderProductForm = renderProductForm;
 window.app.editors.deleteProduct = deleteProductHandler;
 window.app.editors.showProductImage = showProductImageModal;

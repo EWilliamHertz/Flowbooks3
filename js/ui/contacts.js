@@ -2,7 +2,6 @@
 import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
-import { navigateTo } from './navigation.js';
 
 // Renders the main contacts page (list view)
 export function renderContactsPage() {
@@ -52,14 +51,12 @@ function renderContactsList() {
         </table>
     `;
     
-    // Event listener för att klicka på en rad och gå till detaljvyn
     container.querySelectorAll('tbody tr').forEach(row => {
         row.addEventListener('click', () => {
-            navigateTo('Kontakter', row.dataset.contactId);
+            window.navigateTo('Kontakter', row.dataset.contactId);
         });
     });
 
-    // Event listeners för checkboxar (för massutskick)
     const allCheckbox = document.getElementById('select-all-contacts');
     const checkboxes = document.querySelectorAll('.contact-select-checkbox');
     const emailBtn = document.getElementById('email-selected-btn');
@@ -79,7 +76,7 @@ function renderContactsList() {
     emailBtn.addEventListener('click', () => {
         const selectedEmails = Array.from(document.querySelectorAll('.contact-select-checkbox:checked'))
             .map(cb => cb.dataset.email)
-            .filter(email => email); // Filtrera bort tomma
+            .filter(email => email);
         
         if (selectedEmails.length > 0) {
             window.location.href = `mailto:?bcc=${selectedEmails.join(',')}`;
@@ -89,20 +86,18 @@ function renderContactsList() {
     });
 }
 
-// NY FUNKTION: Renderar detaljvyn för en enskild kontakt
 export function renderContactDetailView(contactId) {
     const { allContacts, allInvoices, allQuotes, allTransactions } = getState();
     const contact = allContacts.find(c => c.id === contactId);
     
     if (!contact) {
-        navigateTo('Kontakter'); // Gå tillbaka om kontakten inte finns
+        window.navigateTo('Kontakter');
         return;
     }
 
     const mainView = document.getElementById('main-view');
-    mainView.innerHTML = renderSpinner(); // Visa spinner medan vi bygger vyn
+    mainView.innerHTML = renderSpinner();
 
-    // Filtrera fram relevant historik
     const contactInvoices = allInvoices.filter(i => i.customerName === contact.name);
     const contactQuotes = allQuotes.filter(q => q.customerName === contact.name);
     const contactTransactions = allTransactions.filter(t => t.party === contact.name);
@@ -122,7 +117,6 @@ export function renderContactDetailView(contactId) {
                 <button class="btn btn-danger" onclick="window.contactFunctions.deleteContact('${contact.id}')">Ta bort</button>
             </div>
         </div>
-
         <div class="settings-grid">
             <div class="card">
                 <h3 class="card-title">Offerter (${contactQuotes.length})</h3>
@@ -140,13 +134,10 @@ export function renderContactDetailView(contactId) {
     `;
 
     mainView.innerHTML = detailHtml;
-    // Uppdatera sidans titel
     const pageTitleEl = document.querySelector('.page-title');
     if(pageTitleEl) pageTitleEl.textContent = contact.name;
 }
 
-
-// Renders the form for adding or editing a contact in a modal
 function renderContactForm(contactId = null) {
     const { allContacts } = getState();
     const contact = contactId ? allContacts.find(c => c.id === contactId) : null;
@@ -192,7 +183,6 @@ function renderContactForm(contactId = null) {
     });
 }
 
-// Handles saving the contact data to Firestore
 async function saveContactHandler(btn, contactId) {
     const contactData = {
         name: document.getElementById('contact-name').value.trim(),
@@ -215,7 +205,6 @@ async function saveContactHandler(btn, contactId) {
         showToast(`Kontakten har ${contactId ? 'uppdaterats' : 'skapats'}!`, 'success');
         closeModal();
         await fetchAllCompanyData();
-        // Om vi var på detaljvyn, rendera om den, annars rendera listan
         const mainView = document.getElementById('main-view');
         const isDetailView = mainView.querySelector('.contact-detail-header');
 
@@ -233,21 +222,19 @@ async function saveContactHandler(btn, contactId) {
     }
 }
 
-// Handles deleting a contact
 function deleteContactHandler(contactId) {
     showConfirmationModal(async () => {
         try {
             await deleteDocument('contacts', contactId);
             showToast('Kontakten har tagits bort!', 'success');
             await fetchAllCompanyData();
-            navigateTo('Kontakter'); // Gå tillbaka till listvyn efter borttagning
+            window.navigateTo('Kontakter');
         } catch (error) {
             showToast('Kunde inte ta bort kontakten.', 'error');
         }
     }, "Ta bort kontakt", "Är du säker på att du vill ta bort denna kontakt permanent?");
 }
 
-// Make functions available on the window object to be called from HTML
 window.contactFunctions = {
     renderContactForm,
     deleteContact: deleteContactHandler,
