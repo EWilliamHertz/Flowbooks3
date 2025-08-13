@@ -4,10 +4,11 @@ import { showToast, closeModal, showConfirmationModal } from './utils.js';
 import { updateDoc, doc, deleteDoc, addDoc, collection } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js";
 import { db, storage, auth } from '../../firebase-config.js';
-import { fetchAllCompanyData } from '../services/firestore.js'; // Importera för att kunna uppdatera state
+import { fetchAllCompanyData } from '../services/firestore.js';
 
 export function renderSettingsPage() {
     const { currentCompany } = getState();
+    const mainView = document.getElementById('main-view'); // <-- DENNA RAD SAKNADES
     mainView.innerHTML = `
         <div class="settings-grid">
             <div class="card">
@@ -272,7 +273,7 @@ async function saveCompanyLogo() {
             }
             logoUrl = url;
         } else {
-            logoUrl = currentCompany.logoUrl || ''; // Behåll existerande om inget anges
+            logoUrl = currentCompany.logoUrl || '';
         }
         await updateDoc(doc(db, 'companies', currentCompany.id), { logoUrl: logoUrl });
         setState({ currentCompany: { ...currentCompany, logoUrl: logoUrl } });
@@ -290,9 +291,8 @@ async function deleteAccount() {
     showConfirmationModal(async () => {
         try {
             const { currentUser } = getState();
-            // Detta är destruktivt, ingen "väntar"-status behövs då sidan laddas om.
-            await deleteDoc(doc(db, 'users', currentUser.uid));
             await auth.currentUser.delete();
+            // Notera: Dokument i firestore för användaren tas inte bort här, kan läggas till.
             showToast("Ditt konto har tagits bort.", "info");
             window.location.href = 'login.html';
         } catch (error) {
