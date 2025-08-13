@@ -57,7 +57,8 @@ export async function fetchAllCompanyData() {
             getDocs(query(collection(db, 'products'), where('companyId', '==', companyId), orderBy('name'))),
             getDocs(query(collection(db, 'categories'), where('companyId', '==', companyId), orderBy('name'))),
             getDocs(query(collection(db, 'invoices'), where('companyId', '==', companyId))),
-            getDocs(query(collection(db, 'contacts'), where('companyId', '==', companyId), orderBy('name'))), // <-- NY RAD FÖR KONTAKTER
+            getDocs(query(collection(db, 'quotes'), where('companyId', '==', companyId))), // <-- NY RAD FÖR OFFERTER
+            getDocs(query(collection(db, 'contacts'), where('companyId', '==', companyId), orderBy('name'))),
         ];
         
         if (memberUIDs.length > 0) {
@@ -72,16 +73,16 @@ export async function fetchAllCompanyData() {
         const allProducts = results[3].docs.map(d => ({ id: d.id, ...d.data() }));
         const categories = results[4].docs.map(d => ({ id: d.id, ...d.data() }));
         const allInvoices = results[5].docs.map(d => ({ id: d.id, ...d.data() }));
-        const allContacts = results[6].docs.map(d => ({ id: d.id, ...d.data() })); // <-- NY RAD FÖR KONTAKTER
-        const teamMembers = results.length > 7 ? results[7].docs.map(d => ({ id: d.id, ...d.data() })) : []; // <-- ÄNDRAD INDEX
+        const allQuotes = results[6].docs.map(d => ({ id: d.id, ...d.data() })); // <-- NY RAD FÖR OFFERTER
+        const allContacts = results[7].docs.map(d => ({ id: d.id, ...d.data() }));
+        const teamMembers = results.length > 8 ? results[8].docs.map(d => ({ id: d.id, ...d.data() })) : [];
         
         const allTransactions = [
             ...allIncomes.map(t => ({ ...t, type: 'income' })),
             ...allExpenses.map(t => ({ ...t, type: 'expense' }))
         ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        // Lade till allContacts i state
-        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allContacts, teamMembers, allTransactions });
+        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allQuotes, allContacts, teamMembers, allTransactions });
     } catch (error) {
         console.error("Kunde inte ladda all företagsdata:", error);
         showToast("Kunde inte ladda all företagsdata.", "error");

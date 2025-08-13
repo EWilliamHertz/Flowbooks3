@@ -12,9 +12,10 @@ const state = {
     allExpenses: [],
     allTransactions: [],
     allInvoices: [],
+    allQuotes: [], // <-- LÄGG TILL DENNA RAD
     recurringTransactions: [],
     categories: [],
-    allContacts: [], // <-- NY RAD
+    allContacts: [],
 
     // Produkt- och lagerdata
     allProducts: [],

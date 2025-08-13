@@ -652,3 +652,63 @@ tr.corrected td { font-style: italic; }
     background-color: var(--success-color);
     color: white;
 }
+/* --- 21. Global Search --- */
+.global-search-container {
+    position: relative;
+    width: 350px;
+}
+
+#global-search-input {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-size: 0.9rem;
+    background-color: var(--background-color);
+}
+
+.global-search-results-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    box-shadow: var(--box-shadow);
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 1100;
+}
+
+.search-category {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    background-color: var(--background-color);
+    border-bottom: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
+}
+.search-category:first-child {
+    border-top: none;
+}
+
+.search-result-item {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+.search-result-item:hover {
+    background-color: #e9f2fe;
+}
+
+.search-no-results {
+    padding: 1rem;
+    color: var(--text-color-light);
+    text-align: center;
+}
