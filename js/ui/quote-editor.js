@@ -2,11 +2,10 @@
 import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, showConfirmationModal, closeModal } from './utils.js';
-// VI TAR BORT DEN CIRKULÄRA IMPORTEN HÄRIFRÅN
 
 let quoteItems = [];
 
-export function renderQuoteEditor(quoteId = null) {
+function renderQuoteEditor(quoteId = null) {
     const { allQuotes, currentCompany } = getState();
     const quote = quoteId ? allQuotes.find(q => q.id === quoteId) : null;
     quoteItems = quote ? JSON.parse(JSON.stringify(quote.items)) : [];
