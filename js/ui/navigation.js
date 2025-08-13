@@ -15,7 +15,8 @@ import { renderInvoicesPage, renderInvoiceEditor } from './invoices.js';
 import { renderReceiptsPage } from './receipts.js';
 import { renderReportsPage } from './reports.js';
 import { renderBankingPage } from './banking.js';
-import { renderContactsPage } from './contacts.js'; // <-- NY IMPORT
+import { renderContactsPage, renderContactDetailView } from './contacts.js'; // Uppdaterad import
+import { renderQuotesPage, renderQuoteEditor } from './quotes.js'; // NY IMPORT för offerter
 
 // Mappar en sid-sträng till funktionen som ska rendera den sidan.
 const pageRenderers = {
@@ -27,19 +28,20 @@ const pageRenderers = {
     'Bankavstämning': renderBankingPage,
     'Skanna Kvitto': renderReceiptsPage,
     'Produkter': renderProductsPage,
-    'Kontakter': renderContactsPage, // <-- NY RAD
+    'Kontakter': renderContactsPage,
     'Team': renderTeamPage,
     'Inställningar': renderSettingsPage,
     'Återkommande': renderRecurringPage,
     'Importera': renderImportPage,
     'Fakturor': renderInvoicesPage,
+    'Offerter': renderQuotesPage, // NY RAD för offerter
     'Rapporter': renderReportsPage,
 };
 
 // Definierar vilka sidor som ska visas i menyn för olika användarroller.
 const menuConfig = {
-    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
-    member: ['Översikt', 'Sammanfattning', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Inställningar'],
+    owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Offerter', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
+    member: ['Översikt', 'Sammanfattning', 'Offerter', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Inställningar'],
     readonly: ['Översikt', 'Sammanfattning', 'Rapporter'],
 };
 
@@ -60,7 +62,7 @@ export function initializeAppUI() {
     document.getElementById('app-container').style.visibility = 'visible';
 }
 
-export function navigateTo(page) {
+export function navigateTo(page, id = null) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
     renderSidebarMenu();
@@ -81,16 +83,30 @@ export function navigateTo(page) {
         if (defaultLink) defaultLink.classList.add('active');
         page = defaultPage;
     }
-    renderPageContent(page);
+    
+    // Specialhantering för sidor som kräver ett ID, t.ex. en specifik kontakt
+    if (id) {
+        renderPageContent(page, id);
+    } else {
+        renderPageContent(page);
+    }
+    
     document.querySelector('.sidebar')?.classList.remove('open');
 }
 
-function renderPageContent(page) {
+function renderPageContent(page, id = null) {
     document.querySelector('.page-title').textContent = page;
     document.getElementById('main-view').innerHTML = ''; 
     const newItemBtn = document.getElementById('new-item-btn');
     newItemBtn.style.display = 'none';
     newItemBtn.onclick = null;
+    
+    // Om det är en detaljvy, anropa dess specifika render-funktion
+    if (page === 'Kontakter' && id) {
+        renderContactDetailView(id);
+        return; // Avsluta här för att inte köra den generella renderaren
+    }
+
     const renderFunction = pageRenderers[page];
     if (renderFunction) renderFunction();
     
@@ -120,7 +136,12 @@ function renderPageContent(page) {
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderInvoiceEditor();
             break;
-        case 'Kontakter': // <-- NYTT CASE
+        case 'Offerter': // NYTT CASE
+            newItemBtn.textContent = 'Ny Offert';
+            newItemBtn.style.display = 'block';
+            newItemBtn.onclick = () => renderQuoteEditor();
+            break;
+        case 'Kontakter':
             newItemBtn.textContent = 'Ny Kontakt';
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => window.contactFunctions.renderContactForm();
@@ -143,7 +164,108 @@ function setupEventListeners() {
         navigateTo('Inställningar');
     });
     document.getElementById('hamburger-btn').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
+
+    // NYTT: Event listeners för global sökning
+    const searchInput = document.getElementById('global-search-input');
+    const searchResults = document.getElementById('global-search-results');
+    
+    searchInput.addEventListener('input', handleGlobalSearch);
+    
+    // Dölj sökresultat när man klickar utanför
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.global-search-container')) {
+            searchResults.style.display = 'none';
+        }
+    });
 }
+
+// NY FUNKTION: Hanterar global sökning
+function handleGlobalSearch() {
+    const input = document.getElementById('global-search-input');
+    const resultsContainer = document.getElementById('global-search-results');
+    const searchTerm = input.value.toLowerCase();
+    
+    if (searchTerm.length < 2) {
+        resultsContainer.style.display = 'none';
+        return;
+    }
+
+    const { allContacts, allInvoices, allProducts, allQuotes } = getState();
+    let resultsHtml = '';
+
+    // Sök bland kontakter
+    const contactResults = allContacts.filter(c => c.name.toLowerCase().includes(searchTerm));
+    if (contactResults.length > 0) {
+        resultsHtml += '<div class="search-category">Kontakter</div>';
+        contactResults.forEach(c => {
+            resultsHtml += `<a href="#" class="search-result-item" data-type="contact" data-id="${c.id}">${c.name}</a>`;
+        });
+    }
+
+    // Sök bland fakturor
+    const invoiceResults = allInvoices.filter(i => i.customerName.toLowerCase().includes(searchTerm) || String(i.invoiceNumber).includes(searchTerm));
+     if (invoiceResults.length > 0) {
+        resultsHtml += '<div class="search-category">Fakturor</div>';
+        invoiceResults.forEach(i => {
+            resultsHtml += `<a href="#" class="search-result-item" data-type="invoice" data-id="${i.id}">#${i.invoiceNumber} - ${i.customerName}</a>`;
+        });
+    }
+
+    // Sök bland offerter
+    const quoteResults = allQuotes.filter(q => q.customerName.toLowerCase().includes(searchTerm) || String(q.quoteNumber).includes(searchTerm));
+    if (quoteResults.length > 0) {
+        resultsHtml += '<div class="search-category">Offerter</div>';
+        quoteResults.forEach(q => {
+            resultsHtml += `<a href="#" class="search-result-item" data-type="quote" data-id="${q.id}">Offert #${q.quoteNumber} - ${q.customerName}</a>`;
+        });
+    }
+
+    // Sök bland produkter
+    const productResults = allProducts.filter(p => p.name.toLowerCase().includes(searchTerm));
+    if (productResults.length > 0) {
+        resultsHtml += '<div class="search-category">Produkter</div>';
+        productResults.forEach(p => {
+            resultsHtml += `<a href="#" class="search-result-item" data-type="product" data-id="${p.id}">${p.name}</a>`;
+        });
+    }
+
+    if (resultsHtml) {
+        resultsContainer.innerHTML = resultsHtml;
+        resultsContainer.style.display = 'block';
+        
+        // Lägg till klickhanterare för sökresultaten
+        resultsContainer.querySelectorAll('.search-result-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const type = e.target.dataset.type;
+                const id = e.target.dataset.id;
+                
+                resultsContainer.style.display = 'none';
+                input.value = '';
+
+                switch(type) {
+                    case 'contact':
+                        navigateTo('Kontakter', id);
+                        break;
+                    case 'invoice':
+                        renderInvoiceEditor(id);
+                        break;
+                    case 'quote':
+                        renderQuoteEditor(id);
+                        break;
+                    case 'product':
+                        attachProductPageEventListeners.renderProductForm(id);
+                        break;
+                }
+            });
+        });
+
+    } else {
+        resultsContainer.innerHTML = '<div class="search-no-results">Inga träffar</div>';
+        resultsContainer.style.display = 'block';
+    }
+}
+
 
 function updateProfileIcon() {
     const { userData } = getState();
