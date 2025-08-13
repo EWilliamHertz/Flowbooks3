@@ -107,8 +107,8 @@ export function renderContactDetailView(contactId) {
     const contactQuotes = allQuotes.filter(q => q.customerName === contact.name);
     const contactTransactions = allTransactions.filter(t => t.party === contact.name);
 
-    const invoiceRows = contactInvoices.map(i => `<li><a href="#" onclick="window.invoiceFunctions.editInvoice('${i.id}')">Faktura #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString('sv-SE')} kr (${i.status})</li>`).join('');
-    const quoteRows = contactQuotes.map(q => `<li><a href="#" onclick="window.quoteFunctions.editQuote('${q.id}')">Offert #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString('sv-SE')} kr (${q.status})</li>`).join('');
+    const invoiceRows = contactInvoices.map(i => `<li><a href="#" onclick="window.app.editors.renderInvoiceEditor('${i.id}')">Faktura #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString('sv-SE')} kr (${i.status})</li>`).join('');
+    const quoteRows = contactQuotes.map(q => `<li><a href="#" onclick="window.app.editors.renderQuoteEditor('${q.id}')">Offert #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString('sv-SE')} kr (${q.status})</li>`).join('');
     const transactionRows = contactTransactions.map(t => `<li class="${t.type}">${t.date}: ${t.description} - ${t.amount.toLocaleString('sv-SE')} kr</li>`).join('');
 
     const detailHtml = `
@@ -215,11 +215,13 @@ async function saveContactHandler(btn, contactId) {
         closeModal();
         await fetchAllCompanyData();
         // Om vi var på detaljvyn, rendera om den, annars rendera listan
-        const currentContactId = window.location.hash.split('/')[2];
-        if (contactId && currentContactId === contactId) {
-            renderContactDetailView(contactId);
+        const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
+        const currentContactId = mainView.querySelector('.contact-detail-header') ? contactId : null;
+
+        if (currentPage === 'Kontakter' && currentContactId) {
+            renderContactDetailView(currentContactId);
         } else {
-            renderContactsList();
+             renderContactsList();
         }
     } catch (error) {
         console.error("Kunde inte spara kontakt:", error);

@@ -7,8 +7,8 @@ const EXCHANGE_TOKEN_URL = 'https://tink-exchange-token-226642349583.europe-west
 const FETCH_DATA_URL = 'https://tink-fetch-data-226642349583.europe-west1.run.app';
 const TINK_CLIENT_ID = '3062b812f1d340b986a70df838755c29';
 
-// UPPDATERAD REDIRECT_URI FÖR FIREBASE HOSTING
-const REDIRECT_URI = 'https://flowbooks-73cd9.firebaseapp.com/app.html';
+// UPPDATERAD REDIRECT_URI FÖR GITHUB PAGES
+const REDIRECT_URI = 'https://ewilliamhertz.github.io/Flowbooks3/app.html';
 
 // Huvudfunktion som anropas från navigation.js
 export function renderBankingPage() {
