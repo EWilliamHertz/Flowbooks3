@@ -106,9 +106,7 @@ export async function runRecurringTransactions(isSilent = false) {
     const toCreate = recurringTransactions.filter(item => item.nextDueDate && item.nextDueDate <= todayStr);
     
     if (toCreate.length === 0) {
-        if (!isSilent) {
-            showToast("Inga transaktioner att generera idag.", "info");
-        }
+        if (!isSilent) showToast("Inga transaktioner att generera idag.", "info");
         return;
     }
     
@@ -129,8 +127,8 @@ export async function runRecurringTransactions(isSilent = false) {
                 const vatAmount = item.amount - (item.amount / (1 + vatRate / 100));
                 transactionData = {
                     amountExclVat: item.amount - vatAmount,
-                    vatRate: vatRate,
-                    vatAmount: vatAmount,
+                    vatRate,
+                    vatAmount,
                 };
             }
             
@@ -217,6 +215,5 @@ async function showHistoryModal(recurringId, description) {
     } catch (error) {
         console.error("Kunde inte hämta historik:", error);
         document.getElementById('history-content').innerHTML = '<p>Kunde inte ladda historik.</p>';
-        showToast("Kunde inte hämta historik.", "error");
     }
 }

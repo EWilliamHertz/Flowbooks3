@@ -3,7 +3,6 @@ import { getState } from '../state.js';
 import { saveDocument, performCorrection, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal } from './utils.js';
 import { getControlsHTML } from './components.js';
-import { navigateTo } from './navigation.js';
 
 export function renderTransactionsPage(type) {
     const mainView = document.getElementById('main-view');
@@ -124,7 +123,7 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
                 <option value="0" ${originalData.vatRate === 0 ? 'selected' : ''}>0%</option>
                 <option value="6" ${originalData.vatRate === 6 ? 'selected' : ''}>6%</option>
                 <option value="12" ${originalData.vatRate === 12 ? 'selected' : ''}>12%</option>
-                <option value="25" ${originalData.vatRate === 25 ? 'selected' : ''}>25%</option>
+                <option value="25" ${originalData.vatRate === 25 || originalData.vatRate === undefined ? 'selected' : ''}>25%</option>
             </select>
         </div>` : '';
 
@@ -167,7 +166,7 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
             handleSave(btn, type, newData);
         }
     });
-    document.getElementById('cancel-btn').addEventListener('click', () => navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
+    document.getElementById('cancel-btn').addEventListener('click', () => window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
 }
 
 async function handleSave(btn, type, data) {
@@ -183,7 +182,7 @@ async function handleSave(btn, type, data) {
             const collectionName = type === 'income' ? 'incomes' : 'expenses';
             await saveDocument(collectionName, { ...data, isCorrection: false });
             await fetchAllCompanyData();
-            navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
+            window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
             showToast("Transaktionen har sparats!", "success");
         } catch (error) {
             console.error("Fel vid sparning:", error);
@@ -207,7 +206,7 @@ async function handleCorrectionSave(btn, type, originalId, originalData, newData
         try {
             await performCorrection(type, originalId, originalData, newData);
             await fetchAllCompanyData();
-            navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
+            window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
             showToast("Rättelsen har sparats.", "success");
         } catch (error) {
             console.error("Fel vid rättelse:", error);
