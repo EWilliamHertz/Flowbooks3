@@ -1,7 +1,7 @@
 // js/ui/quotes.js
 import { getState } from '../state.js';
 import { renderSpinner, showConfirmationModal, showToast } from './utils.js';
-import { renderQuoteEditor } from './quote-editor.js';
+// VI TAR BORT DEN CIRKULÄRA IMPORTEN HÄRIFRÅN
 import { deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 
 export function renderQuotesPage() {
@@ -73,4 +73,3 @@ async function deleteQuote(quoteId) {
 window.quoteFunctions = {
     deleteQuote: deleteQuote,
 };
-window.app.editors.renderQuoteEditor = renderQuoteEditor;

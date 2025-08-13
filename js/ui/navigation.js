@@ -38,7 +38,6 @@ const pageRenderers = {
     'Rapporter': renderReportsPage,
 };
 
-// Definierar vilka sidor som ska visas i menyn för olika användarroller.
 const menuConfig = {
     owner: ['Översikt Alla Företag', 'Översikt', 'Sammanfattning', 'Offerter', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Importera', 'Team', 'Inställningar'],
     member: ['Översikt', 'Sammanfattning', 'Offerter', 'Fakturor', 'Intäkter', 'Utgifter', 'Bankavstämning', 'Skanna Kvitto', 'Återkommande', 'Produkter', 'Kontakter', 'Rapporter', 'Inställningar'],
@@ -75,21 +74,9 @@ function navigateTo(page, id = null) {
     }
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const link = document.querySelector(`.sidebar-nav a[data-page="${page}"]`);
-    if (link) {
-        link.classList.add('active');
-    } else {
-        const defaultPage = page === 'Översikt Alla Företag' ? 'Översikt Alla Företag' : 'Översikt';
-        const defaultLink = document.querySelector(`.sidebar-nav a[data-page="${defaultPage}"]`);
-        if (defaultLink) defaultLink.classList.add('active');
-        page = defaultPage;
-    }
+    if (link) link.classList.add('active');
     
-    if (id) {
-        renderPageContent(page, id);
-    } else {
-        renderPageContent(page);
-    }
-    
+    renderPageContent(page, id);
     document.querySelector('.sidebar')?.classList.remove('open');
 }
 window.navigateTo = navigateTo;
@@ -301,9 +288,4 @@ window.switchToCompany = async (companyId) => {
         document.getElementById('company-selector').value = companyId;
         navigateTo('Översikt');
     }
-};
-
-// Skapa ett globalt objekt för att hålla redigeringsfunktioner
-window.app = {
-    editors: {}
 };

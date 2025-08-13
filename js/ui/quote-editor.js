@@ -2,6 +2,7 @@
 import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, showConfirmationModal, closeModal } from './utils.js';
+// VI TAR BORT DEN CIRKULÄRA IMPORTEN HÄRIFRÅN
 
 let quoteItems = [];
 
@@ -165,7 +166,7 @@ async function saveQuote(btn, quoteId, status) {
     }
 }
 
-function convertToInvoice(quote) {
+async function convertToInvoice(quote) {
     showConfirmationModal(async () => {
         const invoiceDataFromQuote = {
             customerName: quote.customerName,
@@ -178,3 +179,6 @@ function convertToInvoice(quote) {
         showToast("Offerten har accepterats. Fyll i fakturadetaljer.", "success");
     }, "Omvandla till Faktura", "En ny faktura kommer att skapas baserat på denna offert. Offerten kommer att markeras som 'Accepterad'. Är du säker?");
 }
+
+// Lägg till redigeringsfunktionen till det globala objektet
+window.app.editors.renderQuoteEditor = renderQuoteEditor;

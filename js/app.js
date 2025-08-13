@@ -1,4 +1,11 @@
 // js/app.js
+
+// VIKTIGT: Skapa ett globalt objekt för att hålla delade funktioner.
+// Detta förhindrar problem med cirkulära importer och säkerställer att objektet alltid finns.
+window.app = {
+    editors: {}
+};
+
 import { initializeAuthListener } from './services/auth.js';
 import { initGoogleClient } from './services/google.js';
 import { runRecurringTransactions } from './ui/recurring.js';
