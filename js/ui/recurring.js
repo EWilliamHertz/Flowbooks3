@@ -123,7 +123,7 @@ export async function runRecurringTransactions(isSilent = false) {
         for (const item of toCreate) {
             const collectionName = item.type === 'income' ? 'incomes' : 'expenses';
             
-            let transactionData;
+            let transactionData = {};
             if (item.type === 'expense') {
                 const vatRate = 25;
                 const vatAmount = item.amount - (item.amount / (1 + vatRate / 100));

@@ -2,8 +2,8 @@
 import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
+import { editors } from './editors.js';
 
-// Renders the main contacts page (list view)
 export function renderContactsPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
@@ -19,10 +19,10 @@ export function renderContactsPage() {
     renderContactsList();
 }
 
-// Renders the list of contacts
 function renderContactsList() {
     const { allContacts } = getState();
     const container = document.getElementById('contacts-list-container');
+    if (!container) return;
 
     const rows = allContacts.map(contact => `
         <tr data-contact-id="${contact.id}" style="cursor: pointer;">
@@ -102,29 +102,29 @@ export function renderContactDetailView(contactId) {
     const contactQuotes = allQuotes.filter(q => q.customerName === contact.name);
     const contactTransactions = allTransactions.filter(t => t.party === contact.name);
 
-    const invoiceRows = contactInvoices.map(i => `<li><a href="#" onclick="window.app.editors.renderInvoiceEditor('${i.id}')">Faktura #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString('sv-SE')} kr (${i.status})</li>`).join('');
-    const quoteRows = contactQuotes.map(q => `<li><a href="#" onclick="window.app.editors.renderQuoteEditor('${q.id}')">Offert #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString('sv-SE')} kr (${q.status})</li>`).join('');
-    const transactionRows = contactTransactions.map(t => `<li class="${t.type}">${t.date}: ${t.description} - ${t.amount.toLocaleString('sv-SE')} kr</li>`).join('');
+    const invoiceRows = contactInvoices.map(i => `<li data-id="${i.id}" data-type="invoice"><a href="#">Faktura #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString('sv-SE')} kr (${i.status})</li>`).join('');
+    const quoteRows = contactQuotes.map(q => `<li data-id="${q.id}" data-type="quote"><a href="#">Offert #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString('sv-SE')} kr (${q.status})</li>`).join('');
+    const transactionRows = contactTransactions.map(t => `<li class="${t.type === 'income' ? 'green' : 'red'}">${t.date}: ${t.description} - ${t.amount.toLocaleString('sv-SE')} kr</li>`).join('');
 
     const detailHtml = `
-        <div class="contact-detail-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <div>
+        <div class="contact-detail-header" data-contact-id="${contact.id}">
+            <div style="margin-bottom: 2rem;">
                 <h2>${contact.name}</h2>
                 <p style="color: var(--text-color-light);">${contact.type === 'customer' ? 'Kund' : 'Leverantör'} | ${contact.email || 'Ingen e-post'} | ${contact.orgNumber || 'Inget org.nr'}</p>
             </div>
             <div>
-                <button class="btn btn-secondary" onclick="window.contactFunctions.renderContactForm('${contact.id}')">Redigera</button>
-                <button class="btn btn-danger" onclick="window.contactFunctions.deleteContact('${contact.id}')">Ta bort</button>
+                <button class="btn btn-secondary btn-edit-contact">Redigera</button>
+                <button class="btn btn-danger btn-delete-contact">Ta bort</button>
             </div>
         </div>
         <div class="settings-grid">
             <div class="card">
                 <h3 class="card-title">Offerter (${contactQuotes.length})</h3>
-                <ul class="history-list">${quoteRows || '<li>Inga offerter.</li>'}</ul>
+                <ul class="history-list" id="quote-history-list">${quoteRows || '<li>Inga offerter.</li>'}</ul>
             </div>
             <div class="card">
                 <h3 class="card-title">Fakturor (${contactInvoices.length})</h3>
-                <ul class="history-list">${invoiceRows || '<li>Inga fakturor.</li>'}</ul>
+                <ul class="history-list" id="invoice-history-list">${invoiceRows || '<li>Inga fakturor.</li>'}</ul>
             </div>
             <div class="card" style="grid-column: 1 / -1;">
                 <h3 class="card-title">Transaktioner (${contactTransactions.length})</h3>
@@ -136,9 +136,38 @@ export function renderContactDetailView(contactId) {
     mainView.innerHTML = detailHtml;
     const pageTitleEl = document.querySelector('.page-title');
     if(pageTitleEl) pageTitleEl.textContent = contact.name;
+    
+    attachContactDetailEventListeners();
 }
 
-function renderContactForm(contactId = null) {
+function attachContactDetailEventListeners() {
+    const mainView = document.getElementById('main-view');
+
+    mainView.addEventListener('click', e => {
+        const contactId = mainView.querySelector('.contact-detail-header')?.dataset.contactId;
+
+        if (e.target.matches('.btn-edit-contact')) {
+            editors.renderContactForm(contactId);
+        } else if (e.target.matches('.btn-delete-contact')) {
+            editors.deleteContact(contactId);
+        }
+        
+        const historyItem = e.target.closest('li[data-id]');
+        if (historyItem) {
+            e.preventDefault();
+            const id = historyItem.dataset.id;
+            const type = historyItem.dataset.type;
+
+            if (type === 'invoice') {
+                editors.renderInvoiceEditor(id);
+            } else if (type === 'quote') {
+                editors.renderQuoteEditor(id);
+            }
+        }
+    });
+}
+
+export function renderContactForm(contactId = null) {
     const { allContacts } = getState();
     const contact = contactId ? allContacts.find(c => c.id === contactId) : null;
     const isEdit = !!contact;
@@ -222,7 +251,7 @@ async function saveContactHandler(btn, contactId) {
     }
 }
 
-function deleteContactHandler(contactId) {
+export function deleteContact(contactId) {
     showConfirmationModal(async () => {
         try {
             await deleteDocument('contacts', contactId);
@@ -234,8 +263,3 @@ function deleteContactHandler(contactId) {
         }
     }, "Ta bort kontakt", "Är du säker på att du vill ta bort denna kontakt permanent?");
 }
-
-window.contactFunctions = {
-    renderContactForm,
-    deleteContact: deleteContactHandler,
-};

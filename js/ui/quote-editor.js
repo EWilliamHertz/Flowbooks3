@@ -2,10 +2,11 @@
 import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, showConfirmationModal, closeModal } from './utils.js';
+import { editors } from './editors.js';
 
 let quoteItems = [];
 
-function renderQuoteEditor(quoteId = null) {
+export function renderQuoteEditor(quoteId = null) {
     const { allQuotes, currentCompany } = getState();
     const quote = quoteId ? allQuotes.find(q => q.id === quoteId) : null;
     quoteItems = quote ? JSON.parse(JSON.stringify(quote.items)) : [];
@@ -174,9 +175,7 @@ async function convertToInvoice(quote) {
         };
         await saveDocument('quotes', { status: 'Accepterad' }, quote.id);
         await fetchAllCompanyData();
-        window.app.editors.renderInvoiceEditor(null, invoiceDataFromQuote);
+        editors.renderInvoiceEditor(null, invoiceDataFromQuote);
         showToast("Offerten har accepterats. Fyll i fakturadetaljer.", "success");
     }, "Omvandla till Faktura", "En ny faktura kommer att skapas baserat på denna offert. Offerten kommer att markeras som 'Accepterad'. Är du säker?");
 }
-
-window.app.editors.renderQuoteEditor = renderQuoteEditor;

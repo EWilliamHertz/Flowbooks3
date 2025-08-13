@@ -3,6 +3,7 @@ import { getAIReceiptDetails } from '../services/ai.js';
 import { saveDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { renderSpinner, showToast, closeModal, showConfirmationModal } from './utils.js';
 import { getState } from '../state.js';
+import { navigateTo } from './navigation.js';
 
 export function renderReceiptsPage() {
     const mainView = document.getElementById('main-view');
@@ -106,7 +107,7 @@ async function saveReceiptHandler(btn) {
             showToast('Kvittot har sparats som en utgift!', 'success');
             closeModal();
             await fetchAllCompanyData();
-            window.navigateTo('Utgifter');
+            navigateTo('Utgifter');
         } catch (error) {
             console.error("Kunde inte spara utgift från kvitto:", error);
             showToast('Kunde inte spara utgiften.', 'error');

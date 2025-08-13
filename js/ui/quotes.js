@@ -2,6 +2,7 @@
 import { getState } from '../state.js';
 import { renderSpinner, showConfirmationModal, showToast } from './utils.js';
 import { deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
+import { editors } from './editors.js';
 
 export function renderQuotesPage() {
     const mainView = document.getElementById('main-view');
@@ -20,7 +21,7 @@ function renderQuoteList() {
     if (!container) return;
 
     const rows = allQuotes.sort((a, b) => b.quoteNumber - a.quoteNumber).map(quote => `
-        <tr>
+        <tr data-quote-id="${quote.id}">
             <td><span class="invoice-status ${quote.status || 'Utkast'}">${quote.status || 'Utkast'}</span></td>
             <td>#${quote.quoteNumber}</td>
             <td>${quote.customerName}</td>
@@ -28,8 +29,8 @@ function renderQuoteList() {
             <td class="text-right">${(quote.grandTotal || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
             <td>
                 <div class="action-menu" style="display: flex; gap: 0.5rem;">
-                    <button class="btn btn-sm btn-secondary" onclick="window.app.editors.renderQuoteEditor('${quote.id}')">Visa / Redigera</button>
-                    <button class="btn btn-sm btn-danger" onclick="window.quoteFunctions.deleteQuote('${quote.id}')">Ta bort</button>
+                    <button class="btn btn-sm btn-secondary btn-edit-quote">Visa / Redigera</button>
+                    <button class="btn btn-sm btn-danger btn-delete-quote">Ta bort</button>
                 </div>
             </td>
         </tr>
@@ -37,7 +38,7 @@ function renderQuoteList() {
 
     container.innerHTML = `
         <h3 class="card-title">Offerter</h3>
-        <table class="data-table">
+        <table class="data-table" id="quotes-table">
             <thead>
                 <tr>
                     <th>Status</th>
@@ -52,9 +53,27 @@ function renderQuoteList() {
                 ${allQuotes.length > 0 ? rows : '<tr><td colspan="6" class="text-center">Du har inga offerter än.</td></tr>'}
             </tbody>
         </table>`;
+
+    attachQuoteListEventListeners();
 }
 
-async function deleteQuote(quoteId) {
+function attachQuoteListEventListeners() {
+    const table = document.getElementById('quotes-table');
+    if (!table) return;
+
+    table.addEventListener('click', e => {
+        const quoteId = e.target.closest('tr')?.dataset.quoteId;
+        if (!quoteId) return;
+
+        if (e.target.classList.contains('btn-edit-quote')) {
+            editors.renderQuoteEditor(quoteId);
+        } else if (e.target.classList.contains('btn-delete-quote')) {
+            deleteQuote(quoteId);
+        }
+    });
+}
+
+export function deleteQuote(quoteId) {
     showConfirmationModal(async () => {
         try {
             await deleteDocument('quotes', quoteId);
@@ -67,7 +86,3 @@ async function deleteQuote(quoteId) {
         }
     }, "Ta bort offert", "Är du säker på att du vill ta bort denna offert permanent?");
 }
-
-window.quoteFunctions = {
-    deleteQuote: deleteQuote,
-};

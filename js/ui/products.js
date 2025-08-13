@@ -4,6 +4,7 @@ import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/f
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
+import { editors } from './editors.js';
 
 let inventoryChartInstance = null;
 
@@ -17,19 +18,19 @@ export function renderProductsPage() {
     const mainView = document.getElementById('main-view');
     
     const productsHtml = allProducts.length > 0 ? `
-        <table class="data-table">
+        <table class="data-table" id="products-table">
             <thead><tr><th>Bild</th><th>Namn</th><th>Pris Företag (exkl. moms)</th><th>Pris Privat</th><th>Lager</th><th>Åtgärder</th></tr></thead>
             <tbody>
                 ${allProducts.map(p => `
-                    <tr>
-                        <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail" onclick="window.app.editors.showProductImage('${p.imageUrl}', '${p.name}')">` : '-'}</td>
+                    <tr data-product-id="${p.id}">
+                        <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail">` : '-'}</td>
                         <td><strong>${p.name}</strong></td>
                         <td>${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${(p.sellingPricePrivate || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${p.stock || 0}</td>
                         <td>
-                            <button class="btn btn-sm btn-secondary" onclick="window.app.editors.renderProductForm('${p.id}')">Redigera</button>
-                            <button class="btn btn-sm btn-danger" onclick="window.app.editors.deleteProduct('${p.id}')">Ta bort</button>
+                            <button class="btn btn-sm btn-secondary btn-edit-product">Redigera</button>
+                            <button class="btn btn-sm btn-danger btn-delete-product">Ta bort</button>
                         </td>
                     </tr>`).join('')}
             </tbody>
@@ -42,8 +43,31 @@ export function renderProductsPage() {
             <h3 class="card-title">Produktregister</h3>
             <div id="table-container">${productsHtml}</div>
         </div>`;
-
+    
+    attachProductPageEventListeners();
     renderInventoryProjection();
+}
+
+function attachProductPageEventListeners() {
+    const productTable = document.getElementById('products-table');
+    if (!productTable) return;
+
+    productTable.addEventListener('click', (e) => {
+        const target = e.target;
+        const productId = target.closest('tr')?.dataset.productId;
+
+        if (!productId) return;
+
+        if (target.classList.contains('btn-edit-product')) {
+            editors.renderProductForm(productId);
+        } else if (target.classList.contains('btn-delete-product')) {
+            editors.deleteProduct(productId);
+        } else if (target.classList.contains('product-thumbnail')) {
+            const productName = target.alt;
+            const imageUrl = target.src;
+            editors.showProductImage(imageUrl, productName);
+        }
+    });
 }
 
 function renderInventoryProjection() {
@@ -159,7 +183,7 @@ function updateInventoryChart(data) {
     });
 }
 
-function renderProductForm(productId = null) {
+export function renderProductForm(productId = null) {
     const { allProducts } = getState();
     const product = productId ? allProducts.find(p => p.id === productId) : null;
     const isEdit = !!product;
@@ -228,7 +252,7 @@ async function saveProductHandler(btn, productId = null) {
     }
 }
 
-function deleteProductHandler(productId) {
+export function deleteProduct(productId) {
     showConfirmationModal(async () => {
         try {
             await deleteDocument('products', productId);
@@ -241,7 +265,7 @@ function deleteProductHandler(productId) {
     }, "Ta bort produkt", "Är du säker på att du vill ta bort denna produkt permanent?");
 }
 
-function showProductImageModal(imageUrl, productName) {
+export function showProductImage(imageUrl, productName) {
     const modalHtml = `
         <div class="modal-overlay" id="image-modal-overlay">
             <div class="modal-content image-modal">
@@ -260,7 +284,3 @@ function showProductImageModal(imageUrl, productName) {
         }
     });
 }
-
-window.app.editors.renderProductForm = renderProductForm;
-window.app.editors.deleteProduct = deleteProductHandler;
-window.app.editors.showProductImage = showProductImageModal;

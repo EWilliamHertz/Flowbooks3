@@ -4,6 +4,7 @@ import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
 import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
+import { editors } from './editors.js';
 
 const { jsPDF } = window.jspdf;
 let invoiceItems = [];
@@ -22,9 +23,10 @@ export function renderInvoicesPage() {
 function renderInvoiceList() {
     const { allInvoices } = getState();
     const container = document.getElementById('invoice-list-container');
+    if (!container) return;
 
     const rows = allInvoices.sort((a, b) => b.invoiceNumber - a.invoiceNumber).map(invoice => `
-        <tr>
+        <tr data-invoice-id="${invoice.id}">
             <td><span class="invoice-status ${invoice.status || 'Utkast'}">${invoice.status || 'Utkast'}</span></td>
             <td>#${invoice.invoiceNumber}</td>
             <td>${invoice.customerName}</td>
@@ -32,9 +34,9 @@ function renderInvoiceList() {
             <td class="text-right">${(invoice.grandTotal || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
             <td>
                 <div class="action-menu" style="display: flex; gap: 0.5rem;">
-                    <button class="btn btn-sm btn-secondary" onclick="window.app.editors.renderInvoiceEditor('${invoice.id}')">Visa / Redigera</button>
-                    <button class="btn btn-sm btn-secondary" onclick="window.invoiceFunctions.generatePDF('${invoice.id}')">PDF</button>
-                    ${invoice.status === 'Skickad' ? `<button class="btn btn-sm btn-success" onclick="window.invoiceFunctions.markAsPaid('${invoice.id}')">Markera Betald</button>` : ''}
+                    <button class="btn btn-sm btn-secondary btn-edit-invoice">Visa / Redigera</button>
+                    <button class="btn btn-sm btn-secondary btn-pdf-invoice">PDF</button>
+                    ${invoice.status === 'Skickad' ? `<button class="btn btn-sm btn-success btn-paid-invoice">Markera Betald</button>` : ''}
                 </div>
             </td>
         </tr>
@@ -42,7 +44,7 @@ function renderInvoiceList() {
 
     container.innerHTML = `
         <h3 class="card-title">Fakturor</h3>
-        <table class="data-table">
+        <table class="data-table" id="invoices-table">
             <thead>
                 <tr>
                     <th>Status</th>
@@ -57,10 +59,30 @@ function renderInvoiceList() {
                 ${allInvoices.length > 0 ? rows : '<tr><td colspan="6" class="text-center">Du har inga fakturor än.</td></tr>'}
             </tbody>
         </table>`;
+    
+    attachInvoiceListEventListeners();
 }
 
-function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
-    const { allInvoices, currentCompany } = getState();
+function attachInvoiceListEventListeners() {
+    const table = document.getElementById('invoices-table');
+    if (!table) return;
+
+    table.addEventListener('click', (e) => {
+        const invoiceId = e.target.closest('tr')?.dataset.invoiceId;
+        if (!invoiceId) return;
+
+        if (e.target.classList.contains('btn-edit-invoice')) {
+            editors.renderInvoiceEditor(invoiceId);
+        } else if (e.target.classList.contains('btn-pdf-invoice')) {
+            editors.generateInvoicePDF(invoiceId);
+        } else if (e.target.classList.contains('btn-paid-invoice')) {
+            editors.markAsPaid(invoiceId);
+        }
+    });
+}
+
+export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
+    const { allInvoices, currentCompany, allProducts } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
     
     if (dataFromQuote) {
@@ -74,15 +96,8 @@ function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
     const mainView = document.getElementById('main-view');
     const today = new Date().toISOString().slice(0, 10);
     
-    let customerName = '';
-    if (dataFromQuote) customerName = dataFromQuote.customerName;
-    else if (invoice) customerName = invoice.customerName;
-
-    let notes = '';
-    if (dataFromQuote) notes = dataFromQuote.notes;
-    else if (invoice) notes = invoice.notes;
-    else notes = currentCompany.defaultInvoiceText || '';
-
+    let customerName = dataFromQuote?.customerName || invoice?.customerName || '';
+    let notes = dataFromQuote?.notes || invoice?.notes || currentCompany.defaultInvoiceText || '';
 
     mainView.innerHTML = `
         <div class="invoice-editor">
@@ -119,8 +134,8 @@ function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
                     <button id="save-send-btn" class="btn btn-primary">Bokför och Skicka</button>
                 ` : `
                     <button id="back-btn" class="btn btn-secondary">Tillbaka till översikt</button>
-                    <button onclick="window.invoiceFunctions.generatePDF('${invoiceId}')" class="btn btn-secondary">Ladda ned PDF</button>
-                    <button onclick="window.invoiceFunctions.sendByEmail('${invoiceId}')" class="btn btn-primary">Skicka via E-post</button>
+                    <button id="pdf-btn" class="btn btn-secondary">Ladda ned PDF</button>
+                    <button id="email-btn" class="btn btn-primary">Skicka via E-post</button>
                 `}
             </div>
         </div>`;
@@ -137,6 +152,8 @@ function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Skickad'));
     } else {
         document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Fakturor'));
+        document.getElementById('pdf-btn').addEventListener('click', () => editors.generateInvoicePDF(invoiceId));
+        document.getElementById('email-btn').addEventListener('click', () => editors.sendByEmail(invoiceId));
     }
 }
 
@@ -207,7 +224,7 @@ function renderInvoiceItems(isLocked = false) {
         container.querySelectorAll('.link-to-product').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                window.app.editors.renderProductForm(e.target.dataset.productId);
+                editors.renderProductForm(e.target.dataset.productId);
             });
         });
     }
@@ -337,7 +354,7 @@ async function saveInvoice(btn, invoiceId, status) {
     }, confirmTitle, confirmMessage);
 }
 
-async function markAsPaid(invoiceId) {
+export async function markAsPaid(invoiceId) {
     showConfirmationModal(async () => {
         try {
             const invoiceRef = doc(db, 'invoices', invoiceId);
@@ -369,7 +386,7 @@ async function markAsPaid(invoiceId) {
     }, "Markera som Betald", "Detta kommer att skapa en motsvarande intäktspost i din bokföring. Är du säker?");
 }
 
-async function generateInvoicePDF(invoiceId) {
+export async function generateInvoicePDF(invoiceId) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
     if (!invoice) {
@@ -382,7 +399,7 @@ async function generateInvoicePDF(invoiceId) {
     doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
 }
 
-function sendByEmail(invoiceId) {
+export function sendByEmail(invoiceId) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
     if (!invoice) {
@@ -390,25 +407,21 @@ function sendByEmail(invoiceId) {
         return;
     }
 
-    showConfirmationModal(() => {
-        generateInvoicePDF(invoiceId);
-
-        const subject = `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`;
-        const body = `
-Hej,
-
-Här kommer faktura #${invoice.invoiceNumber}.
-Den finns bifogad i detta mail.
-
-Med vänliga hälsningar,
-${currentCompany.name}
-        `;
-        
-        const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        
-        window.location.href = mailtoLink;
-
-    }, "Förbered E-post", "Först, ladda ner PDF-fakturan för att kunna bifoga den. Klicka på 'Bekräfta' för att starta nedladdningen.");
+    showConfirmationModal(async () => {
+        // Generate PDF in memory
+        const doc = new jsPDF();
+        await createPdfContent(doc, invoice, currentCompany);
+        const pdfBlob = doc.output('blob');
+        const reader = new FileReader();
+        reader.readAsDataURL(pdfBlob);
+        reader.onloadend = function() {
+            const base64data = reader.result;
+            const subject = `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`;
+            const body = `Hej,\n\nHär kommer faktura #${invoice.invoiceNumber}.\nDen finns bifogad i detta mail.\n\nMed vänliga hälsningar,\n${currentCompany.name}`;
+            const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.location.href = mailtoLink;
+        }
+    }, "Förbered E-post", "Ett nytt e-postmeddelande kommer att öppnas. Glöm inte att bifoga den nedladdade PDF-filen.");
 }
 
 async function createPdfContent(doc, invoice, company) {
@@ -511,10 +524,3 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(splitNotes, 15, finalYWithTotals + 5);
     }
 }
-
-window.invoiceFunctions = {
-    generatePDF: generateInvoicePDF,
-    markAsPaid: markAsPaid,
-    sendByEmail: sendByEmail,
-};
-window.app.editors.renderInvoiceEditor = renderInvoiceEditor;

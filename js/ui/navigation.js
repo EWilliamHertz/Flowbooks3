@@ -3,7 +3,7 @@ import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 
-// Importera render-funktioner för HELA SIDOR
+// Importera alla sid-renderare
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
@@ -17,14 +17,8 @@ import { renderReportsPage } from './reports.js';
 import { renderBankingPage } from './banking.js';
 import { renderContactsPage, renderContactDetailView } from './contacts.js';
 import { renderQuotesPage } from './quotes.js';
+import { editors } from './editors.js';
 
-// ---- VIKTIG FIX: Importera ALLA redigerare som kan anropas från andra sidor ----
-import './invoices.js';
-import './quote-editor.js';
-import './products.js';
-// --------------------------------------------------------------------------------
-
-// Mappar en sid-sträng till funktionen som ska rendera den sidan.
 const pageRenderers = {
     'Översikt': renderDashboard,
     'Översikt Alla Företag': renderAllCompaniesDashboard,
@@ -123,22 +117,22 @@ function renderPageContent(page, id = null) {
         case 'Produkter':
             newItemBtn.textContent = 'Ny Produkt';
             newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => window.app.editors.renderProductForm();
+            newItemBtn.onclick = () => editors.renderProductForm();
             break;
         case 'Fakturor':
             newItemBtn.textContent = 'Ny Faktura';
             newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => window.app.editors.renderInvoiceEditor();
+            newItemBtn.onclick = () => editors.renderInvoiceEditor();
             break;
         case 'Offerter':
             newItemBtn.textContent = 'Ny Offert';
             newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => window.app.editors.renderQuoteEditor();
+            newItemBtn.onclick = () => editors.renderQuoteEditor();
             break;
         case 'Kontakter':
             newItemBtn.textContent = 'Ny Kontakt';
             newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => window.contactFunctions.renderContactForm();
+            newItemBtn.onclick = () => editors.renderContactForm();
             break;
     }
 }
@@ -234,13 +228,13 @@ function handleGlobalSearch() {
                         navigateTo('Kontakter', id);
                         break;
                     case 'invoice':
-                        window.app.editors.renderInvoiceEditor(id);
+                        editors.renderInvoiceEditor(id);
                         break;
                     case 'quote':
-                        window.app.editors.renderQuoteEditor(id);
+                        editors.renderQuoteEditor(id);
                         break;
                     case 'product':
-                        window.app.editors.renderProductForm(id);
+                        editors.renderProductForm(id);
                         break;
                 }
             });

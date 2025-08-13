@@ -3,6 +3,7 @@ import { getState } from '../state.js';
 import { saveDocument, performCorrection, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal } from './utils.js';
 import { getControlsHTML } from './components.js';
+import { navigateTo } from './navigation.js';
 
 export function renderTransactionsPage(type) {
     const mainView = document.getElementById('main-view');
@@ -18,20 +19,20 @@ export function renderTransactionsPage(type) {
         </div>`;
 
     setTimeout(() => {
-        applyFiltersAndRender(dataToList, type);
-        document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList, type));
-        document.getElementById('category-filter').addEventListener('change', () => applyFiltersAndRender(dataToList, type));
+        applyFiltersAndRender(dataToList);
+        document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList));
+        document.getElementById('category-filter').addEventListener('change', () => applyFiltersAndRender(dataToList));
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelector('.filter-btn.active').classList.remove('active');
                 e.target.classList.add('active');
-                applyFiltersAndRender(dataToList, type);
+                applyFiltersAndRender(dataToList);
             });
         });
     }, 10);
 }
 
-export function applyFiltersAndRender(list, type) {
+function applyFiltersAndRender(list) {
     const searchInput = document.getElementById('search-input');
     const categoryFilter = document.getElementById('category-filter');
     
@@ -64,10 +65,10 @@ export function applyFiltersAndRender(list, type) {
         filteredList = filteredList.filter(t => new Date(t.date) >= firstDayLastMonth && new Date(t.date) <= lastDayLastMonth);
     }
 
-    renderTransactionTable(filteredList, type);
+    renderTransactionTable(filteredList);
 }
 
-export function renderTransactionTable(transactions, type) {
+function renderTransactionTable(transactions) {
     const { categories } = getState();
     const container = document.getElementById('table-container');
     if (!container) return;
@@ -97,7 +98,7 @@ export function renderTransactionTable(transactions, type) {
     container.innerHTML = `
         <table class="data-table">
             <thead><tr>${head}</tr></thead>
-            <tbody>${rows.length > 0 ? rows : `<tr><td colspan="${head.split('</th>').length}" class="text-center">Inga transaktioner att visa.</td></tr>`}</tbody>
+            <tbody>${rows.length > 0 ? rows : `<tr><td colspan="7" class="text-center">Inga transaktioner att visa.</td></tr>`}</tbody>
         </table>`;
         
     container.querySelectorAll('.btn-correction').forEach(btn => {
@@ -166,7 +167,7 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
             handleSave(btn, type, newData);
         }
     });
-    document.getElementById('cancel-btn').addEventListener('click', () => window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
+    document.getElementById('cancel-btn').addEventListener('click', () => navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
 }
 
 async function handleSave(btn, type, data) {
@@ -182,7 +183,7 @@ async function handleSave(btn, type, data) {
             const collectionName = type === 'income' ? 'incomes' : 'expenses';
             await saveDocument(collectionName, { ...data, isCorrection: false });
             await fetchAllCompanyData();
-            window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
+            navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
             showToast("Transaktionen har sparats!", "success");
         } catch (error) {
             console.error("Fel vid sparning:", error);
@@ -206,7 +207,7 @@ async function handleCorrectionSave(btn, type, originalId, originalData, newData
         try {
             await performCorrection(type, originalId, originalData, newData);
             await fetchAllCompanyData();
-            window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
+            navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
             showToast("Rättelsen har sparats.", "success");
         } catch (error) {
             console.error("Fel vid rättelse:", error);
