@@ -1,7 +1,6 @@
 // js/ui/quotes.js
 import { getState } from '../state.js';
 import { renderSpinner, showConfirmationModal, showToast } from './utils.js';
-// VI TAR BORT DEN CIRKULÄRA IMPORTEN HÄRIFRÅN
 import { deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 
 export function renderQuotesPage() {
