@@ -3,6 +3,8 @@ import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { navigateTo } from './navigation.js';
+import './invoices.js';      // <--- VIKTIG FIX: Ladda fakturafunktioner
+import './quote-editor.js'; // <--- VIKTIG FIX: Ladda offertfunktioner
 
 // Renders the main contacts page (list view)
 export function renderContactsPage() {
@@ -141,7 +143,8 @@ export function renderContactDetailView(contactId) {
 
     mainView.innerHTML = detailHtml;
     // Uppdatera sidans titel
-    document.querySelector('.page-title').textContent = contact.name;
+    const pageTitleEl = document.querySelector('.page-title');
+    if(pageTitleEl) pageTitleEl.textContent = contact.name;
 }
 
 
@@ -215,13 +218,13 @@ async function saveContactHandler(btn, contactId) {
         closeModal();
         await fetchAllCompanyData();
         // Om vi var på detaljvyn, rendera om den, annars rendera listan
-        const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
-        const currentContactId = mainView.querySelector('.contact-detail-header') ? contactId : null;
+        const mainView = document.getElementById('main-view');
+        const isDetailView = mainView.querySelector('.contact-detail-header');
 
-        if (currentPage === 'Kontakter' && currentContactId) {
-            renderContactDetailView(currentContactId);
+        if (isDetailView) {
+            renderContactDetailView(contactId);
         } else {
-             renderContactsList();
+            renderContactsList();
         }
     } catch (error) {
         console.error("Kunde inte spara kontakt:", error);

@@ -2,6 +2,7 @@
 import { getState } from '../state.js';
 import { renderSpinner, showConfirmationModal, showToast } from './utils.js';
 import { deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
+import './quote-editor.js'; // <--- VIKTIG FIX: Ladda redigeringsfunktionerna
 
 export function renderQuotesPage() {
     const mainView = document.getElementById('main-view');
