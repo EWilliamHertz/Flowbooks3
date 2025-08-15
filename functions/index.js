@@ -1,4 +1,4 @@
-// functions/index.js
+// functions/index.js - KOMPLETT OCH KORRIGERAD VERSION
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
@@ -337,9 +337,14 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("not-found", "Company not found.");
     }
 
-    if (companyDoc.data().members[uid] !== 'owner') {
+    // === KORRIGERING STARTAR HÄR ===
+    const companyData = companyDoc.data();
+    const isOwner = companyData.ownerId === uid || (companyData.members && companyData.members[uid] === 'owner');
+
+    if (!isOwner) {
         throw new functions.https.HttpsError("permission-denied", "Only the company owner can delete the company.");
     }
+    // === KORRIGERING SLUTAR HÄR ===
 
     const batch = db.batch();
     
@@ -351,16 +356,30 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
 
     batch.delete(companyRef);
     
-    const memberIds = Object.keys(companyDoc.data().members);
-    for (const memberId of memberIds) {
-        const userRef = db.collection('users').doc(memberId);
-        batch.update(userRef, {
-            userCompanies: fieldValue.arrayRemove({
-                id: companyId,
-                name: companyDoc.data().name,
-                role: companyDoc.data().members[memberId]
-            })
-        });
+    // KORRIGERING: Hanterar nu säkert fall där 'members' inte finns.
+    if (companyData.members) {
+        const memberIds = Object.keys(companyData.members);
+        for (const memberId of memberIds) {
+            const userRef = db.collection('users').doc(memberId);
+            const userDoc = await userRef.get();
+            if (userDoc.exists) {
+                const userCompanies = userDoc.data().userCompanies || [];
+                const companyToRemove = userCompanies.find(c => c.id === companyId);
+                if (companyToRemove) {
+                     batch.update(userRef, { userCompanies: fieldValue.arrayRemove(companyToRemove) });
+                }
+            }
+        }
+    } else if (companyData.ownerId) { // Fallback för gamla företag
+        const userRef = db.collection('users').doc(companyData.ownerId);
+        const userDoc = await userRef.get();
+        if (userDoc.exists) {
+            const userCompanies = userDoc.data().userCompanies || [];
+            const companyToRemove = userCompanies.find(c => c.id === companyId);
+            if (companyToRemove) {
+                 batch.update(userRef, { userCompanies: fieldValue.arrayRemove(companyToRemove) });
+            }
+        }
     }
 
     await batch.commit();
