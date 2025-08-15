@@ -2,6 +2,7 @@
 import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
+import { editors } from './editors.js';
 
 export function renderProjectsPage() {
     const mainView = document.getElementById('main-view');
@@ -20,7 +21,7 @@ function renderProjectsList() {
     const container = document.getElementById('projects-list-container');
     if (!container) return;
 
-    const rows = allProjects.sort((a, b) => new Date(b.createdAt.seconds * 1000) - new Date(a.createdAt.seconds * 1000)).map(project => {
+    const rows = allProjects.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map(project => {
         const projectTransactions = allTransactions.filter(t => t.projectId === project.id);
         const income = projectTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
         const expense = projectTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
@@ -31,9 +32,9 @@ function renderProjectsList() {
                 <td><strong>${project.name}</strong></td>
                 <td>${project.customerName || '-'}</td>
                 <td><span class="project-status ${project.status}">${project.status}</span></td>
-                <td class="text-right green">${income.toLocaleString('sv-SE')} kr</td>
-                <td class="text-right red">${expense.toLocaleString('sv-SE')} kr</td>
-                <td class="text-right ${profit >= 0 ? 'blue' : 'red'}"><strong>${profit.toLocaleString('sv-SE')} kr</strong></td>
+                <td class="text-right green">${income.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
+                <td class="text-right red">${expense.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
+                <td class="text-right ${profit >= 0 ? 'blue' : 'red'}"><strong>${profit.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></td>
             </tr>
         `;
     }).join('');
@@ -69,7 +70,7 @@ export function renderProjectDetailView(projectId) {
     const project = allProjects.find(p => p.id === projectId);
     
     if (!project) {
-        window.navigateTo('Projekt');
+        window.navigateTo('projects');
         return;
     }
 
@@ -99,6 +100,7 @@ export function renderProjectDetailView(projectId) {
                 <p style="color: var(--text-color-light);">Kund: ${project.customerName || 'Ingen kund angiven'}</p>
             </div>
             <div>
+                <button class="btn btn-success btn-invoice-time">Fakturera Obetald Tid</button>
                 <button class="btn btn-secondary btn-edit-project">Redigera Projekt</button>
                 <button class="btn btn-danger btn-delete-project">Ta bort Projekt</button>
             </div>
@@ -112,7 +114,7 @@ export function renderProjectDetailView(projectId) {
             <h3 class="card-title">Kopplade Transaktioner</h3>
             <table class="data-table">
                 <thead><tr><th>Datum</th><th>Beskrivning</th><th>Kategori</th><th class="text-right">Belopp</th></tr></thead>
-                <tbody>${transactionRows || '<tr><td colspan="4" class="text-center">Inga transaktioner kopplade till detta projekt.</td></tr>'}</tbody>
+                <tbody>${transactionRows.length > 0 ? transactionRows : '<tr><td colspan="4" class="text-center">Inga transaktioner kopplade till detta projekt.</td></tr>'}</tbody>
             </table>
         </div>
     `;
@@ -121,6 +123,38 @@ export function renderProjectDetailView(projectId) {
     
     mainView.querySelector('.btn-edit-project').addEventListener('click', () => renderProjectForm(projectId));
     mainView.querySelector('.btn-delete-project').addEventListener('click', () => deleteProject(projectId));
+    mainView.querySelector('.btn-invoice-time').addEventListener('click', () => invoiceUnbilledTimeForProject(projectId));
+}
+
+function invoiceUnbilledTimeForProject(projectId) {
+    const { allTimeEntries, allProjects } = getState();
+    const project = allProjects.find(p => p.id === projectId);
+    const unbilledEntries = allTimeEntries.filter(e => e.projectId === projectId && !e.isBilled);
+
+    if (unbilledEntries.length === 0) {
+        showToast("Det finns ingen ofakturerad tid för detta projekt.", "info");
+        return;
+    }
+    
+    showConfirmationModal(() => {
+        const invoiceItems = unbilledEntries.map(entry => ({
+            description: `${entry.date}: ${entry.description}`,
+            quantity: entry.hours,
+            price: 0,
+            vatRate: 25,
+            sourceTimeEntryId: entry.id
+        }));
+
+        const invoiceDataFromTime = {
+            customerName: project.customerName,
+            items: invoiceItems,
+            source: 'timetracking',
+            timeEntryIds: unbilledEntries.map(e => e.id)
+        };
+
+        editors.renderInvoiceEditor(null, invoiceDataFromTime);
+
+    }, "Skapa Faktura?", `Detta kommer att skapa ett fakturautkast med ${unbilledEntries.length} tidsposter. Du kan justera timpris och detaljer innan du bokför.`);
 }
 
 export function renderProjectForm(projectId = null) {
@@ -212,7 +246,7 @@ function deleteProject(projectId) {
             await deleteDocument('projects', projectId);
             showToast('Projektet har tagits bort!', 'success');
             await fetchAllCompanyData();
-            window.navigateTo('Projekt');
+            window.navigateTo('projects');
         } catch (error) {
             showToast('Kunde inte ta bort projektet. Se till att inga transaktioner är kopplade till det.', 'error');
         }

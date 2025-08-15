@@ -8,6 +8,7 @@ import { editors } from './editors.js';
 
 const { jsPDF } = window.jspdf;
 let invoiceItems = [];
+let sourceTimeEntryIds = [];
 
 export function renderInvoicesPage() {
     const mainView = document.getElementById('main-view');
@@ -125,12 +126,16 @@ function attachInvoiceListEventListeners() {
     }
 }
 
-export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
+export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
     const { allInvoices, currentCompany, allContacts } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
     
-    if (dataFromQuote) {
-        invoiceItems = dataFromQuote.items || [];
+    sourceTimeEntryIds = []; // Rensa vid varje rendering
+    if (dataFromSource) {
+        invoiceItems = dataFromSource.items || [];
+        if (dataFromSource.source === 'timetracking') {
+            sourceTimeEntryIds = dataFromSource.timeEntryIds || [];
+        }
     } else {
         invoiceItems = invoice ? JSON.parse(JSON.stringify(invoice.items)) : [];
     }
@@ -140,9 +145,9 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
     const mainView = document.getElementById('main-view');
     const today = new Date().toISOString().slice(0, 10);
     
-    let customerName = dataFromQuote?.customerName || invoice?.customerName || '';
+    let customerName = dataFromSource?.customerName || invoice?.customerName || '';
     let customerEmail = invoice?.customerEmail || allContacts.find(c => c.name === customerName)?.email || '';
-    let notes = dataFromQuote?.notes || invoice?.notes || currentCompany.defaultInvoiceText || '';
+    let notes = dataFromSource?.notes || invoice?.notes || currentCompany.defaultInvoiceText || '';
     
     const paymentHistoryHtml = (invoice?.payments && invoice.payments.length > 0) ? `
         <div class="card" style="margin-top: 1.5rem;">
@@ -201,7 +206,7 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
         </div>`;
 
     renderInvoiceItems(isLocked);
-    document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Fakturor'));
+    document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('invoices'));
 
     if(!isLocked) {
         document.getElementById('add-item-btn').addEventListener('click', () => {
@@ -217,8 +222,6 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
     }
 }
 
-
-// ... (renderInvoiceItems, showProductSelector, updateInvoiceItem, removeQuoteItem remain the same)
 function renderInvoiceItems(isLocked = false) {
     const { allProducts } = getState();
     const container = document.getElementById('invoice-items-container');
@@ -386,8 +389,8 @@ async function saveInvoice(btn, invoiceId, status) {
         subtotal: subtotal,
         totalVat: totalVat,
         grandTotal: grandTotal,
-        balance: grandTotal, // Initial balance is the grand total
-        payments: [], // Initialize payments array
+        balance: grandTotal,
+        payments: [],
         notes: document.getElementById('invoice-notes').value,
         status: status,
         invoiceNumber: invoiceId ? getState().allInvoices.find(i => i.id === invoiceId).invoiceNumber : Date.now()
@@ -406,10 +409,21 @@ async function saveInvoice(btn, invoiceId, status) {
         btn.disabled = true;
         btn.textContent = "Sparar...";
         try {
-            await saveDocument('invoices', invoiceData, invoiceId);
+            const newInvoiceId = await saveDocument('invoices', invoiceData, invoiceId);
+            
+            if (status === 'Skickad' && sourceTimeEntryIds.length > 0) {
+                const batch = writeBatch(db);
+                sourceTimeEntryIds.forEach(entryId => {
+                    const entryRef = doc(db, 'timeEntries', entryId);
+                    batch.update(entryRef, { isBilled: true, invoiceId: invoiceId || newInvoiceId });
+                });
+                await batch.commit();
+            }
+
+            sourceTimeEntryIds = [];
             await fetchAllCompanyData();
             showToast(status === 'Skickad' ? 'Fakturan har bokförts och låsts!' : 'Utkast sparat!', 'success');
-            window.navigateTo('Fakturor');
+            window.navigateTo('invoices');
         } catch (error) {
             console.error("Kunde inte spara faktura:", error);
             showToast('Kunde inte spara fakturan.', 'error');
@@ -470,7 +484,6 @@ async function registerPayment(invoiceId) {
     const newStatus = newBalance <= 0 ? 'Betald' : 'Delvis betald';
     const newPayment = { date: paymentDate, amount: paymentAmount };
     
-    // Beräkna moms- och exkl. moms-del av betalningen proportionerligt
     const paymentRatio = paymentAmount / invoice.grandTotal;
     const paymentExclVat = invoice.subtotal * paymentRatio;
     const paymentVatAmount = invoice.totalVat * paymentRatio;
@@ -501,7 +514,7 @@ async function registerPayment(invoiceId) {
         closeModal();
         
         const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
-        if (currentPage === 'Fakturor') {
+        if (currentPage === 'invoices') {
             renderInvoiceList();
         } else if (document.querySelector('.invoice-editor')) {
             renderInvoiceEditor(invoiceId);
@@ -536,7 +549,6 @@ export function sendByEmail(invoiceId) {
     }
 
     showConfirmationModal(async () => {
-        // Generate PDF in memory
         const doc = new jsPDF();
         await createPdfContent(doc, invoice, currentCompany);
         const pdfBlob = doc.output('blob');

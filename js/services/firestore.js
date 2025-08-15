@@ -85,6 +85,7 @@ export async function fetchAllCompanyData() {
             getDocs(query(collection(db, 'quotes'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'contacts'), where('companyId', '==', companyId), orderBy('name'))),
             getDocs(query(collection(db, 'projects'), where('companyId', '==', companyId), orderBy('name'))),
+            getDocs(query(collection(db, 'timeEntries'), where('companyId', '==', companyId))),
         ];
         
         if (memberUIDs.length > 0) {
@@ -102,14 +103,15 @@ export async function fetchAllCompanyData() {
         const allQuotes = results[6].docs.map(d => ({ id: d.id, ...d.data() }));
         const allContacts = results[7].docs.map(d => ({ id: d.id, ...d.data() }));
         const allProjects = results[8].docs.map(d => ({ id: d.id, ...d.data() }));
-        const teamMembers = results.length > 9 ? results[9].docs.map(d => ({ id: d.id, ...d.data() })) : [];
+        const allTimeEntries = results[9].docs.map(d => ({ id: d.id, ...d.data() }));
+        const teamMembers = results.length > 10 ? results[10].docs.map(d => ({ id: d.id, ...d.data() })) : [];
         
         const allTransactions = [
             ...allIncomes.map(t => ({ ...t, type: 'income' })),
             ...allExpenses.map(t => ({ ...t, type: 'expense' }))
         ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allQuotes, allContacts, allProjects, teamMembers, allTransactions });
+        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allQuotes, allContacts, allProjects, allTimeEntries, teamMembers, allTransactions });
     } catch (error) {
         console.error("Kunde inte ladda all företagsdata:", error);
         showToast("Kunde inte ladda all företagsdata.", "error");
@@ -123,10 +125,12 @@ export async function saveDocument(collectionName, data, docId = null) {
     if (docId) {
         dataToSave.updatedAt = serverTimestamp();
         await updateDoc(doc(db, collectionName, docId), dataToSave);
+        return docId;
     } else {
         dataToSave.createdAt = serverTimestamp();
         dataToSave.userId = currentUser.uid;
-        await addDoc(collection(db, collectionName), dataToSave);
+        const docRef = await addDoc(collection(db, collectionName), dataToSave);
+        return docRef.id;
     }
 }
 

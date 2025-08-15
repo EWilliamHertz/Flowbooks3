@@ -25,6 +25,7 @@ import { editors } from './editors.js';
 import { renderMailPage } from './mail.js';
 import { renderMailSettingsPage } from './mail-settings.js';
 import { renderProjectsPage, renderProjectDetailView, renderProjectForm } from './projects.js';
+import { renderTimeTrackingPage, renderTimeEntryForm } from './timetracking.js';
 
 const pageRenderers = {
     'overview': renderDashboard,
@@ -43,14 +44,15 @@ const pageRenderers = {
     'invoices': renderInvoicesPage,
     'quotes': renderQuotesPage,
     'projects': renderProjectsPage,
+    'timetracking': renderTimeTrackingPage,
     'reports': renderReportsPage,
     'mail': renderMailPage,
     'mail-settings': renderMailSettingsPage
 };
 
 const menuConfig = {
-    owner: ['allCompaniesOverview', 'overview', 'summary', 'projects', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
-    member: ['overview', 'summary', 'projects', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
+    owner: ['allCompaniesOverview', 'overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
+    member: ['overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
     readonly: ['overview', 'summary', 'projects', 'reports'],
 };
 
@@ -148,6 +150,11 @@ function renderPageContent(pageKey, id = null) {
             newItemBtn.textContent = 'Nytt Projekt';
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderProjectForm();
+            break;
+        case 'timetracking':
+            newItemBtn.textContent = 'Ny Tidspost';
+            newItemBtn.style.display = 'block';
+            newItemBtn.onclick = () => renderTimeEntryForm();
             break;
         case 'contacts':
             newItemBtn.textContent = t('newContact');

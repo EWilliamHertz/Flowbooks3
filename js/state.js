@@ -17,6 +17,7 @@ const state = {
     categories: [],
     allContacts: [],
     allProjects: [], // <-- LÄGG TILL DENNA RAD
+    allTimeEntries: [],
 
     // Produkt- och lagerdata
     allProducts: [],
