@@ -38,12 +38,19 @@ export function renderSettingsPage() {
                 </div>
                 <button id="save-company" class="btn btn-primary">Spara Företagsinfo</button>
             </div>
+
+            <div class="card">
+                <h3>Inställningar för fakturapåminnelser</h3>
+                <p>Aktivera och ställ in automatiska e-postpåminnelser för obetalda fakturor. Kräver fungerande e-postinställningar.</p>
+                <div id="reminder-settings-container">
+                    </div>
+                <button id="save-reminder-settings" class="btn btn-primary" style="margin-top: 1rem;">Spara Påminnelseinställningar</button>
+            </div>
             
             <div class="card">
                 <h3>Inställningar för Översikt</h3>
                 <p>Välj vilka vyer som ska visas på din översiktssida.</p>
-                <div id="dashboard-settings-container">
-                    </div>
+                <div id="dashboard-settings-container"></div>
                 <button id="save-dashboard-settings" class="btn btn-primary" style="margin-top: 1rem;">Spara Översiktsval</button>
             </div>
 
@@ -62,23 +69,15 @@ export function renderSettingsPage() {
             <div class="card">
                 <h3>Företagslogotyp</h3>
                 <p>Används på fakturor.</p>
-                <div class="input-group">
-                    <label>Ladda upp fil</label>
-                    <input type="file" id="logo-upload" accept="image/*">
-                </div>
-                 <div class="input-group">
-                    <label>Eller klistra in bildlänk</label>
-                    <input id="logo-url" class="form-input" placeholder="https://..." value="${currentCompany.logoUrl || ''}">
-                </div>
+                <div class="input-group"><label>Ladda upp fil</label><input type="file" id="logo-upload" accept="image/*"></div>
+                <div class="input-group"><label>Eller klistra in bildlänk</label><input id="logo-url" class="form-input" placeholder="https://..." value="${currentCompany.logoUrl || ''}"></div>
                 <button id="save-logo" class="btn btn-primary">Spara Logotyp</button>
             </div>
             
             <div class="card">
                 <h3>Standardtext för Fakturor</h3>
                 <p>Denna text (t.ex. betalningsvillkor) läggs automatiskt till på alla nya fakturor.</p>
-                <div class="input-group">
-                    <textarea id="setting-invoice-text" class="form-input" rows="4" placeholder="T.ex. Betalning inom 30 dagar. Dröjsmålsränta enligt lag.">${currentCompany.defaultInvoiceText || ''}</textarea>
-                </div>
+                <div class="input-group"><textarea id="setting-invoice-text" class="form-input" rows="4">${currentCompany.defaultInvoiceText || ''}</textarea></div>
                 <button id="save-invoice-text" class="btn btn-primary">Spara Standardtext</button>
             </div>
 
@@ -87,11 +86,11 @@ export function renderSettingsPage() {
                 <p>Din användare raderas permanent. Företagsdata påverkas inte.</p>
                 <button id="delete-account" class="btn btn-danger">Ta bort mitt konto</button>
             </div>
-
             ${dangerZoneHTML}
         </div>`;
     
     renderDashboardSettings();
+    renderReminderSettings();
     document.getElementById('save-company').addEventListener('click', saveCompanyInfo);
     document.getElementById('save-logo').addEventListener('click', saveCompanyLogo);
     document.getElementById('delete-account').addEventListener('click', deleteAccount);
@@ -100,9 +99,64 @@ export function renderSettingsPage() {
     document.getElementById('save-invoice-text').addEventListener('click', saveInvoiceDefaultText);
     document.getElementById('manage-mail-btn').addEventListener('click', renderMailSettingsPage);
     document.getElementById('save-dashboard-settings').addEventListener('click', saveDashboardSettings);
+    document.getElementById('save-reminder-settings').addEventListener('click', saveReminderSettings);
     
     if (isOwner) {
         document.getElementById('delete-company-btn').addEventListener('click', handleDeleteCompany);
+    }
+}
+
+function renderReminderSettings() {
+    const { currentCompany } = getState();
+    const container = document.getElementById('reminder-settings-container');
+    const settings = currentCompany.reminderSettings || {};
+
+    container.innerHTML = `
+        <div class="form-check" style="margin-bottom: 1rem;">
+            <input type="checkbox" id="reminder-enabled" ${settings.enabled ? 'checked' : ''}>
+            <label for="reminder-enabled"><strong>Aktivera automatiska påminnelser</strong></label>
+        </div>
+        <div class="input-group">
+            <input type="checkbox" id="reminder-before" ${settings.before ? 'checked' : ''}>
+            <label for="reminder-before">Skicka <input type="number" id="reminder-days-before" value="${settings.daysBefore || 3}" style="width: 60px;"> dagar innan förfallodatum.</label>
+        </div>
+        <div class="input-group">
+            <input type="checkbox" id="reminder-on" ${settings.on ? 'checked' : ''}>
+            <label for="reminder-on">Skicka på förfallodagen.</label>
+        </div>
+        <div class="input-group">
+            <input type="checkbox" id="reminder-after" ${settings.after ? 'checked' : ''}>
+            <label for="reminder-after">Skicka <input type="number" id="reminder-days-after" value="${settings.daysAfter || 7}" style="width: 60px;"> dagar efter förfallodatum.</label>
+        </div>
+    `;
+}
+
+async function saveReminderSettings() {
+    const btn = document.getElementById('save-reminder-settings');
+    const { currentCompany } = getState();
+
+    const newSettings = {
+        enabled: document.getElementById('reminder-enabled').checked,
+        before: document.getElementById('reminder-before').checked,
+        daysBefore: parseInt(document.getElementById('reminder-days-before').value) || 3,
+        on: document.getElementById('reminder-on').checked,
+        after: document.getElementById('reminder-after').checked,
+        daysAfter: parseInt(document.getElementById('reminder-days-after').value) || 7,
+    };
+    
+    btn.disabled = true;
+    btn.textContent = 'Sparar...';
+
+    try {
+        await updateDoc(doc(db, 'companies', currentCompany.id), { reminderSettings: newSettings });
+        setState({ currentCompany: { ...currentCompany, reminderSettings: newSettings } });
+        showToast('Påminnelseinställningar sparade!', 'success');
+    } catch (error) {
+        console.error("Fel vid sparning av påminnelseinställningar:", error);
+        showToast("Kunde inte spara inställningarna.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Spara Påminnelseinställningar';
     }
 }
 
@@ -120,12 +174,8 @@ function renderDashboardSettings() {
     };
 
     const currentSettings = currentCompany.dashboardSettings || {
-        metrics: true,
-        cashFlow: true,
-        categoryExpenses: true,
-        incomeVsExpense: true,
-        unpaidInvoices: false,
-        topProducts: false
+        metrics: true, cashFlow: true, categoryExpenses: true,
+        incomeVsExpense: true, unpaidInvoices: false, topProducts: false
     };
 
     let settingsHtml = '';
@@ -167,7 +217,7 @@ async function saveDashboardSettings() {
     }
 }
 
-
+// ... (Resten av settings.js, t.ex. saveCompanyInfo, saveCompanyLogo, etc. förblir oförändrad)
 function copyOrgNumber() {
     const orgNumberInput = document.getElementById('setting-org-number');
     navigator.clipboard.writeText(orgNumberInput.value).then(() => {
