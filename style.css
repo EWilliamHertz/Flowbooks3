@@ -649,11 +649,27 @@ tr.corrected td { font-style: italic; }
 /* =================================================================
    20. Badge & Status colors
    ================================================================= */
-.invoice-status.Skickad { background-color: #e3f2fd; color: #1565c0; }
-.invoice-status.Betald { background-color: #e8f5e9; color: #388e3c; }
-.invoice-status.Förfallen { background-color: #ffebee; color: #d32f2f; }
-.invoice-status.Utkast { background-color: #f5f5f5; color: #616161; }
+/* Ersätt befintliga .invoice-status klasser med dessa för att lägga till "Delvis betald" */
+.invoice-status {
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white;
+}
+.invoice-status.Utkast { background-color: #7f8c8d; }
+.invoice-status.Skickad { background-color: var(--primary-color); }
+.invoice-status.Delvis.betald { background-color: #ff9800; } /* NY */
+.invoice-status.Betald { background-color: var(--success-color); }
+.invoice-status.Förfallen { background-color: var(--danger-color); }
 
+/* Se till att klassen för delvis betald fungerar även med mellanslag */
+.invoice-status.Delvis.betald {
+    background-color: #ffb74d; /* En lite ljusare orange */
+    color: #424242;
+}
 .btn-success {
     background-color: var(--success-color);
     color: white;

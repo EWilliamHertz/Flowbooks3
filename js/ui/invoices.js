@@ -33,11 +33,11 @@ function renderInvoiceList() {
             <td>${invoice.customerName}</td>
             <td>${invoice.dueDate}</td>
             <td class="text-right">${(invoice.grandTotal || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
+            <td class="text-right">${(invoice.balance || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
             <td>
                 <div class="action-menu" style="display: flex; gap: 0.5rem;">
                     <button class="btn btn-sm btn-secondary btn-edit-invoice">Visa / Redigera</button>
-                    <button class="btn btn-sm btn-secondary btn-pdf-invoice">PDF</button>
-                    ${invoice.status === 'Skickad' ? `<button class="btn btn-sm btn-success btn-paid-invoice">Markera Betald</button>` : ''}
+                    ${invoice.status !== 'Utkast' ? `<button class="btn btn-sm btn-success btn-payment-invoice">Registrera Betalning</button>` : ''}
                 </div>
             </td>
         </tr>
@@ -56,12 +56,13 @@ function renderInvoiceList() {
                     <th>Fakturanr.</th>
                     <th>Kund</th>
                     <th>Förfallodatum</th>
-                    <th class="text-right">Summa</th>
+                    <th class="text-right">Totalsumma</th>
+                    <th class="text-right">Återstår</th>
                     <th>Åtgärder</th>
                 </tr>
             </thead>
             <tbody>
-                ${allInvoices.length > 0 ? rows : '<tr><td colspan="7" class="text-center">Du har inga fakturor än.</td></tr>'}
+                ${allInvoices.length > 0 ? rows : '<tr><td colspan="8" class="text-center">Du har inga fakturor än.</td></tr>'}
             </tbody>
         </table>`;
     
@@ -78,10 +79,8 @@ function attachInvoiceListEventListeners() {
 
         if (e.target.classList.contains('btn-edit-invoice')) {
             editors.renderInvoiceEditor(invoiceId);
-        } else if (e.target.classList.contains('btn-pdf-invoice')) {
-            editors.generateInvoicePDF(invoiceId);
-        } else if (e.target.classList.contains('btn-paid-invoice')) {
-            markAsPaid(invoiceId);
+        } else if (e.target.classList.contains('btn-payment-invoice')) {
+            showPaymentModal(invoiceId);
         }
     });
 
@@ -111,20 +110,23 @@ function attachInvoiceListEventListeners() {
                 showConfirmationModal(async () => {
                     const batch = writeBatch(db);
                     selectedIds.forEach(id => {
-                        batch.delete(doc(db, 'invoices', id));
+                        const invoice = getState().allInvoices.find(inv => inv.id === id);
+                        if (invoice && invoice.status === 'Utkast') {
+                            batch.delete(doc(db, 'invoices', id));
+                        }
                     });
                     await batch.commit();
                     await fetchAllCompanyData();
                     renderInvoiceList();
-                    showToast(`${selectedIds.length} fakturor har tagits bort!`, 'success');
-                }, "Ta bort fakturor", `Är du säker på att du vill ta bort ${selectedIds.length} fakturor permanent?`);
+                    showToast(`${selectedIds.length} fakturautkast har tagits bort!`, 'success');
+                }, "Ta bort fakturor", `Är du säker? Endast fakturor med status "Utkast" kommer att tas bort.`);
             }
         });
     }
 }
 
 export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
-    const { allInvoices, currentCompany, allProducts } = getState();
+    const { allInvoices, currentCompany, allContacts } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
     
     if (dataFromQuote) {
@@ -139,18 +141,32 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
     const today = new Date().toISOString().slice(0, 10);
     
     let customerName = dataFromQuote?.customerName || invoice?.customerName || '';
+    let customerEmail = invoice?.customerEmail || allContacts.find(c => c.name === customerName)?.email || '';
     let notes = dataFromQuote?.notes || invoice?.notes || currentCompany.defaultInvoiceText || '';
+    
+    const paymentHistoryHtml = (invoice?.payments && invoice.payments.length > 0) ? `
+        <div class="card" style="margin-top: 1.5rem;">
+            <h3 class="card-title">Betalningshistorik</h3>
+            <ul class="history-list">
+                ${invoice.payments.map(p => `<li class="history-item"><span>${p.date}</span><span class="text-right green">${p.amount.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</span></li>`).join('')}
+            </ul>
+        </div>` : '';
+
 
     mainView.innerHTML = `
         <div class="invoice-editor">
             <div class="card">
                 <h3>${invoiceId ? `Faktura #${invoice.invoiceNumber}` : 'Skapa Ny Faktura'}</h3>
-                ${invoice ? `<p><strong>Status:</strong> <span class="invoice-status ${invoice.status}">${invoice.status}</span></p>` : ''}
-                <div class="input-group">
-                    <label>Kundnamn</label>
-                    <input id="customerName" class="form-input" value="${customerName}" ${isLocked ? 'disabled' : ''}>
-                </div>
-                <div class="invoice-form-grid" style="margin-top: 1rem;">
+                ${invoice ? `<p><strong>Status:</strong> <span class="invoice-status ${invoice.status}">${invoice.status}</span> | <strong>Återstår att betala:</strong> ${invoice.balance.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p>` : ''}
+                <div class="invoice-form-grid">
+                    <div class="input-group">
+                        <label>Kundnamn</label>
+                        <input id="customerName" class="form-input" value="${customerName}" ${isLocked ? 'disabled' : ''}>
+                    </div>
+                    <div class="input-group">
+                        <label>Kundens E-post (för påminnelser)</label>
+                        <input id="customerEmail" type="email" class="form-input" value="${customerEmail}" ${isLocked ? 'disabled' : ''}>
+                    </div>
                     <div class="input-group"><label>Fakturadatum</label><input id="invoiceDate" type="date" class="form-input" value="${invoice?.invoiceDate || today}" ${isLocked ? 'disabled' : ''}></div>
                     <div class="input-group"><label>Förfallodatum</label><input id="dueDate" type="date" class="form-input" value="${invoice?.dueDate || today}" ${isLocked ? 'disabled' : ''}></div>
                 </div>
@@ -162,8 +178,10 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
                 ${!isLocked ? `
                     <button id="add-item-btn" class="btn btn-secondary" style="margin-top: 1rem;">+ Lägg till Egen Rad</button>
                     <button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem; margin-left: 1rem;">+ Lägg till Produkt</button>
-                ` : '<p>Fakturan är låst och kan inte redigeras.</p>'}
+                ` : ''}
             </div>
+            
+            ${paymentHistoryHtml}
             
             <div class="card">
                 <h3 class="card-title">Villkor och Kommentarer</h3>
@@ -171,11 +189,11 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
             </div>
             
             <div class="invoice-actions-footer">
+                <button id="back-btn" class="btn btn-secondary">Tillbaka till översikt</button>
                 ${!isLocked ? `
                     <button id="save-draft-btn" class="btn btn-secondary">Spara som Utkast</button>
-                    <button id="save-send-btn" class="btn btn-primary">Bokför och Skicka</button>
+                    <button id="save-send-btn" class="btn btn-primary">Bokför Faktura</button>
                 ` : `
-                    <button id="back-btn" class="btn btn-secondary">Tillbaka till översikt</button>
                     <button id="pdf-btn" class="btn btn-secondary">Ladda ned PDF</button>
                     <button id="email-btn" class="btn btn-primary">Skicka via E-post</button>
                 `}
@@ -183,7 +201,8 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
         </div>`;
 
     renderInvoiceItems(isLocked);
-    
+    document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Fakturor'));
+
     if(!isLocked) {
         document.getElementById('add-item-btn').addEventListener('click', () => {
             invoiceItems.push({ productId: null, description: '', quantity: 1, price: 0, vatRate: 25, priceSelection: 'custom' });
@@ -193,12 +212,13 @@ export function renderInvoiceEditor(invoiceId = null, dataFromQuote = null) {
         document.getElementById('save-draft-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Utkast'));
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Skickad'));
     } else {
-        document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Fakturor'));
         document.getElementById('pdf-btn').addEventListener('click', () => generateInvoicePDF(invoiceId));
         document.getElementById('email-btn').addEventListener('click', () => sendByEmail(invoiceId));
     }
 }
 
+
+// ... (renderInvoiceItems, showProductSelector, updateInvoiceItem, removeQuoteItem remain the same)
 function renderInvoiceItems(isLocked = false) {
     const { allProducts } = getState();
     const container = document.getElementById('invoice-items-container');
@@ -355,15 +375,19 @@ function removeInvoiceItem(event) {
 async function saveInvoice(btn, invoiceId, status) {
     const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     const totalVat = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
-    
+    const grandTotal = subtotal + totalVat;
+
     const invoiceData = {
         customerName: document.getElementById('customerName').value,
+        customerEmail: document.getElementById('customerEmail').value,
         invoiceDate: document.getElementById('invoiceDate').value,
         dueDate: document.getElementById('dueDate').value,
         items: invoiceItems,
         subtotal: subtotal,
         totalVat: totalVat,
-        grandTotal: subtotal + totalVat,
+        grandTotal: grandTotal,
+        balance: grandTotal, // Initial balance is the grand total
+        payments: [], // Initialize payments array
         notes: document.getElementById('invoice-notes').value,
         status: status,
         invoiceNumber: invoiceId ? getState().allInvoices.find(i => i.id === invoiceId).invoiceNumber : Date.now()
@@ -374,7 +398,7 @@ async function saveInvoice(btn, invoiceId, status) {
         return;
     }
 
-    const confirmTitle = status === 'Skickad' ? "Bokför och Skicka Faktura" : "Spara Utkast";
+    const confirmTitle = status === 'Skickad' ? "Bokför Faktura" : "Spara Utkast";
     const confirmMessage = status === 'Skickad' ? "Fakturan kommer att låsas för redigering och markeras som skickad. Detta är en bokföringshändelse som inte kan ångras." : "Är du säker på att du vill spara detta utkast?";
 
     showConfirmationModal(async () => {
@@ -396,37 +420,99 @@ async function saveInvoice(btn, invoiceId, status) {
     }, confirmTitle, confirmMessage);
 }
 
-export async function markAsPaid(invoiceId) {
-    showConfirmationModal(async () => {
-        try {
-            const invoiceRef = doc(db, 'invoices', invoiceId);
-            await updateDoc(invoiceRef, { status: 'Betald' });
-            
-            const { allInvoices } = getState();
-            const invoice = allInvoices.find(inv => inv.id === invoiceId);
-            
-            const incomeData = {
-                date: new Date().toISOString().slice(0, 10),
-                description: `Betalning för faktura #${invoice.invoiceNumber}`,
-                party: invoice.customerName,
-                amount: invoice.grandTotal,
-                amountExclVat: invoice.subtotal,
-                vatAmount: invoice.totalVat,
-                categoryId: null,
-                isCorrection: false,
-                generatedFromInvoiceId: invoiceId
-            };
-            await saveDocument('incomes', incomeData);
+function showPaymentModal(invoiceId) {
+    const { allInvoices } = getState();
+    const invoice = allInvoices.find(inv => inv.id === invoiceId);
+    const today = new Date().toISOString().slice(0, 10);
 
-            await fetchAllCompanyData();
-            showToast('Fakturan har markerats som betald och en intäkt har registrerats!', 'success');
-            renderInvoiceList();
-        } catch (error) {
-            console.error("Fel vid markering som betald:", error);
-            showToast("Kunde inte uppdatera fakturastatus.", "error");
-        }
-    }, "Markera som Betald", "Detta kommer att skapa en motsvarande intäktspost i din bokföring. Är du säker?");
+    const modalHtml = `
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <h3>Registrera Betalning för Faktura #${invoice.invoiceNumber}</h3>
+                <p>Återstående belopp: <strong>${invoice.balance.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</strong></p>
+                <form id="payment-form">
+                    <div class="input-group">
+                        <label>Betalningsdatum</label>
+                        <input id="payment-date" type="date" class="form-input" value="${today}">
+                    </div>
+                    <div class="input-group">
+                        <label>Belopp</label>
+                        <input id="payment-amount" type="number" step="0.01" class="form-input" value="${invoice.balance}" max="${invoice.balance}">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
+                        <button type="submit" class="btn btn-primary">Registrera</button>
+                    </div>
+                </form>
+            </div>
+        </div>`;
+    document.getElementById('modal-container').innerHTML = modalHtml;
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('payment-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        registerPayment(invoiceId);
+    });
 }
+
+async function registerPayment(invoiceId) {
+    const { allInvoices } = getState();
+    const invoice = allInvoices.find(inv => inv.id === invoiceId);
+    
+    const paymentAmount = parseFloat(document.getElementById('payment-amount').value);
+    const paymentDate = document.getElementById('payment-date').value;
+
+    if (isNaN(paymentAmount) || paymentAmount <= 0 || paymentAmount > invoice.balance) {
+        showToast('Ange ett giltigt belopp.', 'warning');
+        return;
+    }
+
+    const newBalance = invoice.balance - paymentAmount;
+    const newStatus = newBalance <= 0 ? 'Betald' : 'Delvis betald';
+    const newPayment = { date: paymentDate, amount: paymentAmount };
+    
+    // Beräkna moms- och exkl. moms-del av betalningen proportionerligt
+    const paymentRatio = paymentAmount / invoice.grandTotal;
+    const paymentExclVat = invoice.subtotal * paymentRatio;
+    const paymentVatAmount = invoice.totalVat * paymentRatio;
+
+    try {
+        const invoiceRef = doc(db, 'invoices', invoiceId);
+        await updateDoc(invoiceRef, {
+            balance: newBalance,
+            status: newStatus,
+            payments: [...(invoice.payments || []), newPayment]
+        });
+        
+        const incomeData = {
+            date: paymentDate,
+            description: `Betalning för faktura #${invoice.invoiceNumber}`,
+            party: invoice.customerName,
+            amount: paymentAmount,
+            amountExclVat: paymentExclVat,
+            vatAmount: paymentVatAmount,
+            categoryId: null,
+            isCorrection: false,
+            generatedFromInvoiceId: invoiceId
+        };
+        await saveDocument('incomes', incomeData);
+
+        await fetchAllCompanyData();
+        showToast('Betalning registrerad!', 'success');
+        closeModal();
+        
+        const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
+        if (currentPage === 'Fakturor') {
+            renderInvoiceList();
+        } else if (document.querySelector('.invoice-editor')) {
+            renderInvoiceEditor(invoiceId);
+        }
+        
+    } catch (error) {
+        console.error("Fel vid registrering av betalning:", error);
+        showToast("Kunde inte registrera betalning.", "error");
+    }
+}
+
 
 export async function generateInvoicePDF(invoiceId) {
     const { allInvoices, currentCompany } = getState();
@@ -460,10 +546,10 @@ export function sendByEmail(invoiceId) {
             const base64data = reader.result;
             const subject = `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`;
             const body = `Hej,\n\nHär kommer faktura #${invoice.invoiceNumber}.\nDen finns bifogad i detta mail.\n\nMed vänliga hälsningar,\n${currentCompany.name}`;
-            const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            const mailtoLink = `mailto:${invoice.customerEmail || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             window.location.href = mailtoLink;
         }
-    }, "Förbered E-post", "Ett nytt e-postmeddelande kommer att öppnas. Glöm inte att bifoga den nedladdade PDF-filen.");
+    }, "Förbered E-post", "Ett nytt e-postmeddelande kommer att öppnas med kundens e-post ifylld. Du kommer behöva bifoga den nedladdade PDF-filen manuellt.");
 }
 
 async function createPdfContent(doc, invoice, company) {
@@ -508,6 +594,9 @@ async function createPdfContent(doc, invoice, company) {
     doc.setFont(undefined, 'bold');
     doc.text(invoice.customerName, 130, startY += 5);
     doc.setFont(undefined, 'normal');
+    if (invoice.customerEmail) {
+        doc.text(invoice.customerEmail, 130, startY += 5);
+    }
     
     startY += 10;
     doc.text(`Fakturanummer:`, 130, startY);
@@ -556,6 +645,17 @@ async function createPdfContent(doc, invoice, company) {
     doc.setFont(undefined, 'bold');
     doc.text(`Att betala:`, summaryX, summaryY += 7);
     doc.text(`${(invoice.grandTotal || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}`, 200, summaryY, { align: 'right' });
+    doc.setFont(undefined, 'normal');
+
+    if(invoice.payments && invoice.payments.length > 0) {
+        const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
+        doc.text(`Betalt:`, summaryX, summaryY += 7);
+        doc.text(`-${totalPaid.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}`, 200, summaryY, { align: 'right' });
+        
+        doc.setFont(undefined, 'bold');
+        doc.text(`Återstår:`, summaryX, summaryY += 7);
+        doc.text(`${(invoice.balance || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}`, 200, summaryY, { align: 'right' });
+    }
     
     let finalYWithTotals = summaryY + 15;
     if (invoice.notes) {
