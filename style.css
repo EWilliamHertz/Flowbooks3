@@ -886,3 +886,21 @@ tr.corrected td { font-style: italic; }
 .btn-success:hover {
     background-color: #27ae60;
 }
+/* =================================================================
+   26. Förbättrad Bankavstämning
+   ================================================================= */
+
+.match-suggestion {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background-color: #e3f2fd;
+    padding: 0.5rem;
+    border-radius: var(--border-radius);
+}
+.match-suggestion .badge {
+    flex-shrink: 0;
+}
+.match-suggestion span {
+    font-size: 0.9rem;
+}

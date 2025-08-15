@@ -31,10 +31,12 @@ export function renderTransactionsPage(type) {
              exportToCSV(currentFilteredList.map(t => ({
                  Datum: t.date,
                  Beskrivning: t.description,
-                 Motpart: t.party,
+                 Motpart: t.party || '',
                  Typ: t.type,
                  Belopp: t.amount,
-                 Moms: t.vatAmount || 0
+                 Moms: t.vatAmount || 0,
+                 Kategori: getState().categories.find(c => c.id === t.categoryId)?.name || '',
+                 Projekt: getState().allProjects.find(p => p.id === t.projectId)?.name || ''
              })), 'transaktioner.csv');
         });
         document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList));
@@ -133,6 +135,7 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
     const { categories, allProjects, allTemplates } = getState();
     const title = isCorrection ? 'Korrigera Transaktion' : `Registrera Ny ${type === 'income' ? 'Intäkt' : 'Utgift'}`;
     const today = new Date().toISOString().slice(0, 10);
+    const matchedBankTxId = originalData.matchedBankTransactionId || null;
     
     const categoryOptions = categories.map(cat => `<option value="${cat.id}" ${originalData.categoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('');
     const projectOptions = allProjects.map(proj => `<option value="${proj.id}" ${originalData.projectId === proj.id ? 'selected' : ''}>${proj.name}</option>`).join('');
@@ -219,7 +222,7 @@ async function handleSaveClick(btn, type, isCorrection, originalId, originalData
         const amountInclVat = parseFloat(document.getElementById('trans-amount').value) || 0;
         const vatRate = type === 'expense' ? parseFloat(document.getElementById('trans-vat').value) : 0;
         const vatAmount = amountInclVat - (amountInclVat / (1 + vatRate / 100));
-
+        
         const newData = {
             date: document.getElementById('trans-date').value,
             description: document.getElementById('trans-desc').value,
@@ -230,6 +233,7 @@ async function handleSaveClick(btn, type, isCorrection, originalId, originalData
             vatAmount: vatAmount,
             categoryId: document.getElementById('trans-category').value || null,
             projectId: document.getElementById('trans-project').value || null,
+            matchedBankTransactionId: originalData.matchedBankTransactionId || null
         };
 
         if (isCorrection) {
@@ -241,7 +245,7 @@ async function handleSaveClick(btn, type, isCorrection, originalId, originalData
 }
 
 async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
-    const { allTemplates } = getState();
+    const { allTemplates, currentCompany, currentUser } = getState();
     const template = allTemplates.find(t => t.id === templateId);
 
     showConfirmationModal(async () => {
@@ -274,10 +278,14 @@ async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
                     vatAmount: vatAmount,
                     categoryId: line.categoryId || null,
                     isCorrection: false,
-                    generatedFromTemplateId: templateId
+                    generatedFromTemplateId: templateId,
+                    companyId: currentCompany.id,
+                    userId: currentUser.uid,
+                    createdAt: new Date(),
                 };
                 
-                batch.set(doc(collection(db, collectionName)), transactionData);
+                const docRef = doc(collection(db, collectionName));
+                batch.set(docRef, transactionData);
             });
 
             await batch.commit();
@@ -294,7 +302,6 @@ async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
     }, "Bekräfta Bokföring", `Detta kommer att skapa ${template.lines.length} transaktioner baserat på mallen. Är du säker?`);
 }
 
-
 async function handleSave(btn, type, data) {
     if (!data.date || !data.description || data.amount <= 0) {
         showToast('Fyll i datum, beskrivning och en giltig summa.', 'warning');
@@ -308,7 +315,14 @@ async function handleSave(btn, type, data) {
             const collectionName = type === 'income' ? 'incomes' : 'expenses';
             await saveDocument(collectionName, { ...data, isCorrection: false });
             await fetchAllCompanyData();
-            window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
+            
+            // Om transaktionen kom från bankavstämning, gå tillbaka dit
+            if(data.matchedBankTransactionId) {
+                window.navigateTo('banking');
+            } else {
+                window.navigateTo(type === 'income' ? 'income' : 'expenses');
+            }
+
             showToast("Transaktionen har sparats!", "success");
         } catch (error) {
             console.error("Fel vid sparning:", error);
@@ -332,7 +346,7 @@ async function handleCorrectionSave(btn, type, originalId, originalData, newData
         try {
             await performCorrection(type, originalId, originalData, newData);
             await fetchAllCompanyData();
-            window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter');
+            window.navigateTo(type === 'income' ? 'income' : 'expenses');
             showToast("Rättelsen har sparats.", "success");
         } catch (error) {
             console.error("Fel vid rättelse:", error);
