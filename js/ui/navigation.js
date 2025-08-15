@@ -20,6 +20,8 @@ import { renderBankingPage } from './banking.js';
 import { renderContactsPage, renderContactDetailView } from './contacts.js';
 import { renderQuotesPage } from './quotes.js';
 import { editors } from './editors.js';
+import { renderMailPage } from './mail.js'; // Import the new mail page
+import { renderMailSettingsPage } from './mail-settings.js'; // Import the new mail settings page
 
 const pageRenderers = {
     'overview': renderDashboard,
@@ -38,11 +40,13 @@ const pageRenderers = {
     'invoices': renderInvoicesPage,
     'quotes': renderQuotesPage,
     'reports': renderReportsPage,
+    'mail': renderMailPage, // Add the new mail page renderer
+    'mail-settings': renderMailSettingsPage // Add the new mail settings page renderer
 };
 
 const menuConfig = {
-    owner: ['allCompaniesOverview', 'overview', 'summary', 'quotes', 'invoices', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
-    member: ['overview', 'summary', 'quotes', 'invoices', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
+    owner: ['allCompaniesOverview', 'overview', 'summary', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
+    member: ['overview', 'summary', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
     readonly: ['overview', 'summary', 'reports'],
 };
 

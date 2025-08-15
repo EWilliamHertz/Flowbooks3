@@ -19,6 +19,8 @@
   "invoices": "Fakturor",
   "quotes": "Offerter",
   "reports": "Rapporter",
+  "mail": "E-post",
+  "mail-settings": "E-postinställningar",
   "newIncome": "Ny Intäkt",
   "newExpense": "Ny Utgift",
   "newRecurring": "Ny Återkommande",

@@ -19,6 +19,8 @@
   "invoices": "Invoices",
   "quotes": "Quotes",
   "reports": "Reports",
+  "mail": "Mail",
+  "mail-settings": "Mail Settings",
   "newIncome": "New Income",
   "newExpense": "New Expense",
   "newRecurring": "New Recurring",

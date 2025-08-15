@@ -5,10 +5,11 @@ import { updateDoc, doc, deleteDoc, addDoc, collection } from "https://www.gstat
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js";
 import { db, storage, auth } from '../../firebase-config.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
+import { renderMailSettingsPage } from './mail-settings.js'; // Import the new mail settings page function
 
 export function renderSettingsPage() {
     const { currentCompany } = getState();
-    const mainView = document.getElementById('main-view'); // <-- DENNA RAD SAKNADES
+    const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
         <div class="settings-grid">
             <div class="card">
@@ -25,6 +26,12 @@ export function renderSettingsPage() {
                     </div>
                 </div>
                 <button id="save-company" class="btn btn-primary">Spara Företagsinfo</button>
+            </div>
+
+            <div class="card">
+                <h3>E-postklient Inställningar</h3>
+                <p>Anslut ditt företags e-postkonto för att skicka och ta emot e-post direkt från FlowBooks.</p>
+                <button id="manage-mail-btn" class="btn btn-secondary" style="margin-top: 1rem;">Hantera E-postkonton</button>
             </div>
 
             <div class="card">
@@ -69,6 +76,7 @@ export function renderSettingsPage() {
     document.getElementById('manage-categories-btn').addEventListener('click', renderCategoryManagerModal);
     document.getElementById('copy-org-number').addEventListener('click', copyOrgNumber);
     document.getElementById('save-invoice-text').addEventListener('click', saveInvoiceDefaultText);
+    document.getElementById('manage-mail-btn').addEventListener('click', renderMailSettingsPage); // Add event listener for the new button
 }
 
 function copyOrgNumber() {
