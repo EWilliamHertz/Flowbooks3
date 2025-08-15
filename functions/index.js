@@ -324,6 +324,50 @@ exports.joinCompany = functions.https.onCall(async (data, context) => {
     return { success: true };
 });
 
+exports.deleteCompany = functions.https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+
+    const { companyId } = data;
+    const uid = context.auth.uid;
+    
+    const companyRef = db.collection('companies').doc(companyId);
+    const companyDoc = await companyRef.get();
+
+    if (!companyDoc.exists) {
+        throw new functions.https.HttpsError("not-found", "Company not found.");
+    }
+
+    if (companyDoc.data().members[uid] !== 'owner') {
+        throw new functions.https.HttpsError("permission-denied", "Only the company owner can delete the company.");
+    }
+
+    const batch = db.batch();
+    
+    const collections = ['incomes', 'expenses', 'products', 'categories', 'recurring', 'invoices', 'contacts', 'quotes', 'mailSettings'];
+    for (const collectionName of collections) {
+        const snapshot = await db.collection(collectionName).where('companyId', '==', companyId).get();
+        snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    }
+
+    batch.delete(companyRef);
+    
+    const memberIds = Object.keys(companyDoc.data().members);
+    for (const memberId of memberIds) {
+        const userRef = db.collection('users').doc(memberId);
+        batch.update(userRef, {
+            userCompanies: fieldValue.arrayRemove({
+                id: companyId,
+                name: companyDoc.data().name,
+                role: companyDoc.data().members[memberId]
+            })
+        });
+    }
+
+    await batch.commit();
+    return { success: true };
+});
+
+
 // ===================================
 //  Existing Banking Functions
 // ===================================

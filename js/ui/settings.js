@@ -4,11 +4,22 @@ import { showToast, closeModal, showConfirmationModal } from './utils.js';
 import { updateDoc, doc, deleteDoc, addDoc, collection } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js";
 import { db, storage, auth } from '../../firebase-config.js';
-import { fetchAllCompanyData } from '../services/firestore.js';
-import { renderMailSettingsPage } from './mail-settings.js'; // Import the new mail settings page function
+import { fetchAllCompanyData, fetchInitialData } from '../services/firestore.js';
+import { renderMailSettingsPage } from './mail-settings.js';
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
 export function renderSettingsPage() {
     const { currentCompany } = getState();
+    const isOwner = currentCompany.role === 'owner';
+
+    const dangerZoneHTML = isOwner ? `
+        <div class="card card-danger">
+            <h3>Danger Zone</h3>
+            <p>This action is irreversible. All associated data (invoices, products, etc.) will be permanently deleted.</p>
+            <button id="delete-company-btn" class="btn btn-danger" style="margin-top: 1rem;">Delete This Company</button>
+        </div>
+    ` : '';
+
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
         <div class="settings-grid">
@@ -68,6 +79,8 @@ export function renderSettingsPage() {
                 <p>Din användare raderas permanent. Företagsdata påverkas inte.</p>
                 <button id="delete-account" class="btn btn-danger">Ta bort mitt konto</button>
             </div>
+
+            ${dangerZoneHTML}
         </div>`;
 
     document.getElementById('save-company').addEventListener('click', saveCompanyInfo);
@@ -76,7 +89,11 @@ export function renderSettingsPage() {
     document.getElementById('manage-categories-btn').addEventListener('click', renderCategoryManagerModal);
     document.getElementById('copy-org-number').addEventListener('click', copyOrgNumber);
     document.getElementById('save-invoice-text').addEventListener('click', saveInvoiceDefaultText);
-    document.getElementById('manage-mail-btn').addEventListener('click', renderMailSettingsPage); // Add event listener for the new button
+    document.getElementById('manage-mail-btn').addEventListener('click', renderMailSettingsPage);
+    
+    if (isOwner) {
+        document.getElementById('delete-company-btn').addEventListener('click', handleDeleteCompany);
+    }
 }
 
 function copyOrgNumber() {
@@ -300,7 +317,6 @@ async function deleteAccount() {
         try {
             const { currentUser } = getState();
             await auth.currentUser.delete();
-            // Notera: Dokument i firestore för användaren tas inte bort här, kan läggas till.
             showToast("Ditt konto har tagits bort.", "info");
             window.location.href = 'login.html';
         } catch (error) {
@@ -308,4 +324,30 @@ async function deleteAccount() {
             showToast("Kunde inte ta bort kontot. Logga ut och in igen.", "error");
         }
     }, "Ta bort konto", "Är du helt säker? Skriv 'RADERA' för att bekräfta.", 'RADERA');
+}
+
+function handleDeleteCompany() {
+    const { currentCompany } = getState();
+    showConfirmationModal(async () => {
+        const btn = document.getElementById('delete-company-btn');
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+
+        try {
+            const deleteCompanyFunc = httpsCallable(getFunctions(), 'deleteCompany');
+            await deleteCompanyFunc({ companyId: currentCompany.id });
+            
+            showToast("Company successfully deleted!", "success");
+            
+            await fetchInitialData(getState().currentUser);
+            window.navigateTo('allCompaniesOverview');
+
+        } catch (error) {
+            console.error("Failed to delete company:", error);
+            showToast(error.message, "error");
+            btn.disabled = false;
+            btn.textContent = 'Delete This Company';
+        }
+
+    }, "Delete Company", `Are you absolutely sure you want to delete "${currentCompany.name}"? This cannot be undone. Type the company name to confirm.`, currentCompany.name);
 }

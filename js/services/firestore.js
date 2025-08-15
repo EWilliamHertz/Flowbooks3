@@ -14,8 +14,6 @@ export async function fetchInitialData(user) {
         const userData = { id: userDocSnap.id, ...userDocSnap.data() };
         setState({ userData });
 
-        // --- NEW LOGIC with THE FIX ---
-        // The .filter(id => id) will remove any null or undefined entries before the query
         const companyIdList = (userData.userCompanies || []).map(c => c.id).filter(id => id);
         
         if (!companyIdList || companyIdList.length === 0) {
@@ -35,8 +33,14 @@ export async function fetchInitialData(user) {
             const companiesSnap = await getDocs(companiesQuery);
             const userCompanies = companiesSnap.docs.map(doc => {
                 const companyData = { id: doc.id, ...doc.data() };
-                // Determine user's role in this company
-                companyData.role = companyData.members[user.uid] || 'member';
+                
+                if (companyData.members && companyData.members[user.uid]) {
+                    companyData.role = companyData.members[user.uid];
+                } else if (companyData.ownerId === user.uid) {
+                    companyData.role = 'owner';
+                } else {
+                    companyData.role = 'member';
+                }
                 return companyData;
             });
 
