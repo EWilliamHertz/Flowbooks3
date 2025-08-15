@@ -1,9 +1,11 @@
 // js/ui/transactions.js
 import { getState } from '../state.js';
 import { saveDocument, performCorrection, fetchAllCompanyData } from '../services/firestore.js';
-import { showToast, renderSpinner, showConfirmationModal } from './utils.js';
+import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
 import { getControlsHTML } from './components.js';
 import { exportToCSV } from './utils.js';
+import { writeBatch, doc, collection } from 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js';
+import { db } from '../../firebase-config.js';
 
 let currentFilteredList = [];
 
@@ -128,11 +130,13 @@ function renderTransactionTable(transactions) {
 
 export function renderTransactionForm(type, originalData = {}, isCorrection = false, originalId = null) {
     const mainView = document.getElementById('main-view');
-    const { categories, allProjects } = getState();
+    const { categories, allProjects, allTemplates } = getState();
     const title = isCorrection ? 'Korrigera Transaktion' : `Registrera Ny ${type === 'income' ? 'Intäkt' : 'Utgift'}`;
     const today = new Date().toISOString().slice(0, 10);
+    
     const categoryOptions = categories.map(cat => `<option value="${cat.id}" ${originalData.categoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('');
     const projectOptions = allProjects.map(proj => `<option value="${proj.id}" ${originalData.projectId === proj.id ? 'selected' : ''}>${proj.name}</option>`).join('');
+    const templateOptions = allTemplates.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
 
     const vatSelectorHTML = type === 'expense' ? `
         <div class="input-group">
@@ -149,31 +153,69 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
         <div class="card" style="max-width: 600px; margin: auto;">
             <h3>${title}</h3>
             ${isCorrection ? `<p class="correction-notice">Du skapar en rättelsepost. Originalposten markeras som rättad och en omvänd post skapas.</p>` : ''}
-            <div class="input-group"><label>Datum</label><input id="trans-date" type="date" class="form-input" value="${originalData.date || today}"></div>
-            <div class="input-group"><label>Beskrivning</label><input id="trans-desc" type="text" class="form-input" value="${originalData.description || ''}"></div>
             
-            <div class="form-grid">
-                 <div class="input-group">
-                    <label>Kategori</label>
-                    <select id="trans-category" class="form-input"><option value="">Välj...</option>${categoryOptions}</select>
+            <div class="input-group">
+                <label>Använd mall (valfritt)</label>
+                <select id="trans-template" class="form-input">
+                    <option value="">Ingen mall</option>
+                    ${templateOptions}
+                </select>
+            </div>
+            <hr>
+
+            <div id="transaction-form-fields">
+                <div class="input-group"><label>Datum</label><input id="trans-date" type="date" class="form-input" value="${originalData.date || today}"></div>
+                <div class="input-group"><label>Beskrivning</label><input id="trans-desc" type="text" class="form-input" value="${originalData.description || ''}"></div>
+                <div class="form-grid">
+                     <div class="input-group"><label>Kategori</label><select id="trans-category" class="form-input"><option value="">Välj...</option>${categoryOptions}</select></div>
+                    <div class="input-group"><label>Projekt</label><select id="trans-project" class="form-input"><option value="">Inget</option>${projectOptions}</select></div>
                 </div>
-                <div class="input-group">
-                    <label>Projekt (valfritt)</label>
-                    <select id="trans-project" class="form-input"><option value="">Inget projekt</option>${projectOptions}</select>
-                </div>
+                <div class="input-group"><label>Motpart</label><input id="trans-party" type="text" class="form-input" value="${originalData.party || ''}"></div>
+                <div class="input-group"><label>Summa (inkl. moms)</label><input id="trans-amount" type="number" class="form-input" placeholder="0.00" value="${originalData.amount || ''}"></div>
+                ${vatSelectorHTML}
             </div>
 
-            <div class="input-group"><label>Motpart</label><input id="trans-party" type="text" class="form-input" value="${originalData.party || ''}"></div>
-            <div class="input-group"><label>Summa (inkl. moms)</label><input id="trans-amount" type="number" class="form-input" placeholder="0.00" value="${originalData.amount || ''}"></div>
-            ${vatSelectorHTML}
+            <div id="template-fields" style="display: none;">
+                 <div class="input-group"><label>Datum</label><input id="template-date" type="date" class="form-input" value="${today}"></div>
+                 <div class="input-group"><label>Totalbelopp att fördela</label><input id="template-total-amount" type="number" class="form-input" placeholder="0.00"></div>
+            </div>
+
             <div style="display: flex; gap: 1rem; margin-top: 1rem;">
                 <button id="cancel-btn" class="btn btn-secondary">Avbryt</button>
                 <button id="save-btn" class="btn btn-primary">${isCorrection ? 'Spara Rättelse' : 'Spara'}</button>
             </div>
         </div>`;
 
-    document.getElementById('save-btn').addEventListener('click', (e) => {
-        const btn = e.target;
+    document.getElementById('trans-template').addEventListener('change', applyTemplate);
+    document.getElementById('save-btn').addEventListener('click', (e) => handleSaveClick(e.target, type, isCorrection, originalId, originalData));
+    document.getElementById('cancel-btn').addEventListener('click', () => window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
+}
+
+function applyTemplate(event) {
+    const templateId = event.target.value;
+    const formFields = document.getElementById('transaction-form-fields');
+    const templateFields = document.getElementById('template-fields');
+
+    if (!templateId) {
+        formFields.style.display = 'block';
+        templateFields.style.display = 'none';
+    } else {
+        formFields.style.display = 'none';
+        templateFields.style.display = 'block';
+    }
+}
+
+async function handleSaveClick(btn, type, isCorrection, originalId, originalData) {
+    const templateId = document.getElementById('trans-template').value;
+    if (templateId) {
+        const totalAmount = parseFloat(document.getElementById('template-total-amount').value) || 0;
+        const date = document.getElementById('template-date').value;
+        if (totalAmount <= 0 || !date) {
+            showToast("Ange ett datum och ett giltigt totalbelopp för mallen.", "warning");
+            return;
+        }
+        await handleSaveFromTemplate(btn, templateId, totalAmount, date);
+    } else {
         const amountInclVat = parseFloat(document.getElementById('trans-amount').value) || 0;
         const vatRate = type === 'expense' ? parseFloat(document.getElementById('trans-vat').value) : 0;
         const vatAmount = amountInclVat - (amountInclVat / (1 + vatRate / 100));
@@ -191,13 +233,67 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
         };
 
         if (isCorrection) {
-            handleCorrectionSave(btn, type, originalId, originalData, newData);
+            await handleCorrectionSave(btn, type, originalId, originalData, newData);
         } else {
-            handleSave(btn, type, newData);
+            await handleSave(btn, type, newData);
         }
-    });
-    document.getElementById('cancel-btn').addEventListener('click', () => window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
+    }
 }
+
+async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
+    const { allTemplates } = getState();
+    const template = allTemplates.find(t => t.id === templateId);
+
+    showConfirmationModal(async () => {
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Sparar...';
+        try {
+            const batch = writeBatch(db);
+            
+            template.lines.forEach(line => {
+                const collectionName = line.type === 'income' ? 'incomes' : 'expenses';
+                let lineAmount = 0;
+                if (String(line.amount).includes('%')) {
+                    const percentage = parseFloat(String(line.amount).replace('%', '')) / 100;
+                    lineAmount = totalAmount * percentage;
+                } else {
+                    lineAmount = parseFloat(line.amount);
+                }
+
+                const vatRate = line.type === 'expense' ? 25 : 0;
+                const vatAmount = lineAmount - (lineAmount / (1 + vatRate / 100));
+
+                const transactionData = {
+                    date: date,
+                    description: line.description,
+                    party: "Enligt mall: " + template.name,
+                    amount: lineAmount,
+                    amountExclVat: lineAmount - vatAmount,
+                    vatRate: vatRate,
+                    vatAmount: vatAmount,
+                    categoryId: line.categoryId || null,
+                    isCorrection: false,
+                    generatedFromTemplateId: templateId
+                };
+                
+                batch.set(doc(collection(db, collectionName)), transactionData);
+            });
+
+            await batch.commit();
+            await fetchAllCompanyData();
+            window.navigateTo('summary');
+            showToast(`Transaktioner från mallen "${template.name}" har sparats!`, "success");
+        } catch (error) {
+            console.error("Fel vid sparning från mall:", error);
+            showToast("Kunde inte spara från mall.", "error");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }, "Bekräfta Bokföring", `Detta kommer att skapa ${template.lines.length} transaktioner baserat på mallen. Är du säker?`);
+}
+
 
 async function handleSave(btn, type, data) {
     if (!data.date || !data.description || data.amount <= 0) {

@@ -7,7 +7,6 @@ import { checkNotifications } from './notifications.js';
 import { showToast, closeModal } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
-// Import all page renderers
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
@@ -26,6 +25,7 @@ import { renderMailPage } from './mail.js';
 import { renderMailSettingsPage } from './mail-settings.js';
 import { renderProjectsPage, renderProjectDetailView, renderProjectForm } from './projects.js';
 import { renderTimeTrackingPage, renderTimeEntryForm } from './timetracking.js';
+import { renderTemplatesPage, renderTemplateEditor } from './templates.js';
 
 const pageRenderers = {
     'overview': renderDashboard,
@@ -45,14 +45,15 @@ const pageRenderers = {
     'quotes': renderQuotesPage,
     'projects': renderProjectsPage,
     'timetracking': renderTimeTrackingPage,
+    'templates': renderTemplatesPage,
     'reports': renderReportsPage,
     'mail': renderMailPage,
     'mail-settings': renderMailSettingsPage
 };
 
 const menuConfig = {
-    owner: ['allCompaniesOverview', 'overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
-    member: ['overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
+    owner: ['allCompaniesOverview', 'overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'recurring', 'templates', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
+    member: ['overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'recurring', 'templates', 'products', 'contacts', 'reports', 'settings'],
     readonly: ['overview', 'summary', 'projects', 'reports'],
 };
 
@@ -111,6 +112,10 @@ function renderPageContent(pageKey, id = null) {
         renderProjectDetailView(id);
         return;
     }
+    if (pageKey === 'templates' && id) {
+        renderTemplateEditor(id);
+        return;
+    }
 
     const renderFunction = pageRenderers[pageKey];
     if (renderFunction) renderFunction();
@@ -155,6 +160,11 @@ function renderPageContent(pageKey, id = null) {
             newItemBtn.textContent = 'Ny Tidspost';
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => renderTimeEntryForm();
+            break;
+        case 'templates':
+            newItemBtn.textContent = 'Ny Mall';
+            newItemBtn.style.display = 'block';
+            newItemBtn.onclick = () => renderTemplateEditor();
             break;
         case 'contacts':
             newItemBtn.textContent = t('newContact');

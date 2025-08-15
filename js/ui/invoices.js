@@ -130,7 +130,7 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
     const { allInvoices, currentCompany, allContacts } = getState();
     const invoice = invoiceId ? allInvoices.find(inv => inv.id === invoiceId) : null;
     
-    sourceTimeEntryIds = []; // Rensa vid varje rendering
+    sourceTimeEntryIds = [];
     if (dataFromSource) {
         invoiceItems = dataFromSource.items || [];
         if (dataFromSource.source === 'timetracking') {

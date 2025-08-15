@@ -18,6 +18,7 @@ const state = {
     allContacts: [],
     allProjects: [], // <-- LÄGG TILL DENNA RAD
     allTimeEntries: [],
+    allTemplates: [], // <-- LÄGG TILL
 
     // Produkt- och lagerdata
     allProducts: [],
