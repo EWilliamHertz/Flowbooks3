@@ -99,10 +99,8 @@
   "loginHere": "Log in here",
   "heroTitle": "Your complete financial co-pilot.",
   "heroSubtitle": "From the first quote to the paid invoice and automatic bookkeeping. FlowBooks is the AI platform that gathers all your finances, so you can focus on what you do best.",
-  "startForFree": "Try FlowBooks for free"
+  "startForFree": "Try FlowBooks for free",
   "mailSettingsSaved": "Email account connected successfully!",
   "mailSettingsFailed": "Could not connect. Please check your credentials.",
-  "mailSettingsIncomplete": "Username and password are required.",
-  "startForFree": "Try FlowBooks for free"
+  "mailSettingsIncomplete": "Username and password are required."
 }
-

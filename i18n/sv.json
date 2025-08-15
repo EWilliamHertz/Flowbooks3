@@ -81,7 +81,7 @@
   "teamMembers": "Teammedlemmar",
   "teamMembersDescription": "Personer med tillgång till företaget",
   "inviteNewMember": "Bjud in ny medlem",
-  "inviteNewMemberDescription": "Skapa en unik engångslänk som du kan skicka till personen du vill bjuda in.",
+  "inviteNewMemberDescription": "Skapa en unik engångslänk som du kan skicka till personen du vill bjudin.",
   "createInviteLink": "Skapa Inbjudningslänk",
   "creating": "Skapar...",
   "noTeamMembers": "Du har inte bjudit in några teammedlemmar än.",
@@ -99,9 +99,8 @@
   "loginHere": "Logga in här",
   "heroTitle": "Din kompletta finansiella co-pilot.",
   "heroSubtitle": "Från första offert till betald faktura och automatisk bokföring. FlowBooks är AI-plattformen som samlar hela din ekonomi, så du kan fokusera på det du gör bäst.",
-  "startForFree": "Testa FlowBooks gratis"
+  "startForFree": "Testa FlowBooks gratis",
   "mailSettingsSaved": "E-postkontot har anslutits!",
   "mailSettingsFailed": "Kunde inte ansluta. Kontrollera dina inloggningsuppgifter.",
-  "mailSettingsIncomplete": "Användarnamn och lösenord är obligatoriskt.",
-  "startForFree": "Testa FlowBooks gratis"
+  "mailSettingsIncomplete": "Användarnamn och lösenord är obligatoriskt."
 }
