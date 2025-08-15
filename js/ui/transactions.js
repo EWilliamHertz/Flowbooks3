@@ -3,6 +3,9 @@ import { getState } from '../state.js';
 import { saveDocument, performCorrection, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, renderSpinner, showConfirmationModal } from './utils.js';
 import { getControlsHTML } from './components.js';
+import { exportToCSV } from './utils.js';
+
+let currentFilteredList = [];
 
 export function renderTransactionsPage(type) {
     const mainView = document.getElementById('main-view');
@@ -12,13 +15,26 @@ export function renderTransactionsPage(type) {
 
     mainView.innerHTML = `
         <div class="card">
-            <h3 class="card-title">${title}</h3>
+             <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                 <h3 class="card-title" style="margin: 0;">${title}</h3>
+                 <button id="export-transactions-btn" class="btn btn-secondary">Exportera till CSV</button>
+            </div>
             ${getControlsHTML()}
             <div id="table-container">${renderSpinner()}</div>
         </div>`;
 
     setTimeout(() => {
         applyFiltersAndRender(dataToList);
+        document.getElementById('export-transactions-btn').addEventListener('click', () => {
+             exportToCSV(currentFilteredList.map(t => ({
+                 Datum: t.date,
+                 Beskrivning: t.description,
+                 Motpart: t.party,
+                 Typ: t.type,
+                 Belopp: t.amount,
+                 Moms: t.vatAmount || 0
+             })), 'transaktioner.csv');
+        });
         document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList));
         document.getElementById('category-filter').addEventListener('change', () => applyFiltersAndRender(dataToList));
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -64,6 +80,7 @@ function applyFiltersAndRender(list) {
         filteredList = filteredList.filter(t => new Date(t.date) >= firstDayLastMonth && new Date(t.date) <= lastDayLastMonth);
     }
 
+    currentFilteredList = filteredList;
     renderTransactionTable(filteredList);
 }
 
@@ -111,10 +128,11 @@ function renderTransactionTable(transactions) {
 
 export function renderTransactionForm(type, originalData = {}, isCorrection = false, originalId = null) {
     const mainView = document.getElementById('main-view');
-    const { categories } = getState();
+    const { categories, allProjects } = getState();
     const title = isCorrection ? 'Korrigera Transaktion' : `Registrera Ny ${type === 'income' ? 'Intäkt' : 'Utgift'}`;
     const today = new Date().toISOString().slice(0, 10);
     const categoryOptions = categories.map(cat => `<option value="${cat.id}" ${originalData.categoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('');
+    const projectOptions = allProjects.map(proj => `<option value="${proj.id}" ${originalData.projectId === proj.id ? 'selected' : ''}>${proj.name}</option>`).join('');
 
     const vatSelectorHTML = type === 'expense' ? `
         <div class="input-group">
@@ -133,7 +151,18 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
             ${isCorrection ? `<p class="correction-notice">Du skapar en rättelsepost. Originalposten markeras som rättad och en omvänd post skapas.</p>` : ''}
             <div class="input-group"><label>Datum</label><input id="trans-date" type="date" class="form-input" value="${originalData.date || today}"></div>
             <div class="input-group"><label>Beskrivning</label><input id="trans-desc" type="text" class="form-input" value="${originalData.description || ''}"></div>
-            <div class="input-group"><label>Kategori</label><select id="trans-category" class="form-input"><option value="">Välj...</option>${categoryOptions}</select></div>
+            
+            <div class="form-grid">
+                 <div class="input-group">
+                    <label>Kategori</label>
+                    <select id="trans-category" class="form-input"><option value="">Välj...</option>${categoryOptions}</select>
+                </div>
+                <div class="input-group">
+                    <label>Projekt (valfritt)</label>
+                    <select id="trans-project" class="form-input"><option value="">Inget projekt</option>${projectOptions}</select>
+                </div>
+            </div>
+
             <div class="input-group"><label>Motpart</label><input id="trans-party" type="text" class="form-input" value="${originalData.party || ''}"></div>
             <div class="input-group"><label>Summa (inkl. moms)</label><input id="trans-amount" type="number" class="form-input" placeholder="0.00" value="${originalData.amount || ''}"></div>
             ${vatSelectorHTML}
@@ -158,6 +187,7 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
             vatRate: vatRate,
             vatAmount: vatAmount,
             categoryId: document.getElementById('trans-category').value || null,
+            projectId: document.getElementById('trans-project').value || null,
         };
 
         if (isCorrection) {

@@ -16,6 +16,7 @@ const state = {
     recurringTransactions: [],
     categories: [],
     allContacts: [],
+    allProjects: [], // <-- LÄGG TILL DENNA RAD
 
     // Produkt- och lagerdata
     allProducts: [],

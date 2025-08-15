@@ -17,7 +17,6 @@ export async function fetchInitialData(user) {
         const companyIdList = (userData.userCompanies || []).map(c => c.id).filter(id => id);
         
         if (!companyIdList || companyIdList.length === 0) {
-            // Fallback for very old users who don't have the new array
             if (!userData.companyId) return false; 
             const companyRef = doc(db, 'companies', userData.companyId);
             const companySnap = await getDoc(companyRef);
@@ -28,7 +27,6 @@ export async function fetchInitialData(user) {
             setState({ userCompanies: [companyData], currentCompany: companyData });
 
         } else {
-            // New logic: Fetch all companies the user is a member of
             const companiesQuery = query(collection(db, 'companies'), where(documentId(), 'in', companyIdList));
             const companiesSnap = await getDocs(companiesQuery);
             const userCompanies = companiesSnap.docs.map(doc => {
@@ -46,7 +44,6 @@ export async function fetchInitialData(user) {
 
             setState({ userCompanies });
 
-            // Set the current company to the last one they were using, or the first in the list
             const lastCompanyId = userData.lastCompanyId || userCompanies[0]?.id;
             const currentCompany = userCompanies.find(c => c.id === lastCompanyId) || userCompanies[0];
             setState({ currentCompany });
@@ -87,6 +84,7 @@ export async function fetchAllCompanyData() {
             getDocs(query(collection(db, 'invoices'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'quotes'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'contacts'), where('companyId', '==', companyId), orderBy('name'))),
+            getDocs(query(collection(db, 'projects'), where('companyId', '==', companyId), orderBy('name'))),
         ];
         
         if (memberUIDs.length > 0) {
@@ -103,14 +101,15 @@ export async function fetchAllCompanyData() {
         const allInvoices = results[5].docs.map(d => ({ id: d.id, ...d.data() }));
         const allQuotes = results[6].docs.map(d => ({ id: d.id, ...d.data() }));
         const allContacts = results[7].docs.map(d => ({ id: d.id, ...d.data() }));
-        const teamMembers = results.length > 8 ? results[8].docs.map(d => ({ id: d.id, ...d.data() })) : [];
+        const allProjects = results[8].docs.map(d => ({ id: d.id, ...d.data() }));
+        const teamMembers = results.length > 9 ? results[9].docs.map(d => ({ id: d.id, ...d.data() })) : [];
         
         const allTransactions = [
             ...allIncomes.map(t => ({ ...t, type: 'income' })),
             ...allExpenses.map(t => ({ ...t, type: 'expense' }))
         ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allQuotes, allContacts, teamMembers, allTransactions });
+        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allQuotes, allContacts, allProjects, teamMembers, allTransactions });
     } catch (error) {
         console.error("Kunde inte ladda all företagsdata:", error);
         showToast("Kunde inte ladda all företagsdata.", "error");

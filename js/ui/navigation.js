@@ -24,6 +24,7 @@ import { renderQuotesPage } from './quotes.js';
 import { editors } from './editors.js';
 import { renderMailPage } from './mail.js';
 import { renderMailSettingsPage } from './mail-settings.js';
+import { renderProjectsPage, renderProjectDetailView, renderProjectForm } from './projects.js';
 
 const pageRenderers = {
     'overview': renderDashboard,
@@ -41,15 +42,16 @@ const pageRenderers = {
     'import': renderImportPage,
     'invoices': renderInvoicesPage,
     'quotes': renderQuotesPage,
+    'projects': renderProjectsPage,
     'reports': renderReportsPage,
     'mail': renderMailPage,
     'mail-settings': renderMailSettingsPage
 };
 
 const menuConfig = {
-    owner: ['allCompaniesOverview', 'overview', 'summary', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
-    member: ['overview', 'summary', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
-    readonly: ['overview', 'summary', 'reports'],
+    owner: ['allCompaniesOverview', 'overview', 'summary', 'projects', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
+    member: ['overview', 'summary', 'projects', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'banking', 'scanReceipt', 'recurring', 'products', 'contacts', 'reports', 'settings'],
+    readonly: ['overview', 'summary', 'projects', 'reports'],
 };
 
 function renderSidebarMenu() {
@@ -103,6 +105,10 @@ function renderPageContent(pageKey, id = null) {
         renderContactDetailView(id);
         return;
     }
+    if (pageKey === 'projects' && id) {
+        renderProjectDetailView(id);
+        return;
+    }
 
     const renderFunction = pageRenderers[pageKey];
     if (renderFunction) renderFunction();
@@ -137,6 +143,11 @@ function renderPageContent(pageKey, id = null) {
             newItemBtn.textContent = t('newQuote');
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => editors.renderQuoteEditor();
+            break;
+        case 'projects':
+            newItemBtn.textContent = 'Nytt Projekt';
+            newItemBtn.style.display = 'block';
+            newItemBtn.onclick = () => renderProjectForm();
             break;
         case 'contacts':
             newItemBtn.textContent = t('newContact');

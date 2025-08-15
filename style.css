@@ -848,3 +848,34 @@ tr.corrected td { font-style: italic; }
         grid-template-columns: 1fr;
     }
 }
+/* =================================================================
+   24. Projekthantering
+   ================================================================= */
+
+.project-status {
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white;
+}
+.project-status.Aktivt { background-color: var(--success-color); }
+.project-status.Pausat { background-color: var(--warning-color); }
+.project-status.Slutfört { background-color: #7f8c8d; }
+
+.project-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.project-detail-header h2 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
