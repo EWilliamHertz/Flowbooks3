@@ -46,3 +46,40 @@ export function closeModal() {
         container.innerHTML = '';
     }
 }
+
+/**
+ * Konverterar en array av objekt till en CSV-sträng och startar nedladdning.
+ * @param {Array<Object>} data - Datan som ska exporteras.
+ * @param {string} filename - Filnamnet för CSV-filen.
+ */
+export function exportToCSV(data, filename) {
+    if (!data || data.length === 0) {
+        showToast("Ingen data att exportera.", "warning");
+        return;
+    }
+
+    const headers = Object.keys(data[0]);
+    const csvRows = [headers.join(',')]; // Lägg till rubrikrad
+
+    for (const row of data) {
+        const values = headers.map(header => {
+            const escaped = ('' + row[header]).replace(/"/g, '""'); // Hantera citationstecken
+            return `"${escaped}"`;
+        });
+        csvRows.push(values.join(','));
+    }
+
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+}
