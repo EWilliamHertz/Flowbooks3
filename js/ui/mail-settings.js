@@ -1,6 +1,7 @@
 // js/ui/mail-settings.js
 import { showToast } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
+import { auth } from '../../firebase-config.js'; // Import auth
 
 export function renderMailSettingsPage() {
     const mainView = document.getElementById('main-view');
@@ -25,10 +26,10 @@ export function renderMailSettingsPage() {
         <hr>
         <h4>Advanced Server Settings (IMAP/SMTP)</h4>
         <div class="form-grid">
-            <div class="input-group"><label>IMAP Server</label><input id="mail-imap-host" type="text" class="form-input" value="imap.titan.email"></div>
-            <div class="input-group"><label>IMAP Port</label><input id="mail-imap-port" type="number" class="form-input" value="993"></div>
-            <div class="input-group"><label>SMTP Server</label><input id="mail-smtp-host" type="text" class="form-input" value="smtp.titan.email"></div>
-            <div class="input-group"><label>SMTP Port</label><input id="mail-smtp-port" type="number" class="form-input" value="465"></div>
+            <div class="input-group"><label>IMAP Server</label><input id="mail-imap-host" type="text" class="form-input" value=""></div>
+            <div class="input-group"><label>IMAP Port</label><input id="mail-imap-port" type="number" class="form-input" value=""></div>
+            <div class="input-group"><label>SMTP Server</label><input id="mail-smtp-host" type="text" class="form-input" value=""></div>
+            <div class="input-group"><label>SMTP Port</label><input id="mail-smtp-port" type="number" class="form-input" value=""></div>
         </div>
         <button id="save-mail-settings" class="btn btn-primary" style="margin-top: 1rem;">Save and Connect</button>
     </div>`;
@@ -44,7 +45,6 @@ function handleConfigFileUpload(event) {
     reader.onload = function(e) {
         const content = e.target.result;
         try {
-            // This is a simplified parser for the specific XML-like structure in .mobileconfig files
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(content, "application/xml");
             
@@ -60,9 +60,9 @@ function handleConfigFileUpload(event) {
 
             document.getElementById('mail-username').value = config.EmailAddress || '';
             document.getElementById('mail-imap-host').value = config.IncomingMailServerHostName || '';
-            document.getElementById('mail-imap-port').value = config.IncomingMailServerPortNumber || '';
+            document.getElementById('mail-imap-port').value = config.IncomingMailServerPortNumber || '993';
             document.getElementById('mail-smtp-host').value = config.OutgoingMailServerHostName || '';
-            document.getElementById('mail-smtp-port').value = config.OutgoingMailServerPortNumber || '';
+            document.getElementById('mail-smtp-port').value = config.OutgoingMailServerPortNumber || '465';
             
             showToast("Settings populated from file!", "success");
 
@@ -80,20 +80,44 @@ async function saveMailSettings() {
     const settings = {
         username: document.getElementById('mail-username').value,
         password: document.getElementById('mail-password').value,
-        imap: { host: document.getElementById('mail-imap-host').value, port: parseInt(document.getElementById('mail-imap-port').value)},
-        smtp: { host: document.getElementById('mail-smtp-host').value, port: parseInt(document.getElementById('mail-smtp-port').value)},
+        // FIX for NaN error: provide default values if fields are empty
+        imap: { host: document.getElementById('mail-imap-host').value, port: parseInt(document.getElementById('mail-imap-port').value) || 993},
+        smtp: { host: document.getElementById('mail-smtp-host').value, port: parseInt(document.getElementById('mail-smtp-port').value) || 465},
     };
+
     if (!settings.password || !settings.username) {
         showToast("Username and password are required.", "warning");
         return;
     }
-    const saveCredentials = httpsCallable(getFunctions(), 'saveMailCredentials');
+
+    // Because we are now using standard HTTPS functions, we need to handle authentication manually
+    const user = auth.currentUser;
+    if (!user) {
+        showToast("You must be logged in to do this.", "error");
+        return;
+    }
+    const token = await user.getIdToken();
+
     btn.disabled = true;
     btn.textContent = "Connecting...";
+
     try {
-        await saveCredentials(settings);
+        // Manually call the HTTPS endpoint
+        const response = await fetch('https://us-central1-flowbooks-73cd9.cloudfunctions.net/saveMailCredentials', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ data: settings })
+        });
+
+        if (!response.ok) {
+            throw new Error('Server responded with an error.');
+        }
+
         showToast("Email account connected successfully!", "success");
-        window.navigateTo('mail'); // Navigate to the new mail page
+        window.navigateTo('mail');
     } catch (error) {
         console.error("Failed to save mail settings:", error);
         showToast("Could not connect. Please check your credentials.", "error");
