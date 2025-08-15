@@ -91,12 +91,14 @@ main { padding: 1.5rem; }
 /* --- 5. Navigation & Sidomeny --- */
 .sidebar-header { padding: 1.5rem; border-bottom: 1px solid var(--border-color); }
 .logo { color: var(--primary-color); font-weight: 700; }
-.sidebar-nav { flex-grow: 1; }
+.sidebar-nav {
+    flex-grow: 1;
+    overflow-y: auto; /* Se till att det står 'overflow' här */
+}
 .sidebar-nav ul { list-style: none; padding: 1rem 0; }
 .sidebar-nav a { display: block; padding: 0.8rem 1.5rem; text-decoration: none; color: var(--text-color-light); font-weight: 500; border-left: 3px solid transparent; }
 .sidebar-nav a:hover { background-color: var(--background-color); color: var(--text-color); }
 .sidebar-nav a.active { background-color: #e9f2fe; color: var(--primary-color); border-left-color: var(--primary-color); font-weight: 600; }
-
 /* --- 6. Återanvändbara Komponenter --- */
 .btn { display: inline-block; padding: 0.6rem 1.2rem; border: none; border-radius: var(--border-radius); cursor: pointer; font-weight: 500; font-size: 0.95rem; text-align: center; text-decoration: none; }
 .btn-large { padding: 0.9rem 2rem; font-size: 1.1rem; }
@@ -212,6 +214,10 @@ tr.corrected td { font-style: italic; }
 .invoice-status.paid { background-color: #e8f5e9; color: #388e3c; }
 .invoice-status.unpaid { background-color: #fff3e0; color: #f57c00; }
 .invoice-status.overdue { background-color: #ffebee; color: #d32f2f; }
+.invoice-status.Delvis.betald {
+    background-color: #fff3e0; /* Ljusorange */
+    color: #f57c00;      /* Mörkorange */
+}
 
 .invoice-details-grid {
     display: grid;
@@ -738,4 +744,91 @@ tr.corrected td { font-style: italic; }
 
 .language-switcher a:hover {
     color: var(--primary-color);
+}
+/* =================================================================
+   23. Anpassningsbar Översikt & Widgets
+   ================================================================= */
+
+.dashboard-layout {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+.dashboard-widget {
+    grid-column: span 1;
+}
+
+.dashboard-widget.full-width {
+    grid-column: 1 / -1;
+}
+
+.metrics-widget {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.metrics-widget .card {
+    padding: 1.5rem 1rem;
+}
+
+.chart-container {
+    position: relative;
+    height: 350px;
+}
+
+.widget-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.list-item {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-radius: var(--border-radius);
+    transition: background-color 0.2s ease;
+}
+
+.list-item:hover {
+    background-color: var(--background-color);
+}
+
+.list-item span:first-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.form-check {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.form-check-input {
+  margin-right: 0.75rem;
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 992px) {
+    .dashboard-layout {
+        grid-template-columns: 1fr;
+    }
+    .metrics-widget {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 576px) {
+    .metrics-widget {
+        grid-template-columns: 1fr;
+    }
 }

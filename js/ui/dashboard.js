@@ -4,94 +4,193 @@ import { renderSpinner } from './utils.js';
 import { getDocs, query, collection, where } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 
-let monthlyChartInstance = null;
-let categoryChartInstance = null;
-let cashFlowChartInstance = null;
+let chartInstances = {};
 
+// Huvudfunktion för att rendera hela översikten
 export function renderDashboard() {
-    if (monthlyChartInstance) monthlyChartInstance.destroy();
-    if (categoryChartInstance) categoryChartInstance.destroy();
-    if (cashFlowChartInstance) cashFlowChartInstance.destroy();
+    Object.values(chartInstances).forEach(chart => chart?.destroy());
+    chartInstances = {};
 
+    const { currentCompany } = getState();
+    const mainView = document.getElementById('main-view');
+    mainView.innerHTML = `<div id="dashboard-container" class="dashboard-layout"></div>`;
+
+    const settings = currentCompany.dashboardSettings || {
+        metrics: true, cashFlow: true, categoryExpenses: true,
+        incomeVsExpense: true, unpaidInvoices: true, topProducts: true
+    };
+
+    const container = document.getElementById('dashboard-container');
+    container.innerHTML = ''; // Rensa innan vi bygger upp den
+
+    if (settings.metrics) {
+        container.innerHTML += renderMetricsWidget();
+    }
+    if (settings.unpaidInvoices) {
+        container.innerHTML += renderUnpaidInvoicesWidget();
+    }
+    if (settings.topProducts) {
+        container.innerHTML += renderTopProductsWidget();
+    }
+    if (settings.cashFlow) {
+        container.innerHTML += renderChartWidget('cashFlowChart', 'Kassaflödesprognos (Nästa 6 mån)');
+    }
+    if (settings.categoryExpenses) {
+        container.innerHTML += renderChartWidget('categoryPieChart', 'Utgifter per Kategori');
+    }
+    if (settings.incomeVsExpense) {
+        container.innerHTML += renderChartWidget('monthlyBarChart', 'Intäkter vs Utgifter (Senaste 12 mån)', 'full-width');
+    }
+    
+    // Rendera diagrammen efter att deras canvas-element har lagts till i DOM
+    setTimeout(() => {
+        if (settings.cashFlow) renderCashFlowChart();
+        if (settings.categoryExpenses) renderCategoryPieChart();
+        if (settings.incomeVsExpense) renderMonthlyBarChart();
+    }, 0);
+}
+
+// ---- WIDGET RENDERERS ----
+
+function renderMetricsWidget() {
     const { allIncomes, allExpenses, allProducts, currentCompany } = getState();
-
     const totalIncome = allIncomes.reduce((sum, doc) => sum + doc.amount, 0);
     const totalExpense = allExpenses.reduce((sum, doc) => sum + doc.amount, 0);
-
     const privateSplitPercent = currentCompany.inventoryProjectionSplit || 60;
     const businessSplitPercent = 100 - privateSplitPercent;
-
     let calculatedInventoryRevenue = 0;
     allProducts.forEach(product => {
         const stock = product.stock || 0;
         const businessPrice = product.sellingPriceBusiness || 0;
         const privatePrice = product.sellingPricePrivate || 0;
-
         const businessValue = stock * (businessSplitPercent / 100) * businessPrice;
         const privateValue = stock * (privateSplitPercent / 100) * privatePrice;
-
         calculatedInventoryRevenue += businessValue + privateValue;
     });
-
     const projectedProfit = (totalIncome + calculatedInventoryRevenue) - totalExpense;
 
-    const mainView = document.getElementById('main-view');
-    mainView.innerHTML = `
-        <div class="dashboard-metrics">
+    return `
+        <div class="dashboard-widget metrics-widget">
             <div class="card text-center">
                 <h3>Totala Intäkter</h3>
                 <p class="metric-value green">${totalIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
             </div>
-            
             <div class="card text-center">
                 <h3>Beräknat Lagervärde</h3>
                 <p class="metric-value green">${calculatedInventoryRevenue.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
             </div>
-
             <div class="card text-center">
                 <h3>Totala Utgifter</h3>
                 <p class="metric-value red">${totalExpense.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
             </div>
-
-            <div class="card text-center" style="grid-column: 1 / -1;">
-                <h3>Projicerat Resultat (inkl. lagervärde)</h3>
+            <div class="card text-center">
+                <h3>Projicerat Resultat</h3>
                 <p class="metric-value ${projectedProfit >= 0 ? 'blue' : 'red'}">${projectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
             </div>
         </div>
+    `;
+}
 
-        <div class="dashboard-charts">
-            <div class="card chart-container">
-                <h3 class="card-title">Kassaflödesprognos (Nästa 6 mån)</h3>
-                <canvas id="cashFlowChart"></canvas>
-            </div>
-            <div class="card chart-container">
-                <h3 class="card-title">Utgifter per Kategori</h3>
-                <canvas id="categoryPieChart"></canvas>
-            </div>
-            <div class="card chart-container" style="grid-column: 1 / -1;">
-                <h3 class="card-title">Intäkter vs Utgifter (Senaste 12 mån)</h3>
-                <canvas id="monthlyBarChart"></canvas>
+function renderUnpaidInvoicesWidget() {
+    const { allInvoices } = getState();
+    const unpaid = allInvoices.filter(inv => inv.status === 'Skickad' || inv.status === 'Förfallen').sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+    const rows = unpaid.slice(0, 5).map(inv => `
+        <div class="list-item">
+            <span>#${inv.invoiceNumber} - ${inv.customerName}</span>
+            <span class="${new Date(inv.dueDate) < new Date() ? 'red' : ''}">${inv.dueDate}</span>
+            <span class="text-right"><strong>${inv.grandTotal.toLocaleString('sv-SE')} kr</strong></span>
+        </div>
+    `).join('');
+    
+    return `
+        <div class="dashboard-widget">
+            <div class="card">
+                <h3 class="card-title">Obetalda Fakturor</h3>
+                <div class="widget-list">
+                    ${unpaid.length > 0 ? rows : '<p class="text-center">Inga obetalda fakturor! Bra jobbat!</p>'}
+                </div>
             </div>
         </div>
     `;
-
-    renderAllCharts();
 }
+
+function renderTopProductsWidget() {
+    const { allInvoices, allProducts } = getState();
+    const productSales = {};
+
+    allInvoices.forEach(invoice => {
+        if (invoice.status === 'Betald') {
+            invoice.items.forEach(item => {
+                if (item.productId) {
+                    if (!productSales[item.productId]) {
+                        productSales[item.productId] = { quantity: 0, revenue: 0 };
+                    }
+                    productSales[item.productId].quantity += item.quantity;
+                    productSales[item.productId].revenue += item.quantity * item.price;
+                }
+            });
+        }
+    });
+
+    const topProducts = Object.entries(productSales)
+        .sort(([,a],[,b]) => b.revenue - a.revenue)
+        .slice(0, 5)
+        .map(([productId, sales]) => {
+            const product = allProducts.find(p => p.id === productId);
+            return {
+                name: product ? product.name : 'Okänd Produkt',
+                ...sales
+            };
+        });
+
+    const rows = topProducts.map(p => `
+         <div class="list-item">
+            <span>${p.name}</span>
+            <span>${p.quantity} st</span>
+            <span class="text-right"><strong>${p.revenue.toLocaleString('sv-SE')} kr</strong></span>
+        </div>
+    `).join('');
+
+    return `
+        <div class="dashboard-widget">
+            <div class="card">
+                <h3 class="card-title">Toppsäljande Produkter</h3>
+                <div class="widget-list">
+                     ${topProducts.length > 0 ? rows : '<p class="text-center">Ingen försäljningsdata från betalda fakturor än.</p>'}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+
+function renderChartWidget(canvasId, title, extraClass = '') {
+    return `
+        <div class="dashboard-widget ${extraClass}">
+            <div class="card chart-container">
+                <h3 class="card-title">${title}</h3>
+                <canvas id="${canvasId}"></canvas>
+            </div>
+        </div>
+    `;
+}
+
+// ---- CHART RENDERERS ----
 
 function prepareChartData() {
     const { allIncomes, allExpenses, categories, recurringTransactions } = getState();
     
-    // Monthly income/expense data
     const monthlyData = {};
-    const monthLabels = [];
-    for (let i = 11; i >= 0; i--) {
+    const monthLabels = Array.from({length: 12}, (_, i) => {
         const d = new Date();
-        d.setMonth(d.getMonth() - i);
+        d.setMonth(d.getMonth() - (11 - i));
         const label = d.toLocaleString('sv-SE', { month: 'short', year: '2-digit' });
-        monthLabels.push(label);
         const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
         monthlyData[key] = { income: 0, expense: 0 };
-    }
+        return label;
+    });
+
     allIncomes.forEach(income => {
         const key = income.date?.substring(0, 7);
         if (monthlyData[key]) monthlyData[key].income += income.amount;
@@ -100,95 +199,67 @@ function prepareChartData() {
         const key = expense.date?.substring(0, 7);
         if (monthlyData[key]) monthlyData[key].expense += expense.amount;
     });
-    const incomeValues = Object.values(monthlyData).map(d => d.income);
-    const expenseValues = Object.values(monthlyData).map(d => d.expense);
 
-    // Category data
     const categoryData = {};
     allExpenses.forEach(expense => {
         const categoryId = expense.categoryId || 'uncategorized';
         categoryData[categoryId] = (categoryData[categoryId] || 0) + expense.amount;
     });
-    const categoryLabels = Object.keys(categoryData).map(id => {
-        if (id === 'uncategorized') return 'Okategoriserat';
-        return categories.find(c => c.id === id)?.name || 'Okänd Kategori';
-    });
-    const categoryValues = Object.values(categoryData);
-
-    // Cash flow data
+    const categoryLabels = Object.keys(categoryData).map(id => 
+        id === 'uncategorized' ? 'Okategoriserat' : categories.find(c => c.id === id)?.name || 'Okänd');
+    
     const cashFlowLabels = [];
     const cashFlowData = { income: [], expense: [] };
     for (let i = 0; i < 6; i++) {
         const d = new Date();
         d.setMonth(d.getMonth() + i);
         cashFlowLabels.push(d.toLocaleString('sv-SE', { month: 'short' }));
-        
-        const recurringIncome = recurringTransactions
-            .filter(t => t.type === 'income')
-            .reduce((sum, t) => sum + t.amount, 0);
-            
-        const recurringExpense = recurringTransactions
-            .filter(t => t.type === 'expense')
-            .reduce((sum, t) => sum + t.amount, 0);
-
-        cashFlowData.income.push(recurringIncome);
-        cashFlowData.expense.push(recurringExpense);
+        cashFlowData.income.push(recurringTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0));
+        cashFlowData.expense.push(recurringTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0));
     }
 
     return {
-        monthly: { labels: monthLabels, incomeData: incomeValues, expenseData: expenseValues },
-        category: { labels: categoryLabels, data: categoryValues },
+        monthly: { labels: monthLabels, incomeData: Object.values(monthlyData).map(d => d.income), expenseData: Object.values(monthlyData).map(d => d.expense) },
+        category: { labels: categoryLabels, data: Object.values(categoryData) },
         cashFlow: { labels: cashFlowLabels, data: cashFlowData }
     };
 }
 
-function renderAllCharts() {
+function renderMonthlyBarChart() {
     const data = prepareChartData();
-
-    // Monthly Bar Chart
-    const monthlyCtx = document.getElementById('monthlyBarChart')?.getContext('2d');
-    if (monthlyCtx) {
-        monthlyChartInstance = new Chart(monthlyCtx, {
+    const ctx = document.getElementById('monthlyBarChart')?.getContext('2d');
+    if (ctx) {
+        chartInstances.monthly = new Chart(ctx, {
             type: 'bar',
             data: { labels: data.monthly.labels, datasets: [{ label: 'Intäkter', data: data.monthly.incomeData, backgroundColor: 'rgba(46, 204, 113, 0.7)' }, { label: 'Utgifter', data: data.monthly.expenseData, backgroundColor: 'rgba(231, 76, 60, 0.7)' }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
     }
+}
 
-    // Category Pie Chart
-    const categoryCtx = document.getElementById('categoryPieChart')?.getContext('2d');
-    if (categoryCtx) {
-        categoryChartInstance = new Chart(categoryCtx, {
+function renderCategoryPieChart() {
+    const data = prepareChartData();
+    const ctx = document.getElementById('categoryPieChart')?.getContext('2d');
+    if (ctx) {
+        chartInstances.category = new Chart(ctx, {
             type: 'pie',
             data: { labels: data.category.labels, datasets: [{ label: 'Utgifter', data: data.category.data, backgroundColor: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'], hoverOffset: 4 }] },
             options: { responsive: true, maintainAspectRatio: false }
         });
     }
+}
 
-    // Cash Flow Line Chart
-    const cashFlowCtx = document.getElementById('cashFlowChart')?.getContext('2d');
-    if(cashFlowCtx) {
-        cashFlowChartInstance = new Chart(cashFlowCtx, {
+function renderCashFlowChart() {
+    const data = prepareChartData();
+    const ctx = document.getElementById('cashFlowChart')?.getContext('2d');
+    if(ctx) {
+        chartInstances.cashFlow = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: data.cashFlow.labels,
                 datasets: [
-                    {
-                        label: 'Prognostiserade intäkter',
-                        data: data.cashFlow.data.income,
-                        borderColor: 'rgba(46, 204, 113, 1)',
-                        backgroundColor: 'rgba(46, 204, 113, 0.2)',
-                        fill: true,
-                        tension: 0.3
-                    },
-                    {
-                        label: 'Prognostiserade utgifter',
-                        data: data.cashFlow.data.expense,
-                        borderColor: 'rgba(231, 76, 60, 1)',
-                        backgroundColor: 'rgba(231, 76, 60, 0.2)',
-                        fill: true,
-                        tension: 0.3
-                    }
+                    { label: 'Prognostiserade intäkter', data: data.cashFlow.data.income, borderColor: 'rgba(46, 204, 113, 1)', backgroundColor: 'rgba(46, 204, 113, 0.2)', fill: true, tension: 0.3 },
+                    { label: 'Prognostiserade utgifter', data: data.cashFlow.data.expense, borderColor: 'rgba(231, 76, 60, 1)', backgroundColor: 'rgba(231, 76, 60, 0.2)', fill: true, tension: 0.3 }
                 ]
             },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
@@ -196,6 +267,7 @@ function renderAllCharts() {
     }
 }
 
+// Denna funktion behövs fortfarande för företagsöversikten
 export async function renderAllCompaniesDashboard() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = renderSpinner();

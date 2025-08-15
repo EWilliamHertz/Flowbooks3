@@ -38,6 +38,14 @@ export function renderSettingsPage() {
                 </div>
                 <button id="save-company" class="btn btn-primary">Spara Företagsinfo</button>
             </div>
+            
+            <div class="card">
+                <h3>Inställningar för Översikt</h3>
+                <p>Välj vilka vyer som ska visas på din översiktssida.</p>
+                <div id="dashboard-settings-container">
+                    </div>
+                <button id="save-dashboard-settings" class="btn btn-primary" style="margin-top: 1rem;">Spara Översiktsval</button>
+            </div>
 
             <div class="card">
                 <h3>E-postklient Inställningar</h3>
@@ -82,7 +90,8 @@ export function renderSettingsPage() {
 
             ${dangerZoneHTML}
         </div>`;
-
+    
+    renderDashboardSettings();
     document.getElementById('save-company').addEventListener('click', saveCompanyInfo);
     document.getElementById('save-logo').addEventListener('click', saveCompanyLogo);
     document.getElementById('delete-account').addEventListener('click', deleteAccount);
@@ -90,11 +99,74 @@ export function renderSettingsPage() {
     document.getElementById('copy-org-number').addEventListener('click', copyOrgNumber);
     document.getElementById('save-invoice-text').addEventListener('click', saveInvoiceDefaultText);
     document.getElementById('manage-mail-btn').addEventListener('click', renderMailSettingsPage);
+    document.getElementById('save-dashboard-settings').addEventListener('click', saveDashboardSettings);
     
     if (isOwner) {
         document.getElementById('delete-company-btn').addEventListener('click', handleDeleteCompany);
     }
 }
+
+function renderDashboardSettings() {
+    const { currentCompany } = getState();
+    const container = document.getElementById('dashboard-settings-container');
+    
+    const allWidgets = {
+        metrics: 'Nyckeltal (Intäkter, Utgifter, Resultat)',
+        cashFlow: 'Kassaflödesprognos',
+        categoryExpenses: 'Utgifter per Kategori',
+        incomeVsExpense: 'Intäkter vs Utgifter',
+        unpaidInvoices: 'Obetalda Fakturor',
+        topProducts: 'Toppsäljande Produkter'
+    };
+
+    const currentSettings = currentCompany.dashboardSettings || {
+        metrics: true,
+        cashFlow: true,
+        categoryExpenses: true,
+        incomeVsExpense: true,
+        unpaidInvoices: false,
+        topProducts: false
+    };
+
+    let settingsHtml = '';
+    for (const key in allWidgets) {
+        settingsHtml += `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="${key}" id="check-${key}" ${currentSettings[key] ? 'checked' : ''}>
+                <label class="form-check-label" for="check-${key}">
+                    ${allWidgets[key]}
+                </label>
+            </div>
+        `;
+    }
+    container.innerHTML = settingsHtml;
+}
+
+async function saveDashboardSettings() {
+    const btn = document.getElementById('save-dashboard-settings');
+    const { currentCompany } = getState();
+    const newSettings = {};
+    
+    document.querySelectorAll('#dashboard-settings-container input[type="checkbox"]').forEach(checkbox => {
+        newSettings[checkbox.value] = checkbox.checked;
+    });
+
+    btn.disabled = true;
+    btn.textContent = 'Sparar...';
+
+    try {
+        await updateDoc(doc(db, 'companies', currentCompany.id), { dashboardSettings: newSettings });
+        setState({ currentCompany: { ...currentCompany, dashboardSettings: newSettings } });
+        showToast('Inställningar för översikt har sparats!', 'success');
+    } catch (error) {
+        console.error("Fel vid sparning av översiktsinställningar:", error);
+        showToast("Kunde inte spara inställningarna.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Spara Översiktsval';
+    }
+}
+
 
 function copyOrgNumber() {
     const orgNumberInput = document.getElementById('setting-org-number');
