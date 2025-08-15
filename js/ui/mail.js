@@ -3,42 +3,73 @@ import { getState } from '../state.js';
 import { renderSpinner, showToast } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
+const functions = getFunctions();
+const listInboxFunc = httpsCallable(functions, 'listInbox');
+const fetchEmailContentFunc = httpsCallable(functions, 'fetchEmailContent');
+const sendEmailFunc = httpsCallable(functions, 'sendEmail');
+const getAIEmailSuggestionFunc = httpsCallable(functions, 'getAIEmailSuggestion');
+
+let currentView = 'inbox'; // inbox, reading, composing
+
 // Main function to render the mail page
 export function renderMailPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
-    <div class="card">
+        <div id="mail-container" class="card">
+            </div>`;
+    
+    switch (currentView) {
+        case 'reading':
+            // If we were reading an email, go back to the inbox on re-render
+            currentView = 'inbox';
+            renderInboxView();
+            break;
+        case 'composing':
+            // If we were composing, stay on the compose screen
+            renderComposeView();
+            break;
+        default:
+            renderInboxView();
+    }
+}
+
+// === INBOX VIEW ===
+async function renderInboxView() {
+    currentView = 'inbox';
+    const container = document.getElementById('mail-container');
+    container.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
             <h3 class="card-title" style="margin:0;">Inbox</h3>
             <button id="new-mail-btn" class="btn btn-primary">Compose</button>
         </div>
-        <div id="inbox-container">${renderSpinner()}</div>
-    </div>
-    <div id="compose-container" style="display:none; margin-top: 1.5rem;" class="card"></div>
-    `;
+        <div id="inbox-list">${renderSpinner()}</div>`;
     
-    document.getElementById('new-mail-btn').addEventListener('click', showComposeView);
-    listInbox();
-}
+    document.getElementById('new-mail-btn').addEventListener('click', () => renderComposeView());
 
-// Fetches and displays the inbox
-async function listInbox() {
-    const container = document.getElementById('inbox-container');
-    const listInboxFunc = httpsCallable(getFunctions(), 'listInbox');
     try {
         const result = await listInboxFunc();
         const emails = result.data.emails;
+        const inboxList = document.getElementById('inbox-list');
+
         if (!emails || emails.length === 0) {
-            container.innerHTML = "<p>Your inbox is empty.</p>";
+            inboxList.innerHTML = "<p>Your inbox is empty.</p>";
             return;
         }
-        container.innerHTML = emails.map(email => `
-            <div class="history-item">
+
+        inboxList.innerHTML = emails.map(email => `
+            <div class="history-item" data-uid="${email.uid}" style="cursor: pointer;">
                 <span><strong>From:</strong> ${email.from}</span>
                 <span>${email.subject}</span>
                 <span style="color: var(--text-color-light);">${new Date(email.date).toLocaleDateString()}</span>
             </div>
         `).join('');
+
+        inboxList.querySelectorAll('.history-item').forEach(item => {
+            item.addEventListener('click', () => {
+                renderReadingView(item.dataset.uid);
+            });
+        });
+
     } catch (error) {
         console.error("Could not fetch emails:", error);
         container.innerHTML = '<p>Could not load emails. Have you configured your account? <a href="#" id="goto-mail-settings">Go to Mail Settings.</a></p>';
@@ -49,36 +80,89 @@ async function listInbox() {
     }
 }
 
-// Shows the compose email form
-function showComposeView() {
-    document.getElementById('inbox-container').parentElement.style.display = 'none';
-    const composeContainer = document.getElementById('compose-container');
-    composeContainer.style.display = 'block';
+// === READING VIEW ===
+async function renderReadingView(emailUid) {
+    currentView = 'reading';
+    const container = document.getElementById('mail-container');
+    container.innerHTML = renderSpinner();
 
+    try {
+        const result = await fetchEmailContentFunc({ uid: emailUid });
+        const email = result.data;
+
+        container.innerHTML = `
+            <div class="email-reading-header">
+                <button id="back-to-inbox-btn" class="btn btn-secondary">&larr; Back to Inbox</button>
+                <div class="email-actions">
+                    <button id="reply-btn" class="btn btn-primary">Reply</button>
+                    <button id="forward-btn" class="btn btn-secondary">Forward</button>
+                </div>
+            </div>
+            <hr style="margin: 1rem 0;">
+            <div class="email-meta">
+                <p><strong>From:</strong> ${email.from}</p>
+                <p><strong>To:</strong> ${email.to}</p>
+                <p><strong>Subject:</strong> ${email.subject}</p>
+                <p><strong>Date:</strong> ${new Date(email.date).toLocaleString()}</p>
+            </div>
+            <hr style="margin: 1rem 0;">
+            <div class="email-body">
+                <iframe srcdoc="${email.html}" style="width: 100%; height: 500px; border: none;"></iframe>
+            </div>
+        `;
+        
+        document.getElementById('back-to-inbox-btn').addEventListener('click', renderInboxView);
+        document.getElementById('reply-btn').addEventListener('click', () => {
+            const replySubject = `Re: ${email.subject}`;
+            const replyBody = `<br><br><hr>On ${new Date(email.date).toLocaleString()}, ${email.from} wrote:<br><blockquote>${email.html}</blockquote>`;
+            renderComposeView({ to: email.from, subject: replySubject, body: replyBody });
+        });
+        document.getElementById('forward-btn').addEventListener('click', () => {
+            const forwardSubject = `Fwd: ${email.subject}`;
+            const forwardBody = `<br><br><hr>Forwarded message:<br>From: ${email.from}<br>Date: ${new Date(email.date).toLocaleString()}<br>Subject: ${email.subject}<br>To: ${email.to}<br><br>${email.html}`;
+            renderComposeView({ subject: forwardSubject, body: forwardBody });
+        });
+
+    } catch (error) {
+        showToast("Could not load email content.", "error");
+        console.error(error);
+        renderInboxView(); // Go back to inbox on error
+    }
+}
+
+
+// === COMPOSE VIEW ===
+function renderComposeView(prefill = {}) {
+    currentView = 'composing';
+    const container = document.getElementById('mail-container');
     const { allContacts } = getState();
     const contactOptions = allContacts.map(c => `<option value="${c.email}">${c.name} (${c.email})</option>`).join('');
 
-    composeContainer.innerHTML = `
+    container.innerHTML = `
         <h3>New Email</h3>
         <div class="input-group">
             <label>To</label>
-            <input id="compose-to" type="text" class="form-input" placeholder="Enter email or select from contacts">
+            <input id="compose-to" type="text" class="form-input" placeholder="Enter email or select from contacts" value="${prefill.to || ''}">
             <select id="contact-select" class="form-input" style="margin-top: 0.5rem;"><option value="">Or select a contact...</option>${contactOptions}</select>
         </div>
         <div class="input-group">
             <label>Subject</label>
-            <input id="compose-subject" type="text" class="form-input">
+            <input id="compose-subject" type="text" class="form-input" value="${prefill.subject || ''}">
         </div>
         <div class="input-group">
-            <label>Message</label>
-            <textarea id="compose-body" class="form-input" rows="10"></textarea>
+             <label>Message</label>
+             <div id="ai-helper" style="margin-bottom: 0.5rem; display: flex; gap: 0.5rem;">
+                <input id="ai-prompt" type="text" class="form-input" placeholder="AI Assistant: Write a reminder about invoice #123...">
+                <button id="ai-generate-btn" class="btn btn-secondary">Generate</button>
+             </div>
+            <textarea id="compose-body" class="form-input" rows="12">${prefill.body || ''}</textarea>
         </div>
         <div class="modal-actions">
             <button id="cancel-compose-btn" class="btn btn-secondary">Cancel</button>
             <button id="send-mail-btn" class="btn btn-primary">Send Email</button>
         </div>
     `;
-    
+
     document.getElementById('contact-select').addEventListener('change', (e) => {
         const toField = document.getElementById('compose-to');
         if (e.target.value) {
@@ -86,15 +170,12 @@ function showComposeView() {
         }
     });
 
-    document.getElementById('cancel-compose-btn').addEventListener('click', () => {
-        composeContainer.style.display = 'none';
-        document.getElementById('inbox-container').parentElement.style.display = 'block';
-    });
-
+    document.getElementById('cancel-compose-btn').addEventListener('click', renderInboxView);
     document.getElementById('send-mail-btn').addEventListener('click', sendEmail);
+    document.getElementById('ai-generate-btn').addEventListener('click', generateAIEmail);
 }
 
-// Calls the backend to send the email
+// Function to call the backend to send the email
 async function sendEmail() {
     const btn = document.getElementById('send-mail-btn');
     const emailData = {
@@ -106,20 +187,40 @@ async function sendEmail() {
         showToast("Recipient and subject are required.", "warning");
         return;
     }
-    const sendEmailFunc = httpsCallable(getFunctions(), 'sendEmail');
+    
     btn.disabled = true;
     btn.textContent = 'Sending...';
     try {
         await sendEmailFunc(emailData);
         showToast("Email sent successfully!", "success");
-        document.getElementById('compose-container').style.display = 'none';
-        document.getElementById('inbox-container').parentElement.style.display = 'block';
-        listInbox(); // Refresh inbox after sending
+        renderInboxView();
     } catch (error) {
         console.error("Failed to send email:", error);
         showToast("Failed to send email. Please check your settings and try again.", "error");
     } finally {
         btn.disabled = false;
         btn.textContent = 'Send Email';
+    }
+}
+
+// Function to call the AI suggestion backend
+async function generateAIEmail() {
+    const btn = document.getElementById('ai-generate-btn');
+    const prompt = document.getElementById('ai-prompt').value;
+    if (!prompt) {
+        showToast("Please enter a prompt for the AI assistant.", "warning");
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.textContent = 'Thinking...';
+    try {
+        const result = await getAIEmailSuggestionFunc({ prompt });
+        document.getElementById('compose-body').value = result.data.suggestion;
+    } catch (error) {
+        showToast("Could not get AI suggestion.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate';
     }
 }

@@ -4,18 +4,28 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const imaps = require("imap-simple");
-const nodemailer = require("nodemailer");
+const nodemailer = a("nodemailer");
 const cors = require("cors")({origin: true});
+const { simpleParser } = require("mailparser");
+const { google } = require("googleapis");
 
 admin.initializeApp();
 const db = admin.firestore();
 
 // ===================================
-//  Mail Client Functions and Utilities
+//  Configuration
 // ===================================
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const IV_LENGTH = 16;
+const OAUTH_REDIRECT_URI = `https://us-central1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/handleGoogleAuthCallback`;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // Store in secrets
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET; // Store in secrets
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // Store in secrets
+
+// ===================================
+//  Encryption Utilities
+// ===================================
 
 function encrypt(text) {
     const iv = crypto.randomBytes(IV_LENGTH);
@@ -35,109 +45,239 @@ function decrypt(text) {
     return decrypted.toString();
 }
 
-// Securely saves user's mail credentials
-exports.saveMailCredentials = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
-    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    const { username, password, imap, smtp } = data;
-    const uid = context.auth.uid;
-    const userDoc = await db.collection("users").doc(uid).get();
-    const companyId = userDoc.data().companyId;
-    if (!companyId) { throw new functions.https.HttpsError("failed-precondition", "User not associated with a company.");}
-    const encryptedPassword = encrypt(password);
-    const mailSettingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
-    await mailSettingsRef.set({ username, encryptedPassword, imap, smtp });
-    return { success: true };
-});
+// ===================================
+//  Mail Client Core Functions
+// ===================================
 
-// Fetches email list for the inbox
-exports.listInbox = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
-    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    const uid = context.auth.uid;
+// Helper to get user's mail settings
+async function getMailSettings(uid) {
     const userDoc = await db.collection("users").doc(uid).get();
     const companyId = userDoc.data().companyId;
     const settingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
     const settingsDoc = await settingsRef.get();
-    if (!settingsDoc.exists) { throw new functions.https.HttpsError("not-found", "No mail settings found.");}
-    const settings = settingsDoc.data();
-    const password = decrypt(settings.encryptedPassword);
+    if (!settingsDoc.exists) {
+        throw new functions.https.HttpsError("not-found", "No mail settings found.");
+    }
+    return settingsDoc.data();
+}
 
+// Fetches the email list (Headers only)
+exports.listInbox = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+    
+    const settings = await getMailSettings(context.auth.uid);
+    const password = decrypt(settings.encryptedPassword);
+    
     const config = {
-        imap: {
-            user: settings.username,
-            password,
-            host: settings.imap.host,
-            port: settings.imap.port,
-            tls: true,
-            tlsOptions: { rejectUnauthorized: false },
-            authTimeout: 8000
-        }
+        imap: { user: settings.username, password, host: settings.imap.host, port: settings.imap.port, tls: true, tlsOptions: { rejectUnauthorized: false } }
     };
 
     try {
         const connection = await imaps.connect(config);
         await connection.openBox("INBOX");
-        const messages = await connection.search(["ALL"], { bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"] });
-        const emails = messages.map(item => {
-            const header = item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body;
-            return { from: header.from[0], subject: header.subject[0], date: header.date[0] };
-        });
+        const messages = await connection.search(["ALL"], { bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"], struct: true });
+        
+        const emails = messages.map(item => ({
+            uid: item.attributes.uid,
+            from: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.from[0],
+            subject: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.subject[0],
+            date: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.date[0],
+        }));
+        
         connection.end();
         return { emails: emails.reverse().slice(0, 50) };
     } catch (error) {
-        console.error("IMAP connection failed with detailed error:", error);
-        throw new functions.https.HttpsError("internal", `Failed to connect to the mail server: ${error.message}`);
+        console.error("IMAP connection failed:", error);
+        throw new functions.https.HttpsError("internal", "Failed to connect to the mail server.");
+    }
+});
+
+// Fetches the full content of a single email
+exports.fetchEmailContent = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+
+    const { uid } = data;
+    const settings = await getMailSettings(context.auth.uid);
+    const password = decrypt(settings.encryptedPassword);
+    
+    const config = {
+        imap: { user: settings.username, password, host: settings.imap.host, port: settings.imap.port, tls: true, tlsOptions: { rejectUnauthorized: false } }
+    };
+    
+    try {
+        const connection = await imaps.connect(config);
+        await connection.openBox("INBOX");
+        const messages = await connection.search([["UID", uid]], { bodies: [""], struct: true });
+        
+        if (messages.length === 0) {
+            throw new functions.https.HttpsError("not-found", "Email not found.");
+        }
+        
+        const emailBody = messages[0].parts.find(p => p.which === "").body;
+        const parsedEmail = await simpleParser(emailBody);
+        
+        connection.end();
+        return {
+            from: parsedEmail.from.text,
+            to: parsedEmail.to.text,
+            subject: parsedEmail.subject,
+            date: parsedEmail.date,
+            html: parsedEmail.html || parsedEmail.textAsHtml,
+            attachments: parsedEmail.attachments.map(att => ({
+                filename: att.filename,
+                contentType: att.contentType,
+                size: att.size
+            }))
+        };
+    } catch (error) {
+        console.error("Failed to fetch email content:", error);
+        throw new functions.https.HttpsError("internal", "Could not retrieve email content.");
     }
 });
 
 // Sends an email
 exports.sendEmail = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    const { to, subject, body } = data;
-    const uid = context.auth.uid;
-    const userDoc = await db.collection("users").doc(uid).get();
-    const companyId = userDoc.data().companyId;
-    const settingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
-    const settingsDoc = await settingsRef.get();
-    if (!settingsDoc.exists) { throw new functions.https.HttpsError("not-found", "No mail settings found.");}
-    const settings = settingsDoc.data();
+    
+    const { to, subject, body, attachments } = data;
+    const settings = await getMailSettings(context.auth.uid);
     const password = decrypt(settings.encryptedPassword);
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
 
     const transporter = nodemailer.createTransport({
         host: settings.smtp.host,
         port: settings.smtp.port,
         secure: true,
         auth: { user: settings.username, pass: password },
-        tls: { rejectUnauthorized: false }
     });
 
+    await transporter.sendMail({
+        from: `"${userDoc.data().firstName} ${userDoc.data().lastName}" <${settings.username}>`,
+        to,
+        subject,
+        html: body,
+        attachments
+    });
+
+    return { success: true };
+});
+
+// ===================================
+//  AI & Google Integration Functions
+// ===================================
+
+// Gets an AI-generated email draft
+exports.getAIEmailSuggestion = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+    
+    const { prompt } = data;
+    const fullPrompt = `You are a professional business assistant. Write a clear, concise, and polite email based on the following instruction. Respond with only the HTML body of the email. Instruction: "${prompt}"`;
+    
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    
     try {
-        await transporter.sendMail({
-            from: `"${userDoc.data().firstName} ${userDoc.data().lastName}" <${settings.username}>`,
-            to: to,
-            subject: subject,
-            html: body,
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }] })
         });
-        return { success: true };
+        const result = await response.json();
+        const suggestion = result.candidates[0].content.parts[0].text;
+        return { suggestion };
     } catch (error) {
-        console.error("Nodemailer failed to send email with detailed error:", error);
-        throw new functions.https.HttpsError("internal", `Failed to send email: ${error.message}`);
+        console.error("AI suggestion failed:", error);
+        throw new functions.https.HttpsError("internal", "Failed to get AI suggestion.");
     }
 });
 
-// ===================================
-//  Existing Banking Functions
-// ===================================
+// Starts the Google OAuth 2.0 flow
+exports.getGoogleAuthUrl = functions.runWith({ secrets: ["GOOGLE_CLIENT_ID"] }).https.onCall((data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+    
+    const oauth2Client = new google.auth.OAuth2(
+        GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET,
+        OAUTH_REDIRECT_URI
+    );
 
-exports.fetchBankData = functions.https.onRequest((req, res) => {
-    cors(req, res, () => {
-        // Your actual code for fetchBankData goes here
-        res.send("This is the fetchBankData function.");
+    const scopes = [
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/contacts.readonly'
+    ];
+
+    const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: scopes,
+        state: context.auth.uid, // Pass UID to link the account on callback
     });
+    
+    return { authUrl: url };
 });
 
-exports.exchangeCodeForToken = functions.https.onRequest((req, res) => {
-    cors(req, res, () => {
-        // Your actual code for exchangeCodeForToken goes here
-        res.send("This is the exchangeCodeForToken function.");
+// Handles the callback from Google OAuth 2.0
+exports.handleGoogleAuthCallback = functions.runWith({ secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] }).https.onRequest(async (req, res) => {
+    const { code, state } = req.query;
+    const uid = state;
+
+    const oauth2Client = new google.auth.OAuth2(
+        GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET,
+        OAUTH_REDIRECT_URI
+    );
+
+    try {
+        const { tokens } = await oauth2Client.getToken(code);
+        oauth2Client.setCredentials(tokens);
+
+        const people = google.people({ version: 'v1', auth: oauth2Client });
+        const profile = await people.people.get({
+            resourceName: 'people/me',
+            personFields: 'emailAddresses',
+        });
+        const email = profile.data.emailAddresses[0].value;
+
+        // Securely store the refresh token for future use
+        const userDoc = await db.collection("users").doc(uid).get();
+        const companyId = userDoc.data().companyId;
+        const mailSettingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
+        
+        await mailSettingsRef.set({
+            type: 'google',
+            username: email,
+            refreshToken: encrypt(tokens.refresh_token) // Encrypt the refresh token
+        }, { merge: true });
+
+        res.send("<script>window.close();</script><h1>Authentication successful! You can close this window.</h1>");
+    } catch (error) {
+        console.error("Google Auth callback failed:", error);
+        res.status(500).send("Authentication failed.");
+    }
+});
+
+// Fetches Google contacts
+exports.listGoogleContacts = functions.runWith({ secrets: ["ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] }).https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+    
+    const settings = await getMailSettings(context.auth.uid);
+    if (settings.type !== 'google' || !settings.refreshToken) {
+        throw new functions.https.HttpsError("failed-precondition", "Google account not connected.");
+    }
+
+    const refreshToken = decrypt(settings.refreshToken);
+    const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+    const people = google.people({ version: 'v1', auth: oauth2Client });
+    const { data: { connections } } = await people.people.connections.list({
+        resourceName: 'people/me',
+        pageSize: 500,
+        personFields: 'names,emailAddresses',
     });
+
+    const contacts = connections.map(person => ({
+        name: person.names ? person.names[0].displayName : '',
+        email: person.emailAddresses ? person.emailAddresses[0].value : '',
+    })).filter(c => c.name && c.email);
+
+    return { contacts };
 });
