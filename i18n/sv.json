@@ -100,4 +100,8 @@
   "heroTitle": "Din kompletta finansiella co-pilot.",
   "heroSubtitle": "Från första offert till betald faktura och automatisk bokföring. FlowBooks är AI-plattformen som samlar hela din ekonomi, så du kan fokusera på det du gör bäst.",
   "startForFree": "Testa FlowBooks gratis"
+  "mailSettingsSaved": "E-postkontot har anslutits!",
+  "mailSettingsFailed": "Kunde inte ansluta. Kontrollera dina inloggningsuppgifter.",
+  "mailSettingsIncomplete": "Användarnamn och lösenord är obligatoriskt.",
+  "startForFree": "Testa FlowBooks gratis"
 }

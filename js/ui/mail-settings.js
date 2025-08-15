@@ -83,7 +83,7 @@ async function saveMailSettings() {
     };
 
     if (!settings.password || !settings.username) {
-        showToast("Username and password are required.", "warning");
+        showToast("mailSettingsIncomplete", "warning");
         return;
     }
 
@@ -93,11 +93,11 @@ async function saveMailSettings() {
     btn.textContent = "Connecting...";
     try {
         await saveCredentials(settings);
-        showToast("Email account connected successfully!", "success");
+        showToast("mailSettingsSaved", "success");
         window.navigateTo('mail');
     } catch (error) {
         console.error("Failed to save mail settings:", error);
-        showToast("Could not connect. Please check your credentials.", "error");
+        showToast("mailSettingsFailed", "error");
     } finally {
         btn.disabled = false;
         btn.textContent = "Save and Connect";
