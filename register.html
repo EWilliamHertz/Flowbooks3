@@ -38,7 +38,6 @@
         import { doc, setDoc, collection, serverTimestamp, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
         import { auth, db } from './firebase-config.js';
         
-        // Initialize i18n
         initializeLanguageSwitcher();
         loadInitialLanguage();
 
@@ -96,8 +95,10 @@
 
                 let companyId;
                 let finalCompanyName;
+                let userCompanies = [];
 
                 if (invitationData) {
+                    // This logic remains the same, but we will add to the userCompanies array later
                     companyId = invitationData.companyId;
                     finalCompanyName = invitationData.companyName;
                     
@@ -110,12 +111,21 @@
                 } else {
                     const newCompanyRef = doc(collection(db, 'companies'));
                     companyId = newCompanyRef.id;
+                    finalCompanyName = companyName;
+
                     await setDoc(newCompanyRef, {
                         name: companyName,
                         ownerId: user.uid,
+                        members: { [user.uid]: 'owner' },
                         createdAt: serverTimestamp()
                     });
-                    finalCompanyName = companyName;
+                    
+                    // Add the first company to the user's list
+                    userCompanies.push({
+                        id: companyId,
+                        name: finalCompanyName,
+                        role: 'owner'
+                    });
                 }
 
                 await setDoc(doc(db, "users", user.uid), {
@@ -123,8 +133,9 @@
                     firstName: firstName,
                     lastName: lastName,
                     position: position,
-                    companyId: companyId,
+                    companyId: companyId, // Keep this for now as the 'primary' company
                     companyName: finalCompanyName,
+                    userCompanies: userCompanies, // The new array structure
                     createdAt: serverTimestamp()
                 });
 

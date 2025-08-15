@@ -1,7 +1,6 @@
 // js/ui/mail-settings.js
 import { showToast } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
-import { getState } from '../state.js';
 
 const functions = getFunctions();
 const saveCredentials = httpsCallable(functions, 'saveMailCredentials');
@@ -18,7 +17,6 @@ export function renderMailSettingsPage() {
         <div class="input-group">
              <button id="connect-google-btn" class="btn btn-primary btn-full-width" style="background-color: #DB4437;">Connect with Google</button>
         </div>
-
         <hr>
         <p class="text-center" style="color: var(--text-color-light);">Or configure manually</p>
 
@@ -38,9 +36,7 @@ export function renderMailSettingsPage() {
             <div class="input-group"><label>SMTP Port</label><input id="mail-smtp-port" type="number" class="form-input" value="465"></div>
         </div>
         <button id="save-mail-settings" class="btn btn-primary" style="margin-top: 1rem;">Save Manual Connection</button>
-        
         <hr>
-        
         <div id="integrations-section">
             <h4>Integrations</h4>
             <button id="import-google-contacts-btn" class="btn btn-secondary">Import Google Contacts</button>
@@ -53,7 +49,6 @@ export function renderMailSettingsPage() {
 }
 
 async function saveMailSettings() {
-    // This function remains the same as before
     const btn = document.getElementById('save-mail-settings');
     const settings = {
         username: document.getElementById('mail-username').value,
@@ -100,9 +95,8 @@ async function importGoogleContacts() {
     try {
         const result = await listGoogleContactsFunc();
         const contacts = result.data.contacts;
-        // In a real app, you would save these to Firestore. For now, we'll show a toast.
-        showToast(`Successfully imported ${contacts.length} contacts!`, 'success');
-        // This is where you would call a function to save the contacts to your database
+        // Here you would save the contacts to your Firestore database.
+        showToast(`Successfully found ${contacts.length} contacts!`, 'success');
     } catch (error) {
         showToast("Could not import contacts. Is your Google account connected?", "error");
     } finally {

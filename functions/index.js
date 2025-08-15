@@ -4,13 +4,14 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const imaps = require("imap-simple");
-const nodemailer = a("nodemailer");
+const nodemailer = require("nodemailer");
 const cors = require("cors")({origin: true});
 const { simpleParser } = require("mailparser");
 const { google } = require("googleapis");
 
 admin.initializeApp();
 const db = admin.firestore();
+const fieldValue = admin.firestore.FieldValue;
 
 // ===================================
 //  Configuration
@@ -19,9 +20,9 @@ const db = admin.firestore();
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const IV_LENGTH = 16;
 const OAUTH_REDIRECT_URI = `https://us-central1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/handleGoogleAuthCallback`;
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // Store in secrets
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET; // Store in secrets
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // Store in secrets
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // From secrets
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET; // From secrets
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // From secrets
 
 // ===================================
 //  Encryption Utilities
@@ -49,7 +50,6 @@ function decrypt(text) {
 //  Mail Client Core Functions
 // ===================================
 
-// Helper to get user's mail settings
 async function getMailSettings(uid) {
     const userDoc = await db.collection("users").doc(uid).get();
     const companyId = userDoc.data().companyId;
@@ -61,84 +61,90 @@ async function getMailSettings(uid) {
     return settingsDoc.data();
 }
 
-// Fetches the email list (Headers only)
+exports.saveMailCredentials = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+    const { username, password, imap, smtp } = data;
+    const uid = context.auth.uid;
+    const userDoc = await db.collection("users").doc(uid).get();
+    const companyId = userDoc.data().companyId;
+    if (!companyId) { throw new functions.https.HttpsError("failed-precondition", "User not associated with a company.");}
+    const encryptedPassword = encrypt(password);
+    const mailSettingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
+    await mailSettingsRef.set({
+        type: 'manual',
+        username,
+        encryptedPassword,
+        imap,
+        smtp
+    });
+    return { success: true };
+});
+
 exports.listInbox = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    
+
     const settings = await getMailSettings(context.auth.uid);
     const password = decrypt(settings.encryptedPassword);
-    
+
     const config = {
         imap: { user: settings.username, password, host: settings.imap.host, port: settings.imap.port, tls: true, tlsOptions: { rejectUnauthorized: false } }
     };
 
-    try {
-        const connection = await imaps.connect(config);
-        await connection.openBox("INBOX");
-        const messages = await connection.search(["ALL"], { bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"], struct: true });
-        
-        const emails = messages.map(item => ({
-            uid: item.attributes.uid,
-            from: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.from[0],
-            subject: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.subject[0],
-            date: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.date[0],
-        }));
-        
-        connection.end();
-        return { emails: emails.reverse().slice(0, 50) };
-    } catch (error) {
-        console.error("IMAP connection failed:", error);
-        throw new functions.https.HttpsError("internal", "Failed to connect to the mail server.");
-    }
+    const connection = await imaps.connect(config);
+    await connection.openBox("INBOX");
+    const messages = await connection.search(["ALL"], { bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"], struct: true });
+
+    const emails = messages.map(item => ({
+        uid: item.attributes.uid,
+        from: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.from[0],
+        subject: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.subject[0],
+        date: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.date[0],
+    }));
+
+    connection.end();
+    return { emails: emails.reverse().slice(0, 50) };
 });
 
-// Fetches the full content of a single email
 exports.fetchEmailContent = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
 
     const { uid } = data;
     const settings = await getMailSettings(context.auth.uid);
     const password = decrypt(settings.encryptedPassword);
-    
+
     const config = {
         imap: { user: settings.username, password, host: settings.imap.host, port: settings.imap.port, tls: true, tlsOptions: { rejectUnauthorized: false } }
     };
-    
-    try {
-        const connection = await imaps.connect(config);
-        await connection.openBox("INBOX");
-        const messages = await connection.search([["UID", uid]], { bodies: [""], struct: true });
-        
-        if (messages.length === 0) {
-            throw new functions.https.HttpsError("not-found", "Email not found.");
-        }
-        
-        const emailBody = messages[0].parts.find(p => p.which === "").body;
-        const parsedEmail = await simpleParser(emailBody);
-        
-        connection.end();
-        return {
-            from: parsedEmail.from.text,
-            to: parsedEmail.to.text,
-            subject: parsedEmail.subject,
-            date: parsedEmail.date,
-            html: parsedEmail.html || parsedEmail.textAsHtml,
-            attachments: parsedEmail.attachments.map(att => ({
-                filename: att.filename,
-                contentType: att.contentType,
-                size: att.size
-            }))
-        };
-    } catch (error) {
-        console.error("Failed to fetch email content:", error);
-        throw new functions.https.HttpsError("internal", "Could not retrieve email content.");
+
+    const connection = await imaps.connect(config);
+    await connection.openBox("INBOX");
+    const messages = await connection.search([["UID", uid]], { bodies: [""], struct: true });
+
+    if (messages.length === 0) {
+        throw new functions.https.HttpsError("not-found", "Email not found.");
     }
+
+    const emailBody = messages[0].parts.find(p => p.which === "").body;
+    const parsedEmail = await simpleParser(emailBody);
+
+    connection.end();
+    return {
+        from: parsedEmail.from.text,
+        to: parsedEmail.to.text,
+        subject: parsedEmail.subject,
+        date: parsedEmail.date,
+        html: parsedEmail.html || parsedEmail.textAsHtml || "<p>Email content could not be displayed.</p>",
+        attachments: parsedEmail.attachments.map(att => ({
+            filename: att.filename,
+            contentType: att.contentType,
+            size: att.size
+        }))
+    };
 });
 
-// Sends an email
 exports.sendEmail = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    
+
     const { to, subject, body, attachments } = data;
     const settings = await getMailSettings(context.auth.uid);
     const password = decrypt(settings.encryptedPassword);
@@ -166,98 +172,67 @@ exports.sendEmail = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
 //  AI & Google Integration Functions
 // ===================================
 
-// Gets an AI-generated email draft
 exports.getAIEmailSuggestion = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    
+
     const { prompt } = data;
     const fullPrompt = `You are a professional business assistant. Write a clear, concise, and polite email based on the following instruction. Respond with only the HTML body of the email. Instruction: "${prompt}"`;
-    
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-    
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }] })
-        });
-        const result = await response.json();
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }] })
+    });
+    const result = await response.json();
+
+    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts) {
         const suggestion = result.candidates[0].content.parts[0].text;
         return { suggestion };
-    } catch (error) {
-        console.error("AI suggestion failed:", error);
-        throw new functions.https.HttpsError("internal", "Failed to get AI suggestion.");
+    } else {
+        console.error("AI suggestion failed: Invalid response structure from API", result);
+        throw new functions.https.HttpsError("internal", "Failed to get AI suggestion due to invalid API response.");
     }
 });
 
-// Starts the Google OAuth 2.0 flow
-exports.getGoogleAuthUrl = functions.runWith({ secrets: ["GOOGLE_CLIENT_ID"] }).https.onCall((data, context) => {
+exports.getGoogleAuthUrl = functions.runWith({ secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] }).https.onCall((data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    
-    const oauth2Client = new google.auth.OAuth2(
-        GOOGLE_CLIENT_ID,
-        GOOGLE_CLIENT_SECRET,
-        OAUTH_REDIRECT_URI
-    );
 
-    const scopes = [
-        'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/contacts.readonly'
-    ];
-
-    const url = oauth2Client.generateAuthUrl({
-        access_type: 'offline',
-        scope: scopes,
-        state: context.auth.uid, // Pass UID to link the account on callback
-    });
-    
+    const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI);
+    const scopes = ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/contacts.readonly'];
+    const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, state: context.auth.uid });
     return { authUrl: url };
 });
 
-// Handles the callback from Google OAuth 2.0
-exports.handleGoogleAuthCallback = functions.runWith({ secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] }).https.onRequest(async (req, res) => {
+exports.handleGoogleAuthCallback = functions.runWith({ secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ENCRYPTION_KEY"] }).https.onRequest(async (req, res) => {
     const { code, state } = req.query;
     const uid = state;
+    const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI);
 
-    const oauth2Client = new google.auth.OAuth2(
-        GOOGLE_CLIENT_ID,
-        GOOGLE_CLIENT_SECRET,
-        OAUTH_REDIRECT_URI
-    );
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
 
-    try {
-        const { tokens } = await oauth2Client.getToken(code);
-        oauth2Client.setCredentials(tokens);
+    const people = google.people({ version: 'v1', auth: oauth2Client });
+    const profile = await people.people.get({ resourceName: 'people/me', personFields: 'emailAddresses' });
+    const email = profile.data.emailAddresses[0].value;
 
-        const people = google.people({ version: 'v1', auth: oauth2Client });
-        const profile = await people.people.get({
-            resourceName: 'people/me',
-            personFields: 'emailAddresses',
-        });
-        const email = profile.data.emailAddresses[0].value;
+    const userDoc = await db.collection("users").doc(uid).get();
+    const companyId = userDoc.data().companyId;
+    const mailSettingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
 
-        // Securely store the refresh token for future use
-        const userDoc = await db.collection("users").doc(uid).get();
-        const companyId = userDoc.data().companyId;
-        const mailSettingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
-        
-        await mailSettingsRef.set({
-            type: 'google',
-            username: email,
-            refreshToken: encrypt(tokens.refresh_token) // Encrypt the refresh token
-        }, { merge: true });
+    await mailSettingsRef.set({
+        type: 'google',
+        username: email,
+        refreshToken: encrypt(tokens.refresh_token)
+    }, { merge: true });
 
-        res.send("<script>window.close();</script><h1>Authentication successful! You can close this window.</h1>");
-    } catch (error) {
-        console.error("Google Auth callback failed:", error);
-        res.status(500).send("Authentication failed.");
-    }
+    res.send("<script>window.close();</script><h1>Authentication successful! You can close this window.</h1>");
 });
 
-// Fetches Google contacts
 exports.listGoogleContacts = functions.runWith({ secrets: ["ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] }).https.onCall(async (data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    
+
     const settings = await getMailSettings(context.auth.uid);
     if (settings.type !== 'google' || !settings.refreshToken) {
         throw new functions.https.HttpsError("failed-precondition", "Google account not connected.");
@@ -280,4 +255,87 @@ exports.listGoogleContacts = functions.runWith({ secrets: ["ENCRYPTION_KEY", "GO
     })).filter(c => c.name && c.email);
 
     return { contacts };
+});
+
+// ===================================
+//  Company Management Functions
+// ===================================
+
+exports.createNewCompany = functions.https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+
+    const { companyName } = data;
+    if (!companyName) {
+        throw new functions.https.HttpsError("invalid-argument", "Company name is required.");
+    }
+
+    const uid = context.auth.uid;
+    const newCompanyRef = db.collection('companies').doc();
+
+    await newCompanyRef.set({
+        name: companyName,
+        ownerId: uid,
+        members: { [uid]: 'owner' },
+        createdAt: fieldValue.serverTimestamp()
+    });
+
+    const userRef = db.collection('users').doc(uid);
+    await userRef.update({
+        userCompanies: fieldValue.arrayUnion({
+            id: newCompanyRef.id,
+            name: companyName,
+            role: 'owner'
+        })
+    });
+
+    return { companyId: newCompanyRef.id };
+});
+
+exports.joinCompany = functions.https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+
+    const { companyId } = data;
+    if (!companyId) {
+        throw new functions.https.HttpsError("invalid-argument", "Company ID is required.");
+    }
+
+    const uid = context.auth.uid;
+    const companyRef = db.collection('companies').doc(companyId);
+    const companyDoc = await companyRef.get();
+
+    if (!companyDoc.exists) {
+        throw new functions.https.HttpsError("not-found", "Company not found.");
+    }
+    const companyData = companyDoc.data();
+
+    await companyRef.update({
+        [`members.${uid}`]: 'member'
+    });
+
+    const userRef = db.collection('users').doc(uid);
+    await userRef.update({
+        userCompanies: fieldValue.arrayUnion({
+            id: companyId,
+            name: companyData.name,
+            role: 'member'
+        })
+    });
+
+    return { success: true };
+});
+
+// ===================================
+//  Existing Banking Functions
+// ===================================
+
+exports.fetchBankData = functions.https.onRequest((req, res) => {
+    cors(req, res, () => {
+        res.send("This is the fetchBankData function.");
+    });
+});
+
+exports.exchangeCodeForToken = functions.https.onRequest((req, res) => {
+    cors(req, res, () => {
+        res.send("This is the exchangeCodeForToken function.");
+    });
 });

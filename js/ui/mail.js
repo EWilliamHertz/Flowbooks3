@@ -11,29 +11,16 @@ const getAIEmailSuggestionFunc = httpsCallable(functions, 'getAIEmailSuggestion'
 
 let currentView = 'inbox'; // inbox, reading, composing
 
-// Main function to render the mail page
 export function renderMailPage() {
     const mainView = document.getElementById('main-view');
-    mainView.innerHTML = `
-        <div id="mail-container" class="card">
-            </div>`;
+    mainView.innerHTML = `<div id="mail-container" class="card"></div>`;
     
-    switch (currentView) {
-        case 'reading':
-            // If we were reading an email, go back to the inbox on re-render
-            currentView = 'inbox';
-            renderInboxView();
-            break;
-        case 'composing':
-            // If we were composing, stay on the compose screen
-            renderComposeView();
-            break;
-        default:
-            renderInboxView();
+    if (currentView === 'reading' || currentView === 'composing') {
+        currentView = 'inbox';
     }
+    renderInboxView();
 }
 
-// === INBOX VIEW ===
 async function renderInboxView() {
     currentView = 'inbox';
     const container = document.getElementById('mail-container');
@@ -59,15 +46,13 @@ async function renderInboxView() {
         inboxList.innerHTML = emails.map(email => `
             <div class="history-item" data-uid="${email.uid}" style="cursor: pointer;">
                 <span><strong>From:</strong> ${email.from}</span>
-                <span>${email.subject}</span>
+                <span>${email.subject || '(No Subject)'}</span>
                 <span style="color: var(--text-color-light);">${new Date(email.date).toLocaleDateString()}</span>
             </div>
         `).join('');
 
         inboxList.querySelectorAll('.history-item').forEach(item => {
-            item.addEventListener('click', () => {
-                renderReadingView(item.dataset.uid);
-            });
+            item.addEventListener('click', () => renderReadingView(item.dataset.uid));
         });
 
     } catch (error) {
@@ -80,7 +65,6 @@ async function renderInboxView() {
     }
 }
 
-// === READING VIEW ===
 async function renderReadingView(emailUid) {
     currentView = 'reading';
     const container = document.getElementById('mail-container');
@@ -89,6 +73,9 @@ async function renderReadingView(emailUid) {
     try {
         const result = await fetchEmailContentFunc({ uid: emailUid });
         const email = result.data;
+
+        // --- FIX for blank email: Escape double quotes for the srcdoc attribute ---
+        const escapedHtml = (email.html || '').replace(/"/g, '&quot;');
 
         container.innerHTML = `
             <div class="email-reading-header">
@@ -107,7 +94,7 @@ async function renderReadingView(emailUid) {
             </div>
             <hr style="margin: 1rem 0;">
             <div class="email-body">
-                <iframe srcdoc="${email.html}" style="width: 100%; height: 500px; border: none;"></iframe>
+                <iframe srcdoc="${escapedHtml}" style="width: 100%; height: 500px; border: none;"></iframe>
             </div>
         `;
         
@@ -126,12 +113,10 @@ async function renderReadingView(emailUid) {
     } catch (error) {
         showToast("Could not load email content.", "error");
         console.error(error);
-        renderInboxView(); // Go back to inbox on error
+        renderInboxView();
     }
 }
 
-
-// === COMPOSE VIEW ===
 function renderComposeView(prefill = {}) {
     currentView = 'composing';
     const container = document.getElementById('mail-container');
@@ -165,9 +150,7 @@ function renderComposeView(prefill = {}) {
 
     document.getElementById('contact-select').addEventListener('change', (e) => {
         const toField = document.getElementById('compose-to');
-        if (e.target.value) {
-            toField.value += (toField.value ? ',' : '') + e.target.value;
-        }
+        if (e.target.value) { toField.value += (toField.value ? ',' : '') + e.target.value; }
     });
 
     document.getElementById('cancel-compose-btn').addEventListener('click', renderInboxView);
@@ -175,7 +158,6 @@ function renderComposeView(prefill = {}) {
     document.getElementById('ai-generate-btn').addEventListener('click', generateAIEmail);
 }
 
-// Function to call the backend to send the email
 async function sendEmail() {
     const btn = document.getElementById('send-mail-btn');
     const emailData = {
@@ -203,7 +185,6 @@ async function sendEmail() {
     }
 }
 
-// Function to call the AI suggestion backend
 async function generateAIEmail() {
     const btn = document.getElementById('ai-generate-btn');
     const prompt = document.getElementById('ai-prompt').value;

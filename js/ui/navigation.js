@@ -1,9 +1,11 @@
 // js/ui/navigation.js
 import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
-import { fetchAllCompanyData } from '../services/firestore.js';
+import { fetchAllCompanyData, fetchInitialData } from '../services/firestore.js';
 import { t } from '../i18n.js';
 import { checkNotifications } from './notifications.js';
+import { showToast, closeModal } from './utils.js';
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
 // Import all page renderers
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
@@ -20,8 +22,8 @@ import { renderBankingPage } from './banking.js';
 import { renderContactsPage, renderContactDetailView } from './contacts.js';
 import { renderQuotesPage } from './quotes.js';
 import { editors } from './editors.js';
-import { renderMailPage } from './mail.js'; // Import the new mail page
-import { renderMailSettingsPage } from './mail-settings.js'; // Import the new mail settings page
+import { renderMailPage } from './mail.js';
+import { renderMailSettingsPage } from './mail-settings.js';
 
 const pageRenderers = {
     'overview': renderDashboard,
@@ -40,8 +42,8 @@ const pageRenderers = {
     'invoices': renderInvoicesPage,
     'quotes': renderQuotesPage,
     'reports': renderReportsPage,
-    'mail': renderMailPage, // Add the new mail page renderer
-    'mail-settings': renderMailSettingsPage // Add the new mail settings page renderer
+    'mail': renderMailPage,
+    'mail-settings': renderMailSettingsPage
 };
 
 const menuConfig = {
@@ -64,7 +66,7 @@ export function initializeAppUI() {
     setupCompanySelector();
     setupEventListeners();
     checkNotifications();
-    navigateTo('allCompaniesOverview'); 
+    navigateTo('allCompaniesOverview');
     document.getElementById('app-container').style.visibility = 'visible';
 }
 
@@ -74,15 +76,15 @@ function navigateTo(pageKey, id = null) {
     renderSidebarMenu();
     if (pageKey === 'allCompaniesOverview') {
         appContainer.classList.add('portal-view');
-        if(header) header.style.display = 'none';
+        if (header) header.style.display = 'none';
     } else {
         appContainer.classList.remove('portal-view');
-        if(header) header.style.display = 'flex';
+        if (header) header.style.display = 'flex';
     }
     document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
     const link = document.querySelector(`.sidebar-nav a[data-page="${pageKey}"]`);
     if (link) link.classList.add('active');
-    
+
     renderPageContent(pageKey, id);
     document.querySelector('.sidebar')?.classList.remove('open');
 }
@@ -92,11 +94,11 @@ function renderPageContent(pageKey, id = null) {
     const pageTitleEl = document.querySelector('.page-title');
     if (pageTitleEl) pageTitleEl.textContent = t(pageKey);
 
-    document.getElementById('main-view').innerHTML = ''; 
+    document.getElementById('main-view').innerHTML = '';
     const newItemBtn = document.getElementById('new-item-btn');
     newItemBtn.style.display = 'none';
     newItemBtn.onclick = null;
-    
+
     if (pageKey === 'contacts' && id) {
         renderContactDetailView(id);
         return;
@@ -104,7 +106,7 @@ function renderPageContent(pageKey, id = null) {
 
     const renderFunction = pageRenderers[pageKey];
     if (renderFunction) renderFunction();
-    
+
     switch (pageKey) {
         case 'income':
             newItemBtn.textContent = t('newIncome');
@@ -151,6 +153,13 @@ function setupEventListeners() {
             navigateTo(e.target.dataset.page);
         }
     });
+
+    document.getElementById('main-view').addEventListener('click', e => {
+        if (e.target.id === 'add-company-btn' || e.target.closest('#add-company-btn')) {
+            showAddCompanyModal();
+        }
+    });
+
     document.getElementById('user-profile-icon').addEventListener('click', () => document.getElementById('profile-dropdown').classList.toggle('show'));
     document.getElementById('logout-btn').addEventListener('click', handleSignOut);
     document.getElementById('settings-link').addEventListener('click', e => {
@@ -162,9 +171,9 @@ function setupEventListeners() {
 
     const searchInput = document.getElementById('global-search-input');
     const searchResults = document.getElementById('global-search-results');
-    
+
     searchInput.addEventListener('input', handleGlobalSearch);
-    
+
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.global-search-container')) {
             searchResults.style.display = 'none';
@@ -176,7 +185,7 @@ function handleGlobalSearch() {
     const input = document.getElementById('global-search-input');
     const resultsContainer = document.getElementById('global-search-results');
     const searchTerm = input.value.toLowerCase();
-    
+
     if (searchTerm.length < 2) {
         resultsContainer.style.display = 'none';
         return;
@@ -194,7 +203,7 @@ function handleGlobalSearch() {
     }
 
     const invoiceResults = allInvoices.filter(i => i.customerName.toLowerCase().includes(searchTerm) || String(i.invoiceNumber).includes(searchTerm));
-     if (invoiceResults.length > 0) {
+    if (invoiceResults.length > 0) {
         resultsHtml += `<div class="search-category">${t('invoices')}</div>`;
         invoiceResults.forEach(i => {
             resultsHtml += `<a href="#" class="search-result-item" data-type="invoice" data-id="${i.id}">#${i.invoiceNumber} - ${i.customerName}</a>`;
@@ -228,17 +237,17 @@ function handleGlobalSearch() {
     if (resultsHtml) {
         resultsContainer.innerHTML = resultsHtml;
         resultsContainer.style.display = 'block';
-        
+
         resultsContainer.querySelectorAll('.search-result-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
                 const type = e.target.dataset.type;
                 const id = e.target.dataset.id;
-                
+
                 resultsContainer.style.display = 'none';
                 input.value = '';
 
-                switch(type) {
+                switch (type) {
                     case 'contact':
                         navigateTo('contacts', id);
                         break;
@@ -281,7 +290,7 @@ function setupCompanySelector() {
     const { userCompanies, currentCompany } = getState();
     const selector = document.getElementById('company-selector');
     if (!selector) return;
-    selector.innerHTML = userCompanies.map(c => `<option value="${c.id}" ${c.id === currentCompany.id ? 'selected' : ''}>${c.name}</option>`).join('');
+    selector.innerHTML = (userCompanies || []).map(c => `<option value="${c.id}" ${c.id === currentCompany.id ? 'selected' : ''}>${c.name}</option>`).join('');
     selector.addEventListener('change', async (e) => {
         const newCurrentCompany = userCompanies.find(c => c.id === e.target.value);
         setState({ currentCompany: newCurrentCompany });
@@ -301,8 +310,94 @@ window.switchToCompany = async (companyId) => {
     const newCurrentCompany = userCompanies.find(c => c.id === companyId);
     if (newCurrentCompany) {
         setState({ currentCompany: newCurrentCompany });
-        await fetchAllCompanyData(); 
+        await fetchAllCompanyData();
         document.getElementById('company-selector').value = companyId;
         navigateTo('overview');
     }
 };
+
+function showAddCompanyModal() {
+    const modalContainer = document.getElementById('modal-container');
+    modalContainer.innerHTML = `
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <h3>Add or Create a Company</h3>
+                <div id="create-company-section">
+                    <h4>Create a New Company</h4>
+                    <div class="input-group">
+                        <label>New Company Name</label>
+                        <input id="new-company-name" class="form-input" placeholder="e.g., FlowBooks Inc.">
+                    </div>
+                    <button id="create-company-btn" class="btn btn-primary">Create</button>
+                </div>
+                <hr style="margin: 2rem 0;">
+                <div id="join-company-section">
+                    <h4>Join an Existing Company</h4>
+                     <div class="input-group">
+                        <label>Company Referral ID</label>
+                        <input id="join-company-id" class="form-input" placeholder="Enter the ID provided to you">
+                    </div>
+                    <button id="join-company-btn" class="btn btn-secondary">Join</button>
+                </div>
+                 <div class="modal-actions" style="margin-top: 2rem;">
+                    <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>`;
+
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('create-company-btn').addEventListener('click', handleCreateCompany);
+    document.getElementById('join-company-btn').addEventListener('click', handleJoinCompany);
+}
+
+async function handleCreateCompany() {
+    const btn = document.getElementById('create-company-btn');
+    const companyName = document.getElementById('new-company-name').value;
+    if (!companyName) {
+        showToast("Please enter a name for the new company.", "warning");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Creating...";
+
+    try {
+        const createNewCompanyFunc = httpsCallable(getFunctions(), 'createNewCompany');
+        await createNewCompanyFunc({ companyName });
+        await fetchInitialData(getState().currentUser);
+        showToast("Company created successfully!", "success");
+        closeModal();
+        navigateTo('allCompaniesOverview');
+    } catch (error) {
+        console.error("Failed to create company:", error);
+        showToast("Could not create the company.", "error");
+        btn.disabled = false;
+        btn.textContent = "Create";
+    }
+}
+
+async function handleJoinCompany() {
+    const btn = document.getElementById('join-company-btn');
+    const companyId = document.getElementById('join-company-id').value;
+    if (!companyId) {
+        showToast("Please enter a Company ID.", "warning");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Joining...";
+
+    try {
+        const joinCompanyFunc = httpsCallable(getFunctions(), 'joinCompany');
+        await joinCompanyFunc({ companyId });
+        await fetchInitialData(getState().currentUser);
+        showToast("Successfully joined company!", "success");
+        closeModal();
+        navigateTo('allCompaniesOverview');
+    } catch (error) {
+        console.error("Failed to join company:", error);
+        showToast(error.message, "error");
+        btn.disabled = false;
+        btn.textContent = "Join";
+    }
+}

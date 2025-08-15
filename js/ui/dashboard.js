@@ -20,16 +20,16 @@ export function renderDashboard() {
 
     const privateSplitPercent = currentCompany.inventoryProjectionSplit || 60;
     const businessSplitPercent = 100 - privateSplitPercent;
-    
+
     let calculatedInventoryRevenue = 0;
     allProducts.forEach(product => {
         const stock = product.stock || 0;
         const businessPrice = product.sellingPriceBusiness || 0;
         const privatePrice = product.sellingPricePrivate || 0;
-        
+
         const businessValue = stock * (businessSplitPercent / 100) * businessPrice;
         const privateValue = stock * (privateSplitPercent / 100) * privatePrice;
-        
+
         calculatedInventoryRevenue += businessValue + privateValue;
     });
 
@@ -201,7 +201,7 @@ export async function renderAllCompaniesDashboard() {
     mainView.innerHTML = renderSpinner();
     try {
         const { userCompanies, userData } = getState();
-        const companiesDataPromises = userCompanies.map(async (company) => {
+        const companiesDataPromises = (userCompanies || []).map(async (company) => {
             const companyId = company.id;
             const [incomesSnap, expensesSnap, productsSnap] = await Promise.all([
                 getDocs(query(collection(db, 'incomes'), where('companyId', '==', companyId))),
@@ -265,6 +265,10 @@ export async function renderAllCompaniesDashboard() {
                             <span>${company.productCount} produkter</span>
                         </div>
                     </div>`).join('')}
+                 <div class="company-card add-company-card" id="add-company-btn" style="align-items: center; justify-content: center; text-align: center; cursor: pointer;">
+                     <h3 style="font-size: 2.5rem; margin: 0;">+</h3>
+                     <p style="margin-top: 0.5rem;">Add New Company</p>
+                 </div>
             </div>`;
     } catch (error) {
         console.error('Fel vid hämtning av företagsdata för portalen:', error);

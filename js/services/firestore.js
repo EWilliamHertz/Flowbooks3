@@ -5,28 +5,55 @@ import { setState, getState } from '../state.js';
 import { showToast } from '../ui/utils.js';
 
 export async function fetchInitialData(user) {
-
     try {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
 
-        if (!userDocSnap.exists() || !userDocSnap.data().companyId) return false;
+        if (!userDocSnap.exists()) return false;
         
         const userData = { id: userDocSnap.id, ...userDocSnap.data() };
         setState({ userData });
 
-        const companyRef = doc(db, 'companies', userData.companyId);
-        const companySnap = await getDoc(companyRef);
-
-        if (!companySnap.exists()) return false;
+        // --- NEW LOGIC with THE FIX ---
+        // The .filter(id => id) will remove any null or undefined entries before the query
+        const companyIdList = (userData.userCompanies || []).map(c => c.id).filter(id => id);
         
-        const companyData = { id: companySnap.id, ...companySnap.data() };
-        companyData.role = (companyData.ownerId === user.uid) ? 'owner' : 'member';
-        
-        setState({ userCompanies: [companyData], currentCompany: companyData });
+        if (!companyIdList || companyIdList.length === 0) {
+            // Fallback for very old users who don't have the new array
+            if (!userData.companyId) return false; 
+            const companyRef = doc(db, 'companies', userData.companyId);
+            const companySnap = await getDoc(companyRef);
+            if (!companySnap.exists()) return false;
+            
+            const companyData = { id: companySnap.id, ...companySnap.data() };
+            companyData.role = (companyData.ownerId === user.uid) ? 'owner' : 'member';
+            setState({ userCompanies: [companyData], currentCompany: companyData });
 
-        await fetchAllCompanyData();
+        } else {
+            // New logic: Fetch all companies the user is a member of
+            const companiesQuery = query(collection(db, 'companies'), where(documentId(), 'in', companyIdList));
+            const companiesSnap = await getDocs(companiesQuery);
+            const userCompanies = companiesSnap.docs.map(doc => {
+                const companyData = { id: doc.id, ...doc.data() };
+                // Determine user's role in this company
+                companyData.role = companyData.members[user.uid] || 'member';
+                return companyData;
+            });
+
+            setState({ userCompanies });
+
+            // Set the current company to the last one they were using, or the first in the list
+            const lastCompanyId = userData.lastCompanyId || userCompanies[0]?.id;
+            const currentCompany = userCompanies.find(c => c.id === lastCompanyId) || userCompanies[0];
+            setState({ currentCompany });
+        }
+        
+        if (getState().currentCompany) {
+            await fetchAllCompanyData();
+        }
+        
         return true;
+
     } catch (error) {
         console.error("Fel vid hämtning av initial data:", error);
         return false;
@@ -43,11 +70,8 @@ export async function fetchAllCompanyData() {
         const companySnap = await getDoc(companyRef);
         
         let memberUIDs = [];
-        if (companySnap.exists() && Array.isArray(companySnap.data().members)) {
-            memberUIDs = companySnap.data().members;
-        }
-        if (currentCompany.ownerId && !memberUIDs.includes(currentCompany.ownerId)) {
-            memberUIDs.push(currentCompany.ownerId);
+        if (companySnap.exists() && companySnap.data().members) {
+            memberUIDs = Object.keys(companySnap.data().members);
         }
 
         const queries = [
@@ -57,7 +81,7 @@ export async function fetchAllCompanyData() {
             getDocs(query(collection(db, 'products'), where('companyId', '==', companyId), orderBy('name'))),
             getDocs(query(collection(db, 'categories'), where('companyId', '==', companyId), orderBy('name'))),
             getDocs(query(collection(db, 'invoices'), where('companyId', '==', companyId))),
-            getDocs(query(collection(db, 'quotes'), where('companyId', '==', companyId))), // <-- NY RAD FÖR OFFERTER
+            getDocs(query(collection(db, 'quotes'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'contacts'), where('companyId', '==', companyId), orderBy('name'))),
         ];
         
@@ -73,7 +97,7 @@ export async function fetchAllCompanyData() {
         const allProducts = results[3].docs.map(d => ({ id: d.id, ...d.data() }));
         const categories = results[4].docs.map(d => ({ id: d.id, ...d.data() }));
         const allInvoices = results[5].docs.map(d => ({ id: d.id, ...d.data() }));
-        const allQuotes = results[6].docs.map(d => ({ id: d.id, ...d.data() })); // <-- NY RAD FÖR OFFERTER
+        const allQuotes = results[6].docs.map(d => ({ id: d.id, ...d.data() }));
         const allContacts = results[7].docs.map(d => ({ id: d.id, ...d.data() }));
         const teamMembers = results.length > 8 ? results[8].docs.map(d => ({ id: d.id, ...d.data() })) : [];
         
