@@ -261,12 +261,13 @@ export function renderProductForm(productId = null) {
                 </form>
             </div>
         </div>`;
-    document.getElementById('modal-container').innerHTML = modalHtml;
-    document.getElementById('modal-cancel').addEventListener('click', closeModal);
-    document.getElementById('product-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = e.target.querySelector('button[type="submit"]');
-        await saveProductHandler(btn, productId);
+    renderModal({
+        title: isEdit ? 'Redigera Produkt' : 'Ny Produkt',
+        content: modalHtml,
+        actions: [
+            { id: 'modal-cancel', text: 'Avbryt', style: 'secondary', handler: closeModal },
+            { id: 'save-product-btn', text: isEdit ? 'Uppdatera' : 'Skapa', style: 'primary', handler: () => saveProductHandler(document.getElementById('save-product-btn'), productId) }
+        ]
     });
 }
 

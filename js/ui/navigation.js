@@ -8,24 +8,25 @@ import { showToast, closeModal } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
-import { renderProductsPage } from './products.js';
+import { renderProductsPage, renderProductForm } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
 import { renderTeamPage } from './team.js';
 import { renderSettingsPage } from './settings.js';
 import { renderRecurringPage, renderRecurringTransactionForm } from './recurring.js';
 import { renderImportPage } from './import.js';
-import { renderInvoicesPage } from './invoices.js';
+import { renderInvoicesPage, renderInvoiceEditor } from './invoices.js';
 import { renderReceiptsPage } from './receipts.js';
 import { renderReportsPage } from './reports.js';
 import { renderBankingPage } from './banking.js';
-import { renderContactsPage, renderContactDetailView } from './contacts.js';
-import { renderQuotesPage } from './quotes.js';
+import { renderContactsPage, renderContactDetailView, renderContactForm } from './contacts.js';
+import { renderQuotesPage, renderQuoteEditor } from './quotes.js';
 import { editors } from './editors.js';
 import { renderMailPage } from './mail.js';
 import { renderMailSettingsPage } from './mail-settings.js';
 import { renderProjectsPage, renderProjectDetailView, renderProjectForm } from './projects.js';
 import { renderTimeTrackingPage, renderTimeEntryForm } from './timetracking.js';
 import { renderTemplatesPage, renderTemplateEditor } from './templates.js';
+import { renderModal } from './components.js';
 
 const pageRenderers = {
     'overview': renderDashboard,
@@ -277,10 +278,14 @@ function handleGlobalSearch() {
 
                 switch (type) {
                     case 'contact':
-                        navigateTo('contacts', id);
+                        renderModal({
+                            title: 'Kontaktinformation',
+                            content: renderContactDetailView(id, true),
+                            actions: [{ id: 'modal-close', text: 'Stäng', style: 'secondary', handler: closeModal }]
+                        });
                         break;
                     case 'invoice':
-                        editors.renderInvoiceEditor(id);
+                        renderInvoiceEditor(id);
                         break;
                     case 'quote':
                         editors.renderQuoteEditor(id);
@@ -289,7 +294,18 @@ function handleGlobalSearch() {
                         editors.renderProductForm(id);
                         break;
                     case 'transaction':
-                        navigateTo('summary');
+                        const transaction = allTransactions.find(t => t.id === id);
+                        renderModal({
+                            title: `Transaktionsdetaljer`,
+                            content: `
+                                <p><strong>Datum:</strong> ${transaction.date}</p>
+                                <p><strong>Beskrivning:</strong> ${transaction.description}</p>
+                                <p><strong>Belopp:</strong> ${transaction.amount} kr</p>
+                                <p><strong>Typ:</strong> ${transaction.type === 'income' ? 'Intäkt' : 'Utgift'}</p>
+                                <p><strong>Kategori:</strong> ${getState().categories.find(c => c.id === transaction.categoryId)?.name || '-'}</p>
+                            `,
+                            actions: [{ id: 'modal-close', text: 'Stäng', style: 'secondary', handler: closeModal }]
+                        });
                         break;
                 }
             });
