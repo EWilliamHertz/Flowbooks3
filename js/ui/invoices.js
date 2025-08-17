@@ -49,7 +49,11 @@ function renderInvoiceList() {
     container.innerHTML = `
         <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
             <h3 class="card-title" style="margin: 0;">Fakturor</h3>
-            <button id="delete-selected-invoices-btn" class="btn btn-danger" style="display: none;">Ta bort valda</button>
+            <div id="bulk-actions-container" style="display: none; gap: 0.5rem;">
+                 <button id="download-selected-invoices-btn" class="btn btn-secondary">Ladda ner valda</button>
+                 <button id="send-selected-invoices-btn" class="btn btn-primary">Skicka valda</button>
+                 <button id="delete-selected-invoices-btn" class="btn btn-danger">Ta bort valda</button>
+            </div>
         </div>
         <table class="data-table" id="invoices-table">
             <thead>
@@ -89,22 +93,31 @@ function attachInvoiceListEventListeners() {
 
     const allCheckbox = document.getElementById('select-all-invoices');
     const checkboxes = document.querySelectorAll('.invoice-select-checkbox');
+    const bulkActionsContainer = document.getElementById('bulk-actions-container');
     const deleteBtn = document.getElementById('delete-selected-invoices-btn');
+    const downloadBtn = document.getElementById('download-selected-invoices-btn');
+    const sendBtn = document.getElementById('send-selected-invoices-btn');
 
-    const toggleDeleteButton = () => {
+    const toggleBulkActions = () => {
         const selected = document.querySelectorAll('.invoice-select-checkbox:checked');
-        deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
-        deleteBtn.textContent = `Ta bort valda (${selected.length})`;
+        if (selected.length > 0) {
+            bulkActionsContainer.style.display = 'flex';
+            deleteBtn.textContent = `Ta bort valda (${selected.length})`;
+            downloadBtn.textContent = `Ladda ner valda (${selected.length})`;
+            sendBtn.textContent = `Skicka valda (${selected.length})`;
+        } else {
+            bulkActionsContainer.style.display = 'none';
+        }
     };
 
     if(allCheckbox){
         allCheckbox.addEventListener('change', (e) => {
             checkboxes.forEach(cb => cb.checked = e.target.checked);
-            toggleDeleteButton();
+            toggleBulkActions();
         });
     }
 
-    checkboxes.forEach(cb => cb.addEventListener('change', toggleDeleteButton));
+    checkboxes.forEach(cb => cb.addEventListener('change', toggleBulkActions));
 
     if(deleteBtn){
         deleteBtn.addEventListener('click', () => {
@@ -126,7 +139,43 @@ function attachInvoiceListEventListeners() {
             }
         });
     }
+
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', async () => {
+            const selectedIds = Array.from(document.querySelectorAll('.invoice-select-checkbox:checked')).map(cb => cb.dataset.id);
+            if (selectedIds.length === 0) return;
+
+            showToast(`Genererar ${selectedIds.length} PDF-filer...`, 'info');
+            for (const id of selectedIds) {
+                await generateInvoicePDF(id, true); // true för att inte anropa .save() direkt
+            }
+        });
+    }
+
+    if (sendBtn) {
+        sendBtn.addEventListener('click', async () => {
+            const selectedIds = Array.from(document.querySelectorAll('.invoice-select-checkbox:checked')).map(cb => cb.dataset.id);
+            if (selectedIds.length === 0) return;
+            
+            showConfirmationModal(async () => {
+                let successCount = 0;
+                let errorCount = 0;
+                showToast(`Påbörjar utskick av ${selectedIds.length} fakturor...`, 'info');
+                
+                for (const id of selectedIds) {
+                    try {
+                        await sendInvoiceByEmail(id, true); // true för tyst läge
+                        successCount++;
+                    } catch (e) {
+                        errorCount++;
+                    }
+                }
+                showToast(`${successCount} fakturor skickades. ${errorCount} misslyckades.`, errorCount > 0 ? 'warning' : 'success');
+            }, "Skicka fakturor", `Är du säker på att du vill skicka ${selectedIds.length} fakturor via e-post?`);
+        });
+    }
 }
+
 
 export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
     const { allInvoices, currentCompany, allContacts } = getState();
@@ -155,7 +204,7 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
         <div class="card" style="margin-top: 1.5rem;">
             <h3 class="card-title">Betalningshistorik</h3>
             <ul class="history-list">
-                ${invoice.payments.map(p => `<li class="history-item"><span>${p.date}</span><span class="text-right green">${p.amount.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</span></li>`).join('')}
+                ${invoice.payments.map(p => `<li class="history-item"><span>${p.date}</span><span class="text-right green">${(p.amount || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</span></li>`).join('')}
             </ul>
         </div>` : '';
 
@@ -164,7 +213,7 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
         <div class="invoice-editor">
             <div class="card">
                 <h3>${invoiceId ? `Faktura #${invoice.invoiceNumber}` : 'Skapa Ny Faktura'}</h3>
-                ${invoice ? `<p><strong>Status:</strong> <span class="invoice-status ${invoice.status}">${invoice.status}</span> | <strong>Återstår att betala:</strong> ${invoice.balance.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p>` : ''}
+                ${invoice ? `<p><strong>Status:</strong> <span class="invoice-status ${invoice.status}">${invoice.status}</span> | <strong>Återstår att betala:</strong> ${(invoice.balance || 0).toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p>` : ''}
                 <div class="invoice-form-grid">
                     <div class="input-group">
                         <label>Kundnamn</label>
@@ -224,6 +273,7 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
     }
 }
 
+// ... (renderInvoiceItems, showProductSelector, updateInvoiceItem, removeInvoiceItem, saveInvoice förblir oförändrade) ...
 function renderInvoiceItems(isLocked = false) {
     const { allProducts } = getState();
     const container = document.getElementById('invoice-items-container');
@@ -237,23 +287,23 @@ function renderInvoiceItems(isLocked = false) {
             const product = allProducts.find(p => p.id === item.productId);
             descriptionFieldHtml = `<a href="#" class="link-to-product" data-product-id="${item.productId}">${item.description}</a>`;
             if (isLocked) {
-                priceFieldHtml = `${item.price.toFixed(2)}`;
+                priceFieldHtml = `${(item.price || 0).toFixed(2)}`;
             } else if (product) {
                 priceFieldHtml = `
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
                         <select class="form-input item-price-select" data-index="${index}">
-                            <option value="business" ${item.priceSelection === 'business' ? 'selected' : ''}>Företag (${product.sellingPriceBusiness.toFixed(2)} kr)</option>
-                            <option value="private" ${item.priceSelection === 'private' ? 'selected' : ''}>Privat (${product.sellingPricePrivate.toFixed(2)} kr)</option>
+                            <option value="business" ${item.priceSelection === 'business' ? 'selected' : ''}>Företag (${(product.sellingPriceBusiness || 0).toFixed(2)} kr)</option>
+                            <option value="private" ${item.priceSelection === 'private' ? 'selected' : ''}>Privat (${(product.sellingPricePrivate || 0).toFixed(2)} kr)</option>
                             <option value="custom" ${item.priceSelection === 'custom' ? 'selected' : ''}>Valfri summa</option>
                         </select>
-                        <input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" ${item.priceSelection !== 'custom' ? 'readonly' : ''}>
+                        <input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price || 0}" ${item.priceSelection !== 'custom' ? 'readonly' : ''}>
                     </div>`;
             } else {
-                priceFieldHtml = `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" placeholder="0.00">`;
+                priceFieldHtml = `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price || 0}" placeholder="0.00">`;
             }
         } else {
             descriptionFieldHtml = isLocked ? item.description : `<input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning">`;
-            priceFieldHtml = isLocked ? item.price.toFixed(2) : `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" placeholder="0.00">`;
+            priceFieldHtml = isLocked ? (item.price || 0).toFixed(2) : `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price || 0}" placeholder="0.00">`;
         }
         
         quantityFieldHtml = isLocked ? item.quantity : `<input type="number" class="form-input item-quantity" data-index="${index}" value="${item.quantity}" style="width: 80px;">`;
@@ -265,13 +315,13 @@ function renderInvoiceItems(isLocked = false) {
             <td>${quantityFieldHtml}</td>
             <td style="min-width: ${isLocked ? 'auto' : '320px'};">${priceFieldHtml}</td>
             <td>${vatFieldHtml}</td>
-            <td class="text-right">${(item.quantity * item.price).toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</td>
+            <td class="text-right">${((item.quantity || 0) * (item.price || 0)).toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</td>
             <td>${deleteButtonHtml}</td>
         </tr>`;
     }).join('');
 
-    const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-    const totalVat = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
+    const subtotal = invoiceItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0)), 0);
+    const totalVat = invoiceItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0) * ((item.vatRate || 0) / 100)), 0);
     const grandTotal = subtotal + totalVat;
     
     container.innerHTML = `
@@ -436,6 +486,7 @@ async function saveInvoice(btn, invoiceId, status) {
     }, confirmTitle, confirmMessage);
 }
 
+
 function showPaymentModal(invoiceId) {
     const { allInvoices } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
@@ -445,7 +496,7 @@ function showPaymentModal(invoiceId) {
         <div class="modal-overlay">
             <div class="modal-content">
                 <h3>Registrera Betalning för Faktura #${invoice.invoiceNumber}</h3>
-                <p>Återstående belopp: <strong>${invoice.balance.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</strong></p>
+                <p>Återstående belopp: <strong>${(invoice.balance || 0).toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</strong></p>
                 <form id="payment-form">
                     <div class="input-group">
                         <label>Betalningsdatum</label>
@@ -453,7 +504,7 @@ function showPaymentModal(invoiceId) {
                     </div>
                     <div class="input-group">
                         <label>Belopp</label>
-                        <input id="payment-amount" type="number" step="0.01" class="form-input" value="${invoice.balance}" max="${invoice.balance}">
+                        <input id="payment-amount" type="number" step="0.01" class="form-input" value="${invoice.balance || 0}" max="${invoice.balance || 0}">
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
@@ -529,7 +580,7 @@ async function registerPayment(invoiceId) {
 }
 
 
-export async function generateInvoicePDF(invoiceId) {
+export async function generateInvoicePDF(invoiceId, silent = false) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
     if (!invoice) {
@@ -539,25 +590,38 @@ export async function generateInvoicePDF(invoiceId) {
 
     const doc = new jsPDF();
     await createPdfContent(doc, invoice, currentCompany);
-    doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
+    if (!silent) {
+        doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
+    } else {
+        // För massnedladdning simulerar vi ett klick för varje PDF
+        const pdfDataUri = doc.output('datauristring');
+        const link = document.createElement('a');
+        link.href = pdfDataUri;
+        link.download = `Faktura-${invoice.invoiceNumber}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 }
 
-export async function sendInvoiceByEmail(invoiceId) {
+export async function sendInvoiceByEmail(invoiceId, silent = false) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
     if (!invoice) {
-        showToast("Kunde inte hitta fakturadata.", "error");
-        return;
+        if (!silent) showToast("Kunde inte hitta fakturadata.", "error");
+        throw new Error("Faktura ej hittad");
     }
     if (!invoice.customerEmail) {
-        showToast("Fakturan har ingen e-postadress kopplad till kunden.", "warning");
-        return;
+        if (!silent) showToast("Fakturan har ingen e-postadress kopplad till kunden.", "warning");
+        throw new Error("E-postadress saknas");
     }
 
     const sendBtn = document.getElementById('email-btn');
-    const originalText = sendBtn.textContent;
-    sendBtn.disabled = true;
-    sendBtn.textContent = 'Skickar...';
+    const originalText = sendBtn ? sendBtn.textContent : '';
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Skickar...';
+    }
 
     try {
         const doc = new jsPDF();
@@ -566,6 +630,7 @@ export async function sendInvoiceByEmail(invoiceId) {
 
         await sendInvoiceWithAttachmentFunc({
             to: invoice.customerEmail,
+            companyId: currentCompany.id, // Skicka med aktivt companyId
             subject: `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`,
             body: `<p>Hej,</p><p>Här kommer faktura #${invoice.invoiceNumber}.</p><p>Den finns bifogad i detta mail.</p><p>Vänligen bortse från detta meddelande om betalning redan är gjord.</p><br><p>Med vänliga hälsningar,</p><p>${currentCompany.name}</p>`,
             attachments: [{
@@ -574,20 +639,25 @@ export async function sendInvoiceByEmail(invoiceId) {
                 contentType: 'application/pdf'
             }]
         });
-        showToast('E-postmeddelande har skickats!', 'success');
+        if (!silent) showToast('E-postmeddelande har skickats!', 'success');
     } catch (error) {
         console.error("Kunde inte skicka e-post:", error);
-        showToast('Kunde inte skicka e-post. Kontrollera dina e-postinställningar.', 'error');
+        if (!silent) showToast('Kunde inte skicka e-post. Kontrollera dina e-postinställningar.', 'error');
+        throw error; // Kasta felet vidare för massutskick
     } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = originalText;
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = originalText;
+        }
     }
 }
 
 async function createPdfContent(doc, invoice, company) {
+    // Logotyp
     if (company.logoUrl) {
         try {
-            const response = await fetch(company.logoUrl);
+            // Använder en proxy för att undvika CORS-problem om möjligt
+            const response = await fetch(`https://cors-anywhere.herokuapp.com/${company.logoUrl}`);
             const blob = await response.blob();
             const logoBase64 = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -595,11 +665,16 @@ async function createPdfContent(doc, invoice, company) {
                 reader.onerror = reject;
                 reader.readAsDataURL(blob);
             });
+            
+            // Kontrollera filtyp
+            const extension = company.logoUrl.split('.').pop().toLowerCase();
+            const format = ['jpg', 'jpeg'].includes(extension) ? 'JPEG' : 'PNG';
+            
             const imgProps = doc.getImageProperties(logoBase64);
             const aspectRatio = imgProps.height / imgProps.width;
             const logoWidth = 40;
             const logoHeight = logoWidth * aspectRatio;
-            doc.addImage(logoBase64, 'PNG', 15, 12, logoWidth, logoHeight);
+            doc.addImage(logoBase64, format, 15, 12, logoWidth, logoHeight);
         } catch (e) {
             console.error("Kunde inte ladda logotyp:", e);
             doc.setFontSize(18);
@@ -610,9 +685,11 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(company.name || 'FlowBooks', 15, 20);
     }
     
+    // Rubrik
     doc.setFontSize(22);
     doc.text('Faktura', 200, 20, { align: 'right' });
 
+    // Adresser
     doc.setFontSize(10);
     let startY = 50;
     doc.text(`Från:`, 15, startY);
@@ -630,6 +707,7 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(invoice.customerEmail, 130, startY += 5);
     }
     
+    // Fakturainfo
     startY += 10;
     doc.text(`Fakturanummer:`, 130, startY);
     doc.text(`${invoice.invoiceNumber}`, 200, startY, { align: 'right' });
@@ -640,12 +718,13 @@ async function createPdfContent(doc, invoice, company) {
     doc.text(invoice.dueDate, 200, startY, { align: 'right' });
     doc.setFont(undefined, 'normal');
 
+    // Tabell med rader
     const tableBody = invoice.items.map(item => [
         item.description,
         item.quantity,
-        item.price.toFixed(2),
+        (item.price || 0).toFixed(2),
         `${item.vatRate}%`,
-        (item.quantity * item.price * (1 + item.vatRate/100)).toFixed(2)
+        (item.quantity * (item.price || 0) * (1 + (item.vatRate || 0)/100)).toFixed(2)
     ]);
 
     doc.autoTable({
@@ -665,6 +744,7 @@ async function createPdfContent(doc, invoice, company) {
 
     const finalY = doc.autoTable.previous.finalY;
     
+    // Summering
     const summaryX = 130;
     let summaryY = finalY + 10;
     doc.setFontSize(10);
@@ -680,7 +760,7 @@ async function createPdfContent(doc, invoice, company) {
     doc.setFont(undefined, 'normal');
 
     if(invoice.payments && invoice.payments.length > 0) {
-        const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
+        const totalPaid = invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0);
         doc.text(`Betalt:`, summaryX, summaryY += 7);
         doc.text(`-${totalPaid.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}`, 200, summaryY, { align: 'right' });
         
@@ -689,6 +769,7 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(`${(invoice.balance || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}`, 200, summaryY, { align: 'right' });
     }
     
+    // Fotnot
     let finalYWithTotals = summaryY + 15;
     if (invoice.notes) {
         doc.setFontSize(9);

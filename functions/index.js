@@ -1,4 +1,4 @@
-// functions/index.js - KORRIGERAD OCH KOMPLETT VERSION
+// functions/index.js
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
@@ -13,10 +13,7 @@ admin.initializeApp();
 const db = admin.firestore();
 const fieldValue = admin.firestore.FieldValue;
 
-// ===================================
-//  Configuration
-// ===================================
-
+// ... (Alla andra funktioner som encrypt, decrypt, listInbox etc. förblir oförändrade) ...
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const IV_LENGTH = 16;
 const OAUTH_REDIRECT_URI = `https://us-central1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/handleGoogleAuthCallback`;
@@ -138,22 +135,30 @@ exports.sendEmail = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
     return { success: true };
 });
 
+// UPPDATERAD FUNKTION
 exports.sendInvoiceWithAttachment = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
-    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
-    const { to, subject, body, attachments } = data;
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+    }
+    
+    // Hämta companyId från datan som skickas från frontend
+    const { to, subject, body, attachments, companyId } = data;
 
-    if (!to || !subject || !body || !attachments || attachments.length === 0) {
-        throw new functions.https.HttpsError("invalid-argument", "To, subject, body, and attachments are required.");
+    if (!to || !subject || !body || !attachments || attachments.length === 0 || !companyId) {
+        throw new functions.https.HttpsError("invalid-argument", "To, subject, body, companyId, and attachments are required.");
     }
     
     const userDoc = await db.collection("users").doc(context.auth.uid).get();
-    if (!userDoc.exists) { throw new functions.https.HttpsError("unauthenticated", "User not found."); }
+    if (!userDoc.exists) {
+        throw new functions.https.HttpsError("unauthenticated", "User not found.");
+    }
 
-    const companyId = userDoc.data().companyId;
+    // Använd det companyId som skickades med för att hämta rätt inställningar
     const settings = await getMailSettings(context.auth.uid, companyId);
     if (!settings) { 
         throw new functions.https.HttpsError("not-found", "No mail settings found for this user. Please configure your email account first."); 
     }
+    
     const password = decrypt(settings.encryptedPassword);
 
     const transporter = nodemailer.createTransport({ 
@@ -182,6 +187,7 @@ exports.sendInvoiceWithAttachment = functions.runWith({ secrets: ["ENCRYPTION_KE
     return { success: true };
 });
 
+// ... (Resten av dina funktioner, t.ex. sendInvoiceReminders, AI-funktioner, etc., förblir oförändrade) ...
 // ===================================
 //  Invoice Reminder Scheduler
 // ===================================
