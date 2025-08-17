@@ -138,6 +138,50 @@ exports.sendEmail = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
     return { success: true };
 });
 
+exports.sendInvoiceWithAttachment = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
+    if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
+    const { to, subject, body, attachments } = data;
+
+    if (!to || !subject || !body || !attachments || attachments.length === 0) {
+        throw new functions.https.HttpsError("invalid-argument", "To, subject, body, and attachments are required.");
+    }
+    
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    if (!userDoc.exists) { throw new functions.https.HttpsError("unauthenticated", "User not found."); }
+
+    const companyId = userDoc.data().companyId;
+    const settings = await getMailSettings(context.auth.uid, companyId);
+    if (!settings) { 
+        throw new functions.https.HttpsError("not-found", "No mail settings found for this user. Please configure your email account first."); 
+    }
+    const password = decrypt(settings.encryptedPassword);
+
+    const transporter = nodemailer.createTransport({ 
+        host: settings.smtp.host, 
+        port: settings.smtp.port, 
+        secure: true, 
+        auth: { 
+            user: settings.username, 
+            pass: password 
+        } 
+    });
+
+    const mailOptions = {
+        from: `"${userDoc.data().firstName} ${userDoc.data().lastName}" <${settings.username}>`,
+        to,
+        subject,
+        html: body,
+        attachments: attachments.map(att => ({
+            filename: att.filename,
+            content: Buffer.from(att.content, 'base64'),
+            contentType: att.contentType || 'application/pdf'
+        }))
+    };
+    
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+});
+
 // ===================================
 //  Invoice Reminder Scheduler
 // ===================================

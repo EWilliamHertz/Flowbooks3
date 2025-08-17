@@ -5,10 +5,12 @@ import { showToast, renderSpinner, showConfirmationModal, closeModal } from './u
 import { doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 import { editors } from './editors.js';
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
 const { jsPDF } = window.jspdf;
 let invoiceItems = [];
 let sourceTimeEntryIds = [];
+const sendInvoiceWithAttachmentFunc = httpsCallable(getFunctions(), 'sendInvoiceWithAttachment');
 
 export function renderInvoicesPage() {
     const mainView = document.getElementById('main-view');
@@ -218,7 +220,7 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Skickad'));
     } else {
         document.getElementById('pdf-btn').addEventListener('click', () => generateInvoicePDF(invoiceId));
-        document.getElementById('email-btn').addEventListener('click', () => sendByEmail(invoiceId));
+        document.getElementById('email-btn').addEventListener('click', () => sendInvoiceByEmail(invoiceId));
     }
 }
 
@@ -540,28 +542,46 @@ export async function generateInvoicePDF(invoiceId) {
     doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
 }
 
-export function sendByEmail(invoiceId) {
+export async function sendInvoiceByEmail(invoiceId) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
     if (!invoice) {
         showToast("Kunde inte hitta fakturadata.", "error");
         return;
     }
+    if (!invoice.customerEmail) {
+        showToast("Fakturan har ingen e-postadress kopplad till kunden.", "warning");
+        return;
+    }
 
-    showConfirmationModal(async () => {
+    const sendBtn = document.getElementById('email-btn');
+    const originalText = sendBtn.textContent;
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Skickar...';
+
+    try {
         const doc = new jsPDF();
         await createPdfContent(doc, invoice, currentCompany);
-        const pdfBlob = doc.output('blob');
-        const reader = new FileReader();
-        reader.readAsDataURL(pdfBlob);
-        reader.onloadend = function() {
-            const base64data = reader.result;
-            const subject = `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`;
-            const body = `Hej,\n\nHär kommer faktura #${invoice.invoiceNumber}.\nDen finns bifogad i detta mail.\n\nMed vänliga hälsningar,\n${currentCompany.name}`;
-            const mailtoLink = `mailto:${invoice.customerEmail || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            window.location.href = mailtoLink;
-        }
-    }, "Förbered E-post", "Ett nytt e-postmeddelande kommer att öppnas med kundens e-post ifylld. Du kommer behöva bifoga den nedladdade PDF-filen manuellt.");
+        const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+        await sendInvoiceWithAttachmentFunc({
+            to: invoice.customerEmail,
+            subject: `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`,
+            body: `<p>Hej,</p><p>Här kommer faktura #${invoice.invoiceNumber}.</p><p>Den finns bifogad i detta mail.</p><p>Vänligen bortse från detta meddelande om betalning redan är gjord.</p><br><p>Med vänliga hälsningar,</p><p>${currentCompany.name}</p>`,
+            attachments: [{
+                filename: `Faktura-${invoice.invoiceNumber}.pdf`,
+                content: pdfBase64,
+                contentType: 'application/pdf'
+            }]
+        });
+        showToast('E-postmeddelande har skickats!', 'success');
+    } catch (error) {
+        console.error("Kunde inte skicka e-post:", error);
+        showToast('Kunde inte skicka e-post. Kontrollera dina e-postinställningar.', 'error');
+    } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = originalText;
+    }
 }
 
 async function createPdfContent(doc, invoice, company) {
@@ -673,348 +693,8 @@ async function createPdfContent(doc, invoice, company) {
     if (invoice.notes) {
         doc.setFontSize(9);
         doc.setFont(undefined, 'normal');
-        doc.text("Kommentarer & Villkor:", 15, finalYWithTotals);
         const splitNotes = doc.splitTextToSize(invoice.notes, 185);
+        doc.text("Kommentarer & Villkor:", 15, finalYWithTotals);
         doc.text(splitNotes, 15, finalYWithTotals + 5);
     }
-}"""))
-print(file_manager.write_file(path='ewilliamhertz/flowbooks3/Flowbooks3-afe948005a1fbfbc73d825bcf9756701bbf024c3/js/ui/contacts.js', content="""// js/ui/contacts.js
-import { getState } from '../state.js';
-import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
-import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
-import { editors } from './editors.js';
-import { writeBatch, doc } from 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js';
-import { db } from '../../firebase-config.js';
-
-export function renderContactsPage() {
-    const mainView = document.getElementById('main-view');
-    mainView.innerHTML = `
-        <div class="card">
-            <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                 <h3 class="card-title" style="margin: 0;">Kontakter</h3>
-                 <div>
-                    <button id="email-selected-btn" class="btn btn-secondary" style="display: none; margin-right: 10px;">Skicka e-post till valda</button>
-                    <button id="delete-selected-contacts-btn" class="btn btn-danger" style="display: none;">Ta bort valda</button>
-                 </div>
-            </div>
-            <p>Hantera dina kunder och leverantörer. Klicka på en kontakt för att se detaljerad historik.</p>
-            <div id="contacts-list-container" style="margin-top: 1.5rem;"></div>
-        </div>
-    `;
-    renderContactsList();
-}
-
-function renderContactsList() {
-    const { allContacts } = getState();
-    const container = document.getElementById('contacts-list-container');
-    if (!container) return;
-
-    const rows = allContacts.map(contact => `
-        <tr data-contact-id="${contact.id}" style="cursor: pointer;">
-            <td><input type="checkbox" class="contact-select-checkbox" data-id="${contact.id}" data-email="${contact.email || ''}" onclick="event.stopPropagation();"></td>
-            <td><strong>${contact.name}</strong></td>
-            <td>${contact.type === 'customer' ? 'Kund' : 'Leverantör'}</td>
-            <td>${contact.orgNumber || '-'}</td>
-            <td>${contact.email || '-'}</td>
-        </tr>
-    `).join('');
-
-    container.innerHTML = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th><input type="checkbox" id="select-all-contacts"></th>
-                    <th>Namn</th>
-                    <th>Typ</th>
-                    <th>Org.nr / Personnr.</th>
-                    <th>E-post</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${allContacts.length > 0 ? rows : '<tr><td colspan="5" class="text-center">Du har inte lagt till några kontakter än.</td></tr>'}
-            </tbody>
-        </table>
-    `;
-    
-    container.querySelectorAll('tbody tr').forEach(row => {
-        row.addEventListener('click', () => {
-            window.navigateTo('Kontakter', row.dataset.contactId);
-        });
-    });
-
-    const allCheckbox = document.getElementById('select-all-contacts');
-    const checkboxes = document.querySelectorAll('.contact-select-checkbox');
-    const emailBtn = document.getElementById('email-selected-btn');
-    const deleteBtn = document.getElementById('delete-selected-contacts-btn');
-
-    const toggleActionButtons = () => {
-        const selected = document.querySelectorAll('.contact-select-checkbox:checked');
-        emailBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
-        deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
-        if(selected.length > 0) {
-            deleteBtn.textContent = `Ta bort valda (${selected.length})`;
-        }
-    };
-
-    if(allCheckbox){
-        allCheckbox.addEventListener('change', (e) => {
-            checkboxes.forEach(cb => cb.checked = e.target.checked);
-            toggleActionButtons();
-        });
-    }
-
-    checkboxes.forEach(cb => cb.addEventListener('change', toggleActionButtons));
-
-    if(emailBtn){
-        emailBtn.addEventListener('click', () => {
-            const selectedEmails = Array.from(document.querySelectorAll('.contact-select-checkbox:checked'))
-                .map(cb => cb.dataset.email)
-                .filter(email => email);
-            
-            if (selectedEmails.length > 0) {
-                window.location.href = `mailto:?bcc=${selectedEmails.join(',')}`;
-            } else {
-                showToast("Inga kontakter med e-postadresser valda.", "warning");
-            }
-        });
-    }
-
-    if(deleteBtn){
-        deleteBtn.addEventListener('click', () => {
-            const selectedIds = Array.from(document.querySelectorAll('.contact-select-checkbox:checked')).map(cb => cb.dataset.id);
-            if (selectedIds.length > 0) {
-                showConfirmationModal(async () => {
-                    const batch = writeBatch(db);
-                    selectedIds.forEach(id => {
-                        batch.delete(doc(db, 'contacts', id));
-                    });
-                    await batch.commit();
-                    await fetchAllCompanyData();
-                    renderContactsList();
-                    showToast(`${selectedIds.length} kontakter har tagits bort!`, 'success');
-                }, "Ta bort kontakter", `Är du säker på att du vill ta bort ${selectedIds.length} kontakter permanent?`);
-            }
-        });
-    }
-}
-
-export function renderContactDetailView(contactId) {
-    const { allContacts, allInvoices, allQuotes, allTransactions, allTimeEntries } = getState();
-    const contact = allContacts.find(c => c.id === contactId);
-    
-    if (!contact) {
-        window.navigateTo('Kontakter');
-        return;
-    }
-
-    const mainView = document.getElementById('main-view');
-    mainView.innerHTML = renderSpinner();
-
-    const contactInvoices = allInvoices.filter(i => i.customerName === contact.name);
-    const contactQuotes = allQuotes.filter(q => q.customerName === contact.name);
-    const contactTransactions = allTransactions.filter(t => t.party === contact.name);
-    const unbilledEntries = allTimeEntries.filter(e => e.contactId === contactId && !e.isBilled);
-
-    const invoiceRows = contactInvoices.map(i => `<li data-id="${i.id}" data-type="invoice"><a href="#">Faktura #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString('sv-SE')} kr (${i.status})</li>`).join('');
-    const quoteRows = contactQuotes.map(q => `<li data-id="${q.id}" data-type="quote"><a href="#">Offert #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString('sv-SE')} kr (${q.status})</li>`).join('');
-    const transactionRows = contactTransactions.map(t => `<li class="${t.type === 'income' ? 'green' : 'red'}">${t.date}: ${t.description} - ${t.amount.toLocaleString('sv-SE')} kr</li>`).join('');
-    
-    const invoiceTimeBtn = unbilledEntries.length > 0 ? `<button class="btn btn-success" id="invoice-unbilled-contact-time">Fakturera Obetald Tid (${unbilledEntries.length})</button>` : '';
-
-    const detailHtml = `
-        <div class="contact-detail-header" data-contact-id="${contact.id}">
-            <div style="margin-bottom: 2rem;">
-                <h2>${contact.name}</h2>
-                <p style="color: var(--text-color-light);">${contact.type === 'customer' ? 'Kund' : 'Leverantör'} | ${contact.email || 'Ingen e-post'} | ${contact.orgNumber || 'Inget org.nr'}</p>
-            </div>
-            <div style="display: flex; gap: 1rem;">
-                ${invoiceTimeBtn}
-                <button class="btn btn-secondary btn-edit-contact">Redigera</button>
-                <button class="btn btn-danger btn-delete-contact">Ta bort</button>
-            </div>
-        </div>
-        <div class="settings-grid">
-            <div class="card">
-                <h3 class="card-title">Offerter (${contactQuotes.length})</h3>
-                <ul class="history-list" id="quote-history-list">${quoteRows || '<li>Inga offerter.</li>'}</ul>
-            </div>
-            <div class="card">
-                <h3 class="card-title">Fakturor (${contactInvoices.length})</h3>
-                <ul class="history-list" id="invoice-history-list">${invoiceRows || '<li>Inga fakturor.</li>'}</ul>
-            </div>
-            <div class="card" style="grid-column: 1 / -1;">
-                <h3 class="card-title">Transaktioner (${contactTransactions.length})</h3>
-                <ul class="history-list">${transactionRows || '<li>Inga transaktioner.</li>'}</ul>
-            </div>
-        </div>
-    `;
-
-    mainView.innerHTML = detailHtml;
-    const pageTitleEl = document.querySelector('.page-title');
-    if(pageTitleEl) pageTitleEl.textContent = contact.name;
-    
-    attachContactDetailEventListeners();
-}
-
-function attachContactDetailEventListeners() {
-    const mainView = document.getElementById('main-view');
-
-    mainView.addEventListener('click', e => {
-        const contactId = mainView.querySelector('.contact-detail-header')?.dataset.contactId;
-
-        if (e.target.matches('.btn-edit-contact')) {
-            editors.renderContactForm(contactId);
-        } else if (e.target.matches('.btn-delete-contact')) {
-            editors.deleteContact(contactId);
-        } else if (e.target.id === 'invoice-unbilled-contact-time') {
-            invoiceUnbilledTimeForContact(contactId);
-        }
-        
-        const historyItem = e.target.closest('li[data-id]');
-        if (historyItem) {
-            e.preventDefault();
-            const id = historyItem.dataset.id;
-            const type = historyItem.dataset.type;
-
-            if (type === 'invoice') {
-                editors.renderInvoiceEditor(id);
-            } else if (type === 'quote') {
-                editors.renderQuoteEditor(id);
-            }
-        }
-    });
-}
-
-function invoiceUnbilledTimeForContact(contactId) {
-    const { allTimeEntries, allContacts } = getState();
-    const contact = allContacts.find(c => c.id === contactId);
-    const unbilledEntries = allTimeEntries.filter(e => e.contactId === contactId && !e.isBilled);
-
-    if (unbilledEntries.length === 0) {
-        showToast("Det finns ingen ofakturerad tid för denna kund.", "info");
-        return;
-    }
-
-    const hourlyRate = contact.hourlyRate || 0;
-
-    showConfirmationModal(() => {
-        const invoiceItems = unbilledEntries.map(entry => ({
-            description: `${entry.date}: ${entry.description}`,
-            quantity: entry.hours,
-            price: hourlyRate,
-            vatRate: 25,
-            sourceTimeEntryId: entry.id
-        }));
-
-        const invoiceDataFromTime = {
-            customerName: contact.name,
-            items: invoiceItems,
-            source: 'timetracking',
-            timeEntryIds: unbilledEntries.map(e => e.id)
-        };
-        editors.renderInvoiceEditor(null, invoiceDataFromTime);
-
-    }, "Skapa Faktura?", `Detta kommer att skapa ett fakturautkast med ${unbilledEntries.length} tidsposter för ${contact.name}. Timpriset (${hourlyRate} kr) kommer att användas. Du kan justera pris och detaljer innan du bokför.`);
-}
-
-export function renderContactForm(contactId = null) {
-    const { allContacts } = getState();
-    const contact = contactId ? allContacts.find(c => c.id === contactId) : null;
-    const isEdit = !!contact;
-
-    const modalHtml = `
-        <div class="modal-overlay">
-            <div class="modal-content" onclick="event.stopPropagation()">
-                <h3>${isEdit ? 'Redigera Kontakt' : 'Ny Kontakt'}</h3>
-                <form id="contact-form">
-                    <div class="input-group">
-                        <label>Namn *</label>
-                        <input class="form-input" id="contact-name" value="${contact?.name || ''}" required>
-                    </div>
-                    <div class="input-group">
-                        <label>Typ</label>
-                        <select id="contact-type" class="form-input">
-                            <option value="customer" ${contact?.type === 'customer' ? 'selected' : ''}>Kund</option>
-                            <option value="supplier" ${contact?.type === 'supplier' ? 'selected' : ''}>Leverantör</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label>Timpris (valfritt, används för tidrapportering)</label>
-                        <input class="form-input" id="contact-hourly-rate" type="number" step="0.01" value="${contact?.hourlyRate || ''}" placeholder="0.00">
-                    </div>
-                    <div class="input-group">
-                        <label>Organisationsnummer / Personnummer</label>
-                        <input class="form-input" id="contact-org-number" value="${contact?.orgNumber || ''}">
-                    </div>
-                    <div class="input-group">
-                        <label>E-post</label>
-                        <input class="form-input" id="contact-email" type="email" value="${contact?.email || ''}">
-                    </div>
-                    <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
-                        <button type="submit" class="btn btn-primary">${isEdit ? 'Uppdatera' : 'Skapa'}</button>
-                    </div>
-                </form>
-            </div>
-        </div>`;
-    document.getElementById('modal-container').innerHTML = modalHtml;
-    document.getElementById('modal-cancel').addEventListener('click', closeModal);
-    document.getElementById('contact-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = e.target.querySelector('button[type="submit"]');
-        await saveContactHandler(btn, contactId);
-    });
-}
-
-async function saveContactHandler(btn, contactId) {
-    const contactData = {
-        name: document.getElementById('contact-name').value.trim(),
-        type: document.getElementById('contact-type').value,
-        hourlyRate: parseFloat(document.getElementById('contact-hourly-rate').value) || null,
-        orgNumber: document.getElementById('contact-org-number').value.trim(),
-        email: document.getElementById('contact-email').value.trim(),
-    };
-
-    if (!contactData.name) {
-        showToast("Namn är obligatoriskt.", "warning");
-        return;
-    }
-
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Sparar...';
-
-    try {
-        await saveDocument('contacts', contactData, contactId);
-        showToast(`Kontakten har ${contactId ? 'uppdaterats' : 'skapats'}!`, 'success');
-        closeModal();
-        await fetchAllCompanyData();
-        const mainView = document.getElementById('main-view');
-        const isDetailView = mainView.querySelector('.contact-detail-header');
-
-        if (isDetailView) {
-            renderContactDetailView(contactId);
-        } else {
-            renderContactsList();
-        }
-    } catch (error) {
-        console.error("Kunde inte spara kontakt:", error);
-        showToast('Kunde inte spara kontakten.', 'error');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = originalText;
-    }
-}
-
-export function deleteContact(contactId) {
-    showConfirmationModal(async () => {
-        try {
-            await deleteDocument('contacts', contactId);
-            showToast('Kontakten har tagits bort!', 'success');
-            await fetchAllCompanyData();
-            window.navigateTo('Kontakter');
-        } catch (error) {
-            showToast('Kunde inte ta bort kontakten.', 'error');
-        }
-    }, "Ta bort kontakt", "Är du säker på att du vill ta bort denna kontakt permanent?");
 }
