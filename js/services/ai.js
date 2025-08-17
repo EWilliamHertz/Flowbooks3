@@ -196,13 +196,16 @@ export async function getLearnedCategorySuggestion(newTransaction, existingTrans
     if (categories.length === 0) return null;
     const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
+    // Använd de 5 senaste transaktionerna från samma motpart som exempel
     const examples = existingTransactions
         .filter(t => t.categoryId && t.party && t.party.toLowerCase() === newTransaction.party.toLowerCase())
+        .sort((a,b) => new Date(b.date) - new Date(a.date))
         .slice(0, 5) 
         .map(t => `- Transaktionen "${t.description}" från "${t.party}" kategoriserades som "${categoryMap.get(t.categoryId)}".`)
         .join('\n');
 
     if (examples.length === 0) {
+        // Fallback till enklare AI-anrop om inga historiska exempel finns
         return getCategorySuggestion(newTransaction);
     }
 

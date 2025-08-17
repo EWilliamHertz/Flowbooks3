@@ -1,10 +1,11 @@
 // js/ui/banking.js
 import { getState, setState } from '../state.js';
-import { renderSpinner, showToast } from './utils.js';
+import { renderSpinner, showToast, showConfirmationModal } from './utils.js';
 import { renderTransactionForm } from './transactions.js';
 import { saveDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { doc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js';
 import { db } from '../../firebase-config.js';
+import { getLearnedCategorySuggestion, getCategorySuggestion } from '../services/ai.js';
 
 // --- (Befintlig kod för Tink-anslutning förblir oförändrad) ---
 const EXCHANGE_TOKEN_URL = 'https://tink-exchange-token-226642349583.europe-west1.run.app';
@@ -25,7 +26,7 @@ export function renderBankingPage() {
         </div>`;
 
     document.getElementById('connect-bank-btn').addEventListener('click', redirectToTink);
-    
+
     handleTinkCallback();
 }
 
@@ -139,28 +140,35 @@ function renderAccountAndTransactionViews() {
     }
 }
 
-function renderTransactionsForAccount(accountId) {
+async function renderTransactionsForAccount(accountId) {
     const container = document.getElementById('transaction-list-container');
-    const { bankTransactions, allInvoices, allTransactions } = getState();
-    
-    // Hitta alla transaktioner i bokföringen som redan är matchade mot en banktransaktion
+    const { bankTransactions, allInvoices, allTransactions, categories } = getState();
+
     const matchedBankTransactionIds = allTransactions
         .map(t => t.matchedBankTransactionId)
         .filter(Boolean);
 
     const transactionsForAccount = bankTransactions
-        .filter(t => t.accountId === accountId && !matchedBankTransactionIds.includes(t.id)) // Visa bara o-matchade
+        .filter(t => t.accountId === accountId && !matchedBankTransactionIds.includes(t.id))
         .sort((a, b) => new Date(b.dates.booked) - new Date(a.dates.booked));
-    
-    // --- Logik för matchningsförslag ---
+
+    // Försök hitta AI-förslag för utgifter (DEBIT)
+    const transactionsWithAI = await Promise.all(transactionsForAccount.map(async t => {
+        if (t.type === 'DEBIT') {
+            const suggestion = await getLearnedCategorySuggestion({ description: t.descriptions.display, party: t.descriptions.display }, allTransactions);
+            const categoryName = categories.find(c => c.id === suggestion)?.name;
+            return { ...t, aiCategorySuggestion: categoryName, aiCategoryId: suggestion };
+        }
+        return t;
+    }));
+
     const unpaidInvoices = allInvoices.filter(i => i.status === 'Skickad' || i.status === 'Delvis betald');
-    
-    const rows = transactionsForAccount.map(t => {
+
+    const rows = transactionsWithAI.map(t => {
         const amount = t.amount.value;
-        const type = t.type; // CREDIT (inkomst) eller DEBIT (utgift)
+        const type = t.type;
         let statusHtml = '';
 
-        // Försök hitta en matchande faktura (endast för inkomster)
         if (type === 'CREDIT') {
             const potentialMatch = unpaidInvoices.find(inv => inv.balance === amount);
             if (potentialMatch) {
@@ -171,12 +179,19 @@ function renderTransactionsForAccount(accountId) {
                         <button class="btn btn-sm btn-success btn-confirm-match" data-invoice-id="${potentialMatch.id}" data-bank-tx-id="${t.id}">Godkänn</button>
                     </div>`;
             }
+        } else if (t.aiCategorySuggestion) {
+            statusHtml = `
+                <div class="match-suggestion">
+                    <span class="badge badge-owner">AI-förslag</span>
+                    <span>Kategori: ${t.aiCategorySuggestion}</span>
+                    <button class="btn btn-sm btn-success btn-ai-match" data-bank-tx-id="${t.id}" data-category-id="${t.aiCategoryId}">Godkänn & Bokför</button>
+                </div>`;
         }
-        
+
         if (!statusHtml) {
-             statusHtml = `<button class="btn btn-sm btn-primary btn-book-manually" data-bank-tx-id="${t.id}">Bokför</button>`;
+            statusHtml = `<button class="btn btn-sm btn-primary btn-book-manually" data-bank-tx-id="${t.id}">Bokför manuellt</button>`;
         }
-        
+
         return `<tr>
                     <td>${t.dates.booked}</td>
                     <td>${t.descriptions.display}</td>
@@ -211,16 +226,58 @@ function attachReconciliationEventListeners() {
             const bankTxId = e.target.dataset.bankTxId;
             const { bankTransactions } = getState();
             const bankTx = bankTransactions.find(t => t.id === bankTxId);
-            
+
             const type = bankTx.type === 'CREDIT' ? 'income' : 'expense';
             const prefillData = {
                 date: bankTx.dates.booked,
                 description: bankTx.descriptions.display,
                 party: bankTx.descriptions.display,
                 amount: Math.abs(bankTx.amount.value),
-                matchedBankTransactionId: bankTx.id // Spara referens
+                matchedBankTransactionId: bankTx.id
             };
             renderTransactionForm(type, prefillData);
+        });
+    });
+
+    document.querySelectorAll('.btn-ai-match').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const bankTxId = e.target.dataset.bankTxId;
+            const categoryId = e.target.dataset.categoryId;
+            const { bankTransactions, categories } = getState();
+            const bankTx = bankTransactions.find(t => t.id === bankTxId);
+            const categoryName = categories.find(c => c.id === categoryId)?.name;
+
+            const prefillData = {
+                date: bankTx.dates.booked,
+                description: bankTx.descriptions.display,
+                party: bankTx.descriptions.display,
+                amount: Math.abs(bankTx.amount.value),
+                categoryId: categoryId,
+                matchedBankTransactionId: bankTx.id
+            };
+
+            const type = bankTx.type === 'CREDIT' ? 'income' : 'expense';
+            showConfirmationModal(async () => {
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = 'Sparar...';
+                try {
+                    const collectionName = type === 'income' ? 'incomes' : 'expenses';
+                    await saveDocument(collectionName, prefillData);
+                    await fetchAllCompanyData();
+                    const activeAccountId = document.querySelector('.filter-btn.active')?.dataset.accountId;
+                    if(activeAccountId) {
+                        renderTransactionsForAccount(activeAccountId);
+                    }
+                    showToast("Transaktionen har sparats!", "success");
+                } catch(error) {
+                    console.error("Fel vid sparning av transaktion:", error);
+                    showToast("Kunde inte spara transaktionen.", "error");
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
+            }, "Godkänn AI-förslag", `Är du säker på att du vill bokföra denna transaktion i kategorin "${categoryName}"?`);
         });
     });
 }
@@ -234,22 +291,22 @@ async function confirmInvoiceMatch(invoiceId, bankTxId, buttonElement) {
         showToast("Kunde inte hitta faktura eller transaktion.", "error");
         return;
     }
-    
+
     buttonElement.disabled = true;
     buttonElement.textContent = "Matchar...";
 
     try {
         const paymentAmount = Math.abs(bankTx.amount.value);
         const paymentDate = bankTx.dates.booked;
-        
+
         const newBalance = invoice.balance - paymentAmount;
         const newStatus = newBalance <= 0 ? 'Betald' : 'Delvis betald';
         const newPayment = { date: paymentDate, amount: paymentAmount };
-        
+
         const paymentRatio = paymentAmount / invoice.grandTotal;
         const paymentExclVat = invoice.subtotal * paymentRatio;
         const paymentVatAmount = invoice.totalVat * paymentRatio;
-        
+
         // 1. Skapa inkomstposten
         const incomeData = {
             date: paymentDate,
@@ -261,7 +318,7 @@ async function confirmInvoiceMatch(invoiceId, bankTxId, buttonElement) {
             categoryId: null,
             isCorrection: false,
             generatedFromInvoiceId: invoiceId,
-            matchedBankTransactionId: bankTxId // Koppla till banktransaktionen
+            matchedBankTransactionId: bankTxId
         };
         await saveDocument('incomes', incomeData);
 
@@ -275,7 +332,7 @@ async function confirmInvoiceMatch(invoiceId, bankTxId, buttonElement) {
 
         await fetchAllCompanyData();
         showToast(`Faktura #${invoice.invoiceNumber} har matchats och markerats som betald!`, 'success');
-        
+
         // Rendera om listan
         const activeAccountId = document.querySelector('.filter-btn.active')?.dataset.accountId;
         if(activeAccountId) {
