@@ -125,16 +125,22 @@ function attachInvoiceListEventListeners() {
             if (selectedIds.length > 0) {
                 showConfirmationModal(async () => {
                     const batch = writeBatch(db);
+                    let count = 0;
                     selectedIds.forEach(id => {
                         const invoice = getState().allInvoices.find(inv => inv.id === id);
                         if (invoice && invoice.status === 'Utkast') {
                             batch.delete(doc(db, 'invoices', id));
+                            count++;
                         }
                     });
                     await batch.commit();
                     await fetchAllCompanyData();
                     renderInvoiceList();
-                    showToast(`${selectedIds.length} fakturautkast har tagits bort!`, 'success');
+                    if(count > 0){
+                        showToast(`${count} fakturautkast har tagits bort!`, 'success');
+                    } else {
+                        showToast('Inga utkast valdes för borttagning.', 'info');
+                    }
                 }, "Ta bort fakturor", `Är du säker? Endast fakturor med status "Utkast" kommer att tas bort.`);
             }
         });
@@ -151,12 +157,11 @@ function attachInvoiceListEventListeners() {
             }
         });
     }
-
+    
     if (sendBtn) {
         sendBtn.addEventListener('click', async () => {
             const { allInvoices } = getState();
             const selectedIds = Array.from(document.querySelectorAll('.invoice-select-checkbox:checked')).map(cb => cb.dataset.id);
-            
             const selectedInvoices = selectedIds.map(id => allInvoices.find(inv => inv.id === id)).filter(Boolean);
 
             const invoicesWithEmail = selectedInvoices.filter(inv => inv.customerEmail && inv.status !== 'Utkast');
@@ -170,12 +175,13 @@ function attachInvoiceListEventListeners() {
 
             let confirmationMessage = `Du kommer nu att skicka ${invoicesWithEmail.length} fakturor.`;
             if (invoicesWithoutEmail.length > 0) {
-                confirmationMessage += ` ${invoicesWithoutEmail.length} fakturor kan inte skickas eftersom de saknar e-postadress.`;
+                const names = invoicesWithoutEmail.map(i => `#${i.invoiceNumber} (${i.customerName})`).join(', ');
+                confirmationMessage += `\n\nFöljande ${invoicesWithoutEmail.length} fakturor kan inte skickas eftersom de saknar e-postadress: ${names}.`;
             }
             if (draftInvoices.length > 0) {
-                confirmationMessage += ` ${draftInvoices.length} utkast kommer att ignoreras.`;
+                confirmationMessage += `\n\n${draftInvoices.length} utkast kommer att ignoreras.`;
             }
-            confirmationMessage += " Vill du fortsätta?";
+            confirmationMessage += "\n\nVill du fortsätta?";
 
             showConfirmationModal(async () => {
                 const btn = document.getElementById('send-selected-invoices-btn');
@@ -204,7 +210,6 @@ function attachInvoiceListEventListeners() {
         });
     }
 }
-
 
 export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
     const { allInvoices, currentCompany, allContacts } = getState();
@@ -237,7 +242,6 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
             </ul>
         </div>` : '';
 
-
     mainView.innerHTML = `
         <div class="invoice-editor">
             <div class="card">
@@ -256,7 +260,6 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
                     <div class="input-group"><label>Förfallodatum</label><input id="dueDate" type="date" class="form-input" value="${invoice?.dueDate || today}" ${isLocked ? 'disabled' : ''}></div>
                 </div>
             </div>
-
             <div class="card">
                 <h3 class="card-title">Fakturarader</h3>
                 <div id="invoice-items-container"></div>
@@ -265,14 +268,11 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
                     <button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem; margin-left: 1rem;">+ Lägg till Produkt</button>
                 ` : ''}
             </div>
-            
             ${paymentHistoryHtml}
-            
             <div class="card">
                 <h3 class="card-title">Villkor och Kommentarer</h3>
                 <textarea id="invoice-notes" class="form-input" rows="4" placeholder="T.ex. information om betalningsvillkor..." ${isLocked ? 'disabled' : ''}>${notes}</textarea>
             </div>
-            
             <div class="invoice-actions-footer">
                 <button id="back-btn" class="btn btn-secondary">Tillbaka till översikt</button>
                 ${!isLocked ? `
@@ -298,26 +298,73 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Skickad'));
     } else {
         document.getElementById('pdf-btn').addEventListener('click', () => generateInvoicePDF(invoiceId));
+        document.getElementById('email-btn').addEventListener('click', () => initiateSingleSendProcess(invoiceId));
+    }
+}
+
+async function initiateSingleSendProcess(invoiceId) {
+    const { allInvoices } = getState();
+    const invoice = allInvoices.find(inv => inv.id === invoiceId);
+    const btn = document.getElementById('email-btn');
+    const originalText = btn.textContent;
+
+    const executeSend = async (email) => {
+        btn.disabled = true;
+        btn.textContent = 'Skickar...';
+        try {
+            await sendInvoiceByEmail(invoiceId, email);
+            showToast('E-postmeddelande har skickats!', 'success');
+        } catch (error) {
+            console.error("Kunde inte skicka e-post:", error);
+            showToast('Kunde inte skicka e-post. Kontrollera dina inställningar.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    };
+
+    if (invoice.customerEmail) {
+        showConfirmationModal(() => executeSend(invoice.customerEmail), "Bekräfta utskick", `Är du säker på att du vill skicka faktura #${invoice.invoiceNumber} till ${invoice.customerEmail}?`);
+    } else {
+        const modalContainer = document.getElementById('modal-container');
+        modalContainer.innerHTML = `
+            <div class="modal-overlay">
+                <div class="modal-content">
+                    <h3>E-postadress saknas</h3>
+                    <p>Ange en e-postadress för kunden "${invoice.customerName}" för att skicka fakturan.</p>
+                    <div class="input-group">
+                        <label>E-postadress</label>
+                        <input id="prompt-email-input" type="email" class="form-input" placeholder="kund@exempel.se">
+                    </div>
+                    <div class="modal-actions">
+                        <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
+                        <button id="modal-save-send" class="btn btn-primary">Spara & Skicka</button>
+                    </div>
+                </div>
+            </div>`;
         
-        document.getElementById('email-btn').addEventListener('click', async () => {
-            const btn = document.getElementById('email-btn');
-            const originalText = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = 'Skickar...';
+        document.getElementById('modal-cancel').addEventListener('click', closeModal);
+        document.getElementById('modal-save-send').addEventListener('click', async () => {
+            const newEmail = document.getElementById('prompt-email-input').value.trim();
+            if (!newEmail.includes('@')) {
+                showToast("Ange en giltig e-postadress.", "warning");
+                return;
+            }
 
             try {
-                await sendInvoiceByEmail(invoiceId);
-                showToast('E-postmeddelande har skickats!', 'success');
-            } catch (error) {
-                console.error("Kunde inte skicka e-post:", error);
-                if (error.message === "E-postadress saknas") {
-                    showToast("Fakturan har ingen e-postadress kopplad till kunden.", "warning");
-                } else {
-                    showToast('Kunde inte skicka e-post. Kontrollera dina e-postinställningar.', 'error');
+                await updateDoc(doc(db, 'invoices', invoiceId), { customerEmail: newEmail });
+                
+                const currentInvoices = getState().allInvoices;
+                const index = currentInvoices.findIndex(i => i.id === invoiceId);
+                if (index !== -1) {
+                    currentInvoices[index].customerEmail = newEmail;
                 }
-            } finally {
-                btn.disabled = false;
-                btn.textContent = originalText;
+
+                closeModal();
+                await executeSend(newEmail);
+                renderInvoiceEditor(invoiceId);
+            } catch (error) {
+                showToast("Kunde inte spara e-postadressen.", "error");
             }
         });
     }
@@ -477,8 +524,8 @@ function removeInvoiceItem(event) {
 }
 
 async function saveInvoice(btn, invoiceId, status) {
-    const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-    const totalVat = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
+    const subtotal = invoiceItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0)), 0);
+    const totalVat = invoiceItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0) * ((item.vatRate || 0) / 100)), 0);
     const grandTotal = subtotal + totalVat;
 
     const invoiceData = {
@@ -534,7 +581,6 @@ async function saveInvoice(btn, invoiceId, status) {
         }
     }, confirmTitle, confirmMessage);
 }
-
 
 function showPaymentModal(invoiceId) {
     const { allInvoices } = getState();
@@ -628,7 +674,6 @@ async function registerPayment(invoiceId) {
     }
 }
 
-
 export async function generateInvoicePDF(invoiceId, silent = false) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
@@ -653,14 +698,16 @@ export async function generateInvoicePDF(invoiceId, silent = false) {
     }
 }
 
-export async function sendInvoiceByEmail(invoiceId) {
+export async function sendInvoiceByEmail(invoiceId, emailOverride = null) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
 
     if (!invoice) {
         throw new Error("Kunde inte hitta fakturadata.");
     }
-    if (!invoice.customerEmail) {
+    
+    const recipientEmail = emailOverride || invoice.customerEmail;
+    if (!recipientEmail) {
         throw new Error("E-postadress saknas");
     }
 
@@ -669,7 +716,7 @@ export async function sendInvoiceByEmail(invoiceId) {
     const pdfBase64 = doc.output('datauristring').split(',')[1];
 
     await sendInvoiceWithAttachmentFunc({
-        to: invoice.customerEmail,
+        to: recipientEmail,
         companyId: currentCompany.id,
         subject: `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`,
         body: `<p>Hej,</p><p>Här kommer faktura #${invoice.invoiceNumber}.</p><p>Den finns bifogad i detta mail.</p><p>Vänligen bortse från detta meddelande om betalning redan är gjord.</p><br><p>Med vänliga hälsningar,</p><p>${currentCompany.name}</p>`,

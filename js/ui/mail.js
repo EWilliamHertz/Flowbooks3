@@ -74,9 +74,6 @@ async function renderReadingView(emailUid) {
         const result = await fetchEmailContentFunc({ uid: emailUid });
         const email = result.data;
 
-        // --- FIX for blank email: Escape double quotes for the srcdoc attribute ---
-        const escapedHtml = (email.html || '').replace(/"/g, '&quot;');
-
         container.innerHTML = `
             <div class="email-reading-header">
                 <button id="back-to-inbox-btn" class="btn btn-secondary">&larr; Back to Inbox</button>
@@ -94,10 +91,32 @@ async function renderReadingView(emailUid) {
             </div>
             <hr style="margin: 1rem 0;">
             <div class="email-body">
-                <iframe srcdoc="${escapedHtml}" style="width: 100%; height: 500px; border: none;"></iframe>
-            </div>
+                </div>
         `;
         
+        // **NY, SÄKER METOD FÖR ATT VISA E-POST**
+        const emailBodyContainer = container.querySelector('.email-body');
+        const iframe = document.createElement('iframe');
+        iframe.style.width = '100%';
+        iframe.style.height = '500px';
+        iframe.style.border = 'none';
+        iframe.setAttribute('sandbox', 'allow-same-origin'); // För säkerhet
+
+        const htmlContent = `
+            <html>
+                <head><style>body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; } img { max-width: 100%; height: auto; }</style></head>
+                <body>${email.html || ''}</body>
+            </html>`;
+        
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        iframe.src = URL.createObjectURL(blob);
+        
+        emailBodyContainer.appendChild(iframe);
+        
+        iframe.onload = () => {
+            URL.revokeObjectURL(iframe.src); // Frigör minne
+        };
+
         document.getElementById('back-to-inbox-btn').addEventListener('click', renderInboxView);
         document.getElementById('reply-btn').addEventListener('click', () => {
             const replySubject = `Re: ${email.subject}`;
@@ -117,6 +136,7 @@ async function renderReadingView(emailUid) {
     }
 }
 
+// ... (renderComposeView, sendEmail, generateAIEmail förblir oförändrade) ...
 function renderComposeView(prefill = {}) {
     currentView = 'composing';
     const container = document.getElementById('mail-container');
