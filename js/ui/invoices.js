@@ -1,7 +1,7 @@
 // js/ui/invoices.js
 import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
-import { showToast, renderSpinner, showConfirmationModal, closeModal } from './utils.js';
+import { showToast, renderSpinner, showConfirmationModal, closeModal, showInfoModal } from './utils.js';
 import { doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
 import { editors } from './editors.js';
@@ -150,7 +150,6 @@ function attachInvoiceListEventListeners() {
         downloadBtn.addEventListener('click', async () => {
             const selectedIds = Array.from(document.querySelectorAll('.invoice-select-checkbox:checked')).map(cb => cb.dataset.id);
             if (selectedIds.length === 0) return;
-
             showToast(`Genererar ${selectedIds.length} PDF-filer...`, 'info');
             for (const id of selectedIds) {
                 await generateInvoicePDF(id, true);
@@ -168,10 +167,10 @@ function attachInvoiceListEventListeners() {
             const invoicesWithoutEmail = selectedInvoices.filter(inv => !inv.customerEmail && inv.status !== 'Utkast');
             const draftInvoices = selectedInvoices.filter(inv => inv.status === 'Utkast');
 
-          if (invoicesWithEmail.length === 0) {
-    showInfoModal("Inget att skicka", "Inga av de valda fakturorna kan skickas. De är antingen utkast eller saknar en sparad e-postadress.");
-    return;
-}
+            if (invoicesWithEmail.length === 0) {
+                showInfoModal("Inget att skicka", "Inga av de valda fakturorna kan skickas. De är antingen utkast eller saknar en sparad e-postadress.");
+                return;
+            }
 
             let confirmationMessage = `Du kommer nu att skicka ${invoicesWithEmail.length} fakturor.`;
             if (invoicesWithoutEmail.length > 0) {
