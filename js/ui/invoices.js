@@ -147,31 +147,60 @@ function attachInvoiceListEventListeners() {
 
             showToast(`Genererar ${selectedIds.length} PDF-filer...`, 'info');
             for (const id of selectedIds) {
-                await generateInvoicePDF(id, true); // true för att inte anropa .save() direkt
+                await generateInvoicePDF(id, true);
             }
         });
     }
 
     if (sendBtn) {
         sendBtn.addEventListener('click', async () => {
+            const { allInvoices } = getState();
             const selectedIds = Array.from(document.querySelectorAll('.invoice-select-checkbox:checked')).map(cb => cb.dataset.id);
-            if (selectedIds.length === 0) return;
             
+            const selectedInvoices = selectedIds.map(id => allInvoices.find(inv => inv.id === id)).filter(Boolean);
+
+            const invoicesWithEmail = selectedInvoices.filter(inv => inv.customerEmail && inv.status !== 'Utkast');
+            const invoicesWithoutEmail = selectedInvoices.filter(inv => !inv.customerEmail && inv.status !== 'Utkast');
+            const draftInvoices = selectedInvoices.filter(inv => inv.status === 'Utkast');
+
+            if (invoicesWithEmail.length === 0) {
+                showToast("Inga av de valda fakturorna kan skickas (antingen utkast eller saknar e-post).", "warning");
+                return;
+            }
+
+            let confirmationMessage = `Du kommer nu att skicka ${invoicesWithEmail.length} fakturor.`;
+            if (invoicesWithoutEmail.length > 0) {
+                confirmationMessage += ` ${invoicesWithoutEmail.length} fakturor kan inte skickas eftersom de saknar e-postadress.`;
+            }
+            if (draftInvoices.length > 0) {
+                confirmationMessage += ` ${draftInvoices.length} utkast kommer att ignoreras.`;
+            }
+            confirmationMessage += " Vill du fortsätta?";
+
             showConfirmationModal(async () => {
+                const btn = document.getElementById('send-selected-invoices-btn');
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                
                 let successCount = 0;
                 let errorCount = 0;
-                showToast(`Påbörjar utskick av ${selectedIds.length} fakturor...`, 'info');
                 
-                for (const id of selectedIds) {
+                for (const [index, invoice] of invoicesWithEmail.entries()) {
+                    btn.textContent = `Skickar ${index + 1}/${invoicesWithEmail.length}...`;
                     try {
-                        await sendInvoiceByEmail(id, true); // true för tyst läge
+                        await sendInvoiceByEmail(invoice.id);
                         successCount++;
                     } catch (e) {
+                        console.error(`Failed to send invoice #${invoice.invoiceNumber}:`, e);
                         errorCount++;
                     }
                 }
+                
                 showToast(`${successCount} fakturor skickades. ${errorCount} misslyckades.`, errorCount > 0 ? 'warning' : 'success');
-            }, "Skicka fakturor", `Är du säker på att du vill skicka ${selectedIds.length} fakturor via e-post?`);
+                btn.disabled = false;
+                btn.textContent = originalText;
+                
+            }, "Bekräfta utskick", confirmationMessage);
         });
     }
 }
@@ -269,11 +298,31 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveInvoice(e.target, invoiceId, 'Skickad'));
     } else {
         document.getElementById('pdf-btn').addEventListener('click', () => generateInvoicePDF(invoiceId));
-        document.getElementById('email-btn').addEventListener('click', () => sendInvoiceByEmail(invoiceId));
+        
+        document.getElementById('email-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('email-btn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Skickar...';
+
+            try {
+                await sendInvoiceByEmail(invoiceId);
+                showToast('E-postmeddelande har skickats!', 'success');
+            } catch (error) {
+                console.error("Kunde inte skicka e-post:", error);
+                if (error.message === "E-postadress saknas") {
+                    showToast("Fakturan har ingen e-postadress kopplad till kunden.", "warning");
+                } else {
+                    showToast('Kunde inte skicka e-post. Kontrollera dina e-postinställningar.', 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        });
     }
 }
 
-// ... (renderInvoiceItems, showProductSelector, updateInvoiceItem, removeInvoiceItem, saveInvoice förblir oförändrade) ...
 function renderInvoiceItems(isLocked = false) {
     const { allProducts } = getState();
     const container = document.getElementById('invoice-items-container');
@@ -528,12 +577,12 @@ async function registerPayment(invoiceId) {
     const paymentAmount = parseFloat(document.getElementById('payment-amount').value);
     const paymentDate = document.getElementById('payment-date').value;
 
-    if (isNaN(paymentAmount) || paymentAmount <= 0 || paymentAmount > invoice.balance) {
+    if (isNaN(paymentAmount) || paymentAmount <= 0 || paymentAmount > (invoice.balance || 0)) {
         showToast('Ange ett giltigt belopp.', 'warning');
         return;
     }
 
-    const newBalance = invoice.balance - paymentAmount;
+    const newBalance = (invoice.balance || 0) - paymentAmount;
     const newStatus = newBalance <= 0 ? 'Betald' : 'Delvis betald';
     const newPayment = { date: paymentDate, amount: paymentAmount };
     
@@ -584,16 +633,16 @@ export async function generateInvoicePDF(invoiceId, silent = false) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
     if (!invoice) {
-        showToast("Kunde inte hitta fakturadata.", "error");
+        if (!silent) showToast("Kunde inte hitta fakturadata.", "error");
         return;
     }
 
     const doc = new jsPDF();
     await createPdfContent(doc, invoice, currentCompany);
+    
     if (!silent) {
         doc.save(`Faktura-${invoice.invoiceNumber}.pdf`);
     } else {
-        // För massnedladdning simulerar vi ett klick för varje PDF
         const pdfDataUri = doc.output('datauristring');
         const link = document.createElement('a');
         link.href = pdfDataUri;
@@ -604,60 +653,38 @@ export async function generateInvoicePDF(invoiceId, silent = false) {
     }
 }
 
-export async function sendInvoiceByEmail(invoiceId, silent = false) {
+export async function sendInvoiceByEmail(invoiceId) {
     const { allInvoices, currentCompany } = getState();
     const invoice = allInvoices.find(inv => inv.id === invoiceId);
+
     if (!invoice) {
-        if (!silent) showToast("Kunde inte hitta fakturadata.", "error");
-        throw new Error("Faktura ej hittad");
+        throw new Error("Kunde inte hitta fakturadata.");
     }
     if (!invoice.customerEmail) {
-        if (!silent) showToast("Fakturan har ingen e-postadress kopplad till kunden.", "warning");
         throw new Error("E-postadress saknas");
     }
 
-    const sendBtn = document.getElementById('email-btn');
-    const originalText = sendBtn ? sendBtn.textContent : '';
-    if (sendBtn) {
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Skickar...';
-    }
+    const doc = new jsPDF();
+    await createPdfContent(doc, invoice, currentCompany);
+    const pdfBase64 = doc.output('datauristring').split(',')[1];
 
-    try {
-        const doc = new jsPDF();
-        await createPdfContent(doc, invoice, currentCompany);
-        const pdfBase64 = doc.output('datauristring').split(',')[1];
-
-        await sendInvoiceWithAttachmentFunc({
-            to: invoice.customerEmail,
-            companyId: currentCompany.id, // Skicka med aktivt companyId
-            subject: `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`,
-            body: `<p>Hej,</p><p>Här kommer faktura #${invoice.invoiceNumber}.</p><p>Den finns bifogad i detta mail.</p><p>Vänligen bortse från detta meddelande om betalning redan är gjord.</p><br><p>Med vänliga hälsningar,</p><p>${currentCompany.name}</p>`,
-            attachments: [{
-                filename: `Faktura-${invoice.invoiceNumber}.pdf`,
-                content: pdfBase64,
-                contentType: 'application/pdf'
-            }]
-        });
-        if (!silent) showToast('E-postmeddelande har skickats!', 'success');
-    } catch (error) {
-        console.error("Kunde inte skicka e-post:", error);
-        if (!silent) showToast('Kunde inte skicka e-post. Kontrollera dina e-postinställningar.', 'error');
-        throw error; // Kasta felet vidare för massutskick
-    } finally {
-        if (sendBtn) {
-            sendBtn.disabled = false;
-            sendBtn.textContent = originalText;
-        }
-    }
+    await sendInvoiceWithAttachmentFunc({
+        to: invoice.customerEmail,
+        companyId: currentCompany.id,
+        subject: `Faktura #${invoice.invoiceNumber} från ${currentCompany.name}`,
+        body: `<p>Hej,</p><p>Här kommer faktura #${invoice.invoiceNumber}.</p><p>Den finns bifogad i detta mail.</p><p>Vänligen bortse från detta meddelande om betalning redan är gjord.</p><br><p>Med vänliga hälsningar,</p><p>${currentCompany.name}</p>`,
+        attachments: [{
+            filename: `Faktura-${invoice.invoiceNumber}.pdf`,
+            content: pdfBase64,
+            contentType: 'application/pdf'
+        }]
+    });
 }
 
 async function createPdfContent(doc, invoice, company) {
-    // Logotyp
     if (company.logoUrl) {
         try {
-            // Använder en proxy för att undvika CORS-problem om möjligt
-            const response = await fetch(`https://cors-anywhere.herokuapp.com/${company.logoUrl}`);
+            const response = await fetch(company.logoUrl);
             const blob = await response.blob();
             const logoBase64 = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -665,16 +692,11 @@ async function createPdfContent(doc, invoice, company) {
                 reader.onerror = reject;
                 reader.readAsDataURL(blob);
             });
-            
-            // Kontrollera filtyp
-            const extension = company.logoUrl.split('.').pop().toLowerCase();
-            const format = ['jpg', 'jpeg'].includes(extension) ? 'JPEG' : 'PNG';
-            
             const imgProps = doc.getImageProperties(logoBase64);
             const aspectRatio = imgProps.height / imgProps.width;
             const logoWidth = 40;
             const logoHeight = logoWidth * aspectRatio;
-            doc.addImage(logoBase64, format, 15, 12, logoWidth, logoHeight);
+            doc.addImage(logoBase64, 'PNG', 15, 12, logoWidth, logoHeight);
         } catch (e) {
             console.error("Kunde inte ladda logotyp:", e);
             doc.setFontSize(18);
@@ -685,11 +707,9 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(company.name || 'FlowBooks', 15, 20);
     }
     
-    // Rubrik
     doc.setFontSize(22);
     doc.text('Faktura', 200, 20, { align: 'right' });
 
-    // Adresser
     doc.setFontSize(10);
     let startY = 50;
     doc.text(`Från:`, 15, startY);
@@ -707,7 +727,6 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(invoice.customerEmail, 130, startY += 5);
     }
     
-    // Fakturainfo
     startY += 10;
     doc.text(`Fakturanummer:`, 130, startY);
     doc.text(`${invoice.invoiceNumber}`, 200, startY, { align: 'right' });
@@ -718,7 +737,6 @@ async function createPdfContent(doc, invoice, company) {
     doc.text(invoice.dueDate, 200, startY, { align: 'right' });
     doc.setFont(undefined, 'normal');
 
-    // Tabell med rader
     const tableBody = invoice.items.map(item => [
         item.description,
         item.quantity,
@@ -744,7 +762,6 @@ async function createPdfContent(doc, invoice, company) {
 
     const finalY = doc.autoTable.previous.finalY;
     
-    // Summering
     const summaryX = 130;
     let summaryY = finalY + 10;
     doc.setFontSize(10);
@@ -769,7 +786,6 @@ async function createPdfContent(doc, invoice, company) {
         doc.text(`${(invoice.balance || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}`, 200, summaryY, { align: 'right' });
     }
     
-    // Fotnot
     let finalYWithTotals = summaryY + 15;
     if (invoice.notes) {
         doc.setFontSize(9);
