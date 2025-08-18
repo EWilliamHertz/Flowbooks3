@@ -1,6 +1,6 @@
 // js/ui/mail.js
 import { getState } from '../state.js';
-import { renderSpinner, showToast } from './utils.js';
+import { renderSpinner, showToast, closeModal } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
 const functions = getFunctions();
@@ -26,8 +26,8 @@ async function renderInboxView() {
     const container = document.getElementById('mail-container');
     container.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-            <h3 class="card-title" style="margin:0;">Inbox</h3>
-            <button id="new-mail-btn" class="btn btn-primary">Compose</button>
+            <h3 class="card-title" style="margin:0;">Inkorg</h3>
+            <button id="new-mail-btn" class="btn btn-primary">Skriv nytt</button>
         </div>
         <div id="inbox-list">${renderSpinner()}</div>`;
     
@@ -39,14 +39,14 @@ async function renderInboxView() {
         const inboxList = document.getElementById('inbox-list');
 
         if (!emails || emails.length === 0) {
-            inboxList.innerHTML = "<p>Your inbox is empty.</p>";
+            inboxList.innerHTML = "<p>Din inkorg är tom.</p>";
             return;
         }
 
         inboxList.innerHTML = emails.map(email => `
             <div class="history-item" data-uid="${email.uid}" style="cursor: pointer;">
-                <span><strong>From:</strong> ${email.from}</span>
-                <span>${email.subject || '(No Subject)'}</span>
+                <span><strong>Från:</strong> ${email.from}</span>
+                <span>${email.subject || '(Inget ämne)'}</span>
                 <span style="color: var(--text-color-light);">${new Date(email.date).toLocaleDateString()}</span>
             </div>
         `).join('');
@@ -57,7 +57,7 @@ async function renderInboxView() {
 
     } catch (error) {
         console.error("Could not fetch emails:", error);
-        container.innerHTML = '<p>Could not load emails. Have you configured your account? <a href="#" id="goto-mail-settings">Go to Mail Settings.</a></p>';
+        container.innerHTML = '<p>Kunde inte ladda e-post. Har du konfigurerat ditt konto? <a href="#" id="goto-mail-settings">Gå till E-postinställningar.</a></p>';
         document.getElementById('goto-mail-settings').addEventListener('click', (e) => {
             e.preventDefault();
             window.navigateTo('mail-settings');
@@ -76,31 +76,30 @@ async function renderReadingView(emailUid) {
 
         container.innerHTML = `
             <div class="email-reading-header">
-                <button id="back-to-inbox-btn" class="btn btn-secondary">&larr; Back to Inbox</button>
+                <button id="back-to-inbox-btn" class="btn btn-secondary">&larr; Tillbaka till inkorgen</button>
                 <div class="email-actions">
-                    <button id="reply-btn" class="btn btn-primary">Reply</button>
-                    <button id="forward-btn" class="btn btn-secondary">Forward</button>
+                    <button id="reply-btn" class="btn btn-primary">Svara</button>
+                    <button id="forward-btn" class="btn btn-secondary">Vidarebefordra</button>
                 </div>
             </div>
             <hr style="margin: 1rem 0;">
             <div class="email-meta">
-                <p><strong>From:</strong> ${email.from}</p>
-                <p><strong>To:</strong> ${email.to}</p>
-                <p><strong>Subject:</strong> ${email.subject}</p>
-                <p><strong>Date:</strong> ${new Date(email.date).toLocaleString()}</p>
+                <p><strong>Från:</strong> ${email.from}</p>
+                <p><strong>Till:</strong> ${email.to}</p>
+                <p><strong>Ämne:</strong> ${email.subject}</p>
+                <p><strong>Datum:</strong> ${new Date(email.date).toLocaleString()}</p>
             </div>
             <hr style="margin: 1rem 0;">
             <div class="email-body">
-                </div>
+            </div>
         `;
         
-        // **NY, SÄKER METOD FÖR ATT VISA E-POST**
         const emailBodyContainer = container.querySelector('.email-body');
         const iframe = document.createElement('iframe');
         iframe.style.width = '100%';
         iframe.style.height = '500px';
         iframe.style.border = 'none';
-        iframe.setAttribute('sandbox', 'allow-same-origin'); // För säkerhet
+        iframe.setAttribute('sandbox', 'allow-same-origin');
 
         const htmlContent = `
             <html>
@@ -114,7 +113,7 @@ async function renderReadingView(emailUid) {
         emailBodyContainer.appendChild(iframe);
         
         iframe.onload = () => {
-            URL.revokeObjectURL(iframe.src); // Frigör minne
+            URL.revokeObjectURL(iframe.src);
         };
 
         document.getElementById('back-to-inbox-btn').addEventListener('click', renderInboxView);
@@ -136,47 +135,102 @@ async function renderReadingView(emailUid) {
     }
 }
 
-// ... (renderComposeView, sendEmail, generateAIEmail förblir oförändrade) ...
 function renderComposeView(prefill = {}) {
     currentView = 'composing';
     const container = document.getElementById('mail-container');
-    const { allContacts } = getState();
-    const contactOptions = allContacts.map(c => `<option value="${c.email}">${c.name} (${c.email})</option>`).join('');
-
+    
     container.innerHTML = `
-        <h3>New Email</h3>
+        <h3>Nytt E-postmeddelande</h3>
         <div class="input-group">
-            <label>To</label>
-            <input id="compose-to" type="text" class="form-input" placeholder="Enter email or select from contacts" value="${prefill.to || ''}">
-            <select id="contact-select" class="form-input" style="margin-top: 0.5rem;"><option value="">Or select a contact...</option>${contactOptions}</select>
+            <label>Till</label>
+            <div style="display: flex; gap: 0.5rem;">
+                <input id="compose-to" type="text" class="form-input" placeholder="Ange e-post, separera med kommatecken" value="${prefill.to || ''}" style="flex-grow: 1;">
+                <button id="add-from-contacts-btn" class="btn btn-secondary">Lägg till från kontakter</button>
+            </div>
+            <div id="contacts-dropdown-container" style="position: relative;"></div>
         </div>
         <div class="input-group">
-            <label>Subject</label>
+            <label>Ämne</label>
             <input id="compose-subject" type="text" class="form-input" value="${prefill.subject || ''}">
         </div>
         <div class="input-group">
-             <label>Message</label>
+             <label>Meddelande</label>
              <div id="ai-helper" style="margin-bottom: 0.5rem; display: flex; gap: 0.5rem;">
-                <input id="ai-prompt" type="text" class="form-input" placeholder="AI Assistant: Write a reminder about invoice #123...">
-                <button id="ai-generate-btn" class="btn btn-secondary">Generate</button>
+                <input id="ai-prompt" type="text" class="form-input" placeholder="AI-assistent: Skriv en påminnelse om faktura #123...">
+                <button id="ai-generate-btn" class="btn btn-secondary">Generera</button>
              </div>
             <textarea id="compose-body" class="form-input" rows="12">${prefill.body || ''}</textarea>
         </div>
         <div class="modal-actions">
-            <button id="cancel-compose-btn" class="btn btn-secondary">Cancel</button>
-            <button id="send-mail-btn" class="btn btn-primary">Send Email</button>
+            <button id="cancel-compose-btn" class="btn btn-secondary">Avbryt</button>
+            <button id="send-mail-btn" class="btn btn-primary">Skicka</button>
         </div>
     `;
-
-    document.getElementById('contact-select').addEventListener('change', (e) => {
-        const toField = document.getElementById('compose-to');
-        if (e.target.value) { toField.value += (toField.value ? ',' : '') + e.target.value; }
-    });
-
+    
+    document.getElementById('add-from-contacts-btn').addEventListener('click', showContactsDropdown);
     document.getElementById('cancel-compose-btn').addEventListener('click', renderInboxView);
     document.getElementById('send-mail-btn').addEventListener('click', sendEmail);
     document.getElementById('ai-generate-btn').addEventListener('click', generateAIEmail);
 }
+
+function showContactsDropdown() {
+    const { allContacts } = getState();
+    const container = document.getElementById('contacts-dropdown-container');
+
+    if (container.querySelector('.product-selector-dropdown')) {
+        container.innerHTML = ''; // Close if already open
+        return;
+    }
+
+    const contactItems = allContacts.map(c => `
+        <div class="product-selector-item" style="padding: 0.5rem;">
+            <label style="display: flex; align-items: center; width: 100%; cursor: pointer;">
+                <input type="checkbox" class="contact-select-checkbox" value="${c.email}" style="margin-right: 1rem;">
+                <div class="product-selector-item-info">
+                    <strong>${c.name}</strong>
+                    <span>${c.email}</span>
+                </div>
+            </label>
+        </div>`).join('');
+
+    container.innerHTML = `
+        <div class="product-selector-dropdown show" style="max-height: 250px;">
+            <div style="padding: 0.5rem; position: sticky; top: 0; background: white;">
+                <input type="text" id="contact-search-input" class="form-input" placeholder="Sök kontakter...">
+                <div style="margin-top: 0.5rem; text-align: right;">
+                    <button id="add-selected-contacts-btn" class="btn btn-sm btn-primary">Lägg till valda</button>
+                </div>
+            </div>
+            <div id="contact-list-for-mail">
+                ${contactItems}
+            </div>
+        </div>`;
+
+    document.getElementById('contact-search-input').addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        container.querySelectorAll('.product-selector-item').forEach(item => {
+            const name = item.querySelector('strong')?.textContent.toLowerCase() || '';
+            const email = item.querySelector('span')?.textContent.toLowerCase() || '';
+            item.style.display = (name.includes(searchTerm) || email.includes(searchTerm)) ? 'block' : 'none';
+        });
+    });
+
+    document.getElementById('add-selected-contacts-btn').addEventListener('click', () => {
+        const toField = document.getElementById('compose-to');
+        const selectedEmails = [];
+        container.querySelectorAll('.contact-select-checkbox:checked').forEach(checkbox => {
+            if(checkbox.value) selectedEmails.push(checkbox.value);
+        });
+
+        if (selectedEmails.length > 0) {
+            const existingEmails = toField.value.split(',').map(e => e.trim()).filter(e => e);
+            const newEmails = [...new Set([...existingEmails, ...selectedEmails])]; // Union to avoid duplicates
+            toField.value = newEmails.join(', ');
+        }
+        container.innerHTML = ''; // Close dropdown
+    });
+}
+
 
 async function sendEmail() {
     const btn = document.getElementById('send-mail-btn');
@@ -186,22 +240,22 @@ async function sendEmail() {
         body: document.getElementById('compose-body').value,
     };
     if (!emailData.to || !emailData.subject) {
-        showToast("Recipient and subject are required.", "warning");
+        showToast("Mottagare och ämne är obligatoriskt.", "warning");
         return;
     }
     
     btn.disabled = true;
-    btn.textContent = 'Sending...';
+    btn.textContent = 'Skickar...';
     try {
         await sendEmailFunc(emailData);
-        showToast("Email sent successfully!", "success");
+        showToast("E-postmeddelandet har skickats!", "success");
         renderInboxView();
     } catch (error) {
         console.error("Failed to send email:", error);
-        showToast("Failed to send email. Please check your settings and try again.", "error");
+        showToast("Kunde inte skicka e-post. Kontrollera dina inställningar och försök igen.", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Send Email';
+        btn.textContent = 'Skicka';
     }
 }
 
@@ -209,19 +263,19 @@ async function generateAIEmail() {
     const btn = document.getElementById('ai-generate-btn');
     const prompt = document.getElementById('ai-prompt').value;
     if (!prompt) {
-        showToast("Please enter a prompt for the AI assistant.", "warning");
+        showToast("Vänligen ange en instruktion till AI-assistenten.", "warning");
         return;
     }
     
     btn.disabled = true;
-    btn.textContent = 'Thinking...';
+    btn.textContent = 'Tänker...';
     try {
         const result = await getAIEmailSuggestionFunc({ prompt });
         document.getElementById('compose-body').value = result.data.suggestion;
     } catch (error) {
-        showToast("Could not get AI suggestion.", "error");
+        showToast("Kunde inte hämta AI-förslag.", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Generate';
+        btn.textContent = 'Generera';
     }
 }

@@ -168,10 +168,10 @@ function attachInvoiceListEventListeners() {
             const invoicesWithoutEmail = selectedInvoices.filter(inv => !inv.customerEmail && inv.status !== 'Utkast');
             const draftInvoices = selectedInvoices.filter(inv => inv.status === 'Utkast');
 
-            if (invoicesWithEmail.length === 0) {
-                showToast("Inga av de valda fakturorna kan skickas (antingen utkast eller saknar e-post).", "warning");
-                return;
-            }
+          if (invoicesWithEmail.length === 0) {
+    showInfoModal("Inget att skicka", "Inga av de valda fakturorna kan skickas. De är antingen utkast eller saknar en sparad e-postadress.");
+    return;
+}
 
             let confirmationMessage = `Du kommer nu att skicka ${invoicesWithEmail.length} fakturor.`;
             if (invoicesWithoutEmail.length > 0) {

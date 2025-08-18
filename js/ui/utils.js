@@ -24,7 +24,7 @@ export function showConfirmationModal(onConfirm, titleKey, messageKey) {
         <div class="modal-overlay">
             <div class="modal-content">
                 <h3>${t(titleKey)}</h3>
-                <p>${t(messageKey)}</p>
+                <p style="white-space: pre-wrap;">${t(messageKey)}</p>
                 <div class="modal-actions">
                     <button id="modal-cancel" class="btn btn-secondary">${t('cancel')}</button>
                     <button id="modal-confirm" class="btn btn-primary">${t('confirmAction')}</button>
@@ -40,6 +40,23 @@ export function showConfirmationModal(onConfirm, titleKey, messageKey) {
     };
 }
 
+// NY FUNKTION FÖR TYDLIGA MEDDELANDEN
+export function showInfoModal(title, message) {
+    const container = document.getElementById('modal-container');
+    container.innerHTML = `
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <h3>${title}</h3>
+                <p>${message}</p>
+                <div class="modal-actions">
+                    <button id="modal-close" class="btn btn-primary">OK</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+}
+
+
 export function closeModal() {
     const container = document.getElementById('modal-container');
     if (container) {
@@ -47,11 +64,6 @@ export function closeModal() {
     }
 }
 
-/**
- * Konverterar en array av objekt till en CSV-sträng och startar nedladdning.
- * @param {Array<Object>} data - Datan som ska exporteras.
- * @param {string} filename - Filnamnet för CSV-filen.
- */
 export function exportToCSV(data, filename) {
     if (!data || data.length === 0) {
         showToast("Ingen data att exportera.", "warning");
@@ -59,11 +71,11 @@ export function exportToCSV(data, filename) {
     }
 
     const headers = Object.keys(data[0]);
-    const csvRows = [headers.join(',')]; // Lägg till rubrikrad
+    const csvRows = [headers.join(',')];
 
     for (const row of data) {
         const values = headers.map(header => {
-            const escaped = ('' + row[header]).replace(/"/g, '""'); // Hantera citationstecken
+            const escaped = ('' + row[header]).replace(/"/g, '""');
             return `"${escaped}"`;
         });
         csvRows.push(values.join(','));
