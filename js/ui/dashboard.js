@@ -101,7 +101,6 @@ function renderMetricsWidget() {
         </div>
     `;
 }
-//... (resten av dashboard.js är oförändrad förutom renderAllCompaniesDashboard) ...
 
 function renderUnpaidInvoicesWidget() {
     const { allInvoices } = getState();
@@ -191,7 +190,7 @@ function renderChartWidget(canvasId, title, extraClass = '') {
 // ---- CHART RENDERERS ----
 
 function prepareChartData() {
-    const { allIncomes, allExpenses, categories, recurringTransactions } = getState();
+    const { allIncomes, allExpenses, categories, recurringTransactions, allInvoices, allBills } = getState();
     
     const monthlyData = {};
     const monthLabels = Array.from({length: 12}, (_, i) => {
@@ -220,14 +219,42 @@ function prepareChartData() {
     const categoryLabels = Object.keys(categoryData).map(id => 
         id === 'uncategorized' ? 'Okategoriserat' : categories.find(c => c.id === id)?.name || 'Okänd');
     
+    // *** UPPDATERAD KASSAFLÖDESLOGIK ***
     const cashFlowLabels = [];
     const cashFlowData = { income: [], expense: [] };
+    const now = new Date();
+
     for (let i = 0; i < 6; i++) {
-        const d = new Date();
-        d.setMonth(d.getMonth() + i);
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
         cashFlowLabels.push(d.toLocaleString('sv-SE', { month: 'short' }));
-        cashFlowData.income.push(recurringTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0));
-        cashFlowData.expense.push(recurringTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0));
+        const monthKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+
+        // 1. Starta med återkommande transaktioner
+        let monthlyIncome = recurringTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+        let monthlyExpense = recurringTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+
+        // 2. Lägg till obetalda utgående fakturor (pengar in)
+        allInvoices.forEach(inv => {
+            if (inv.status !== 'Betald' && inv.status !== 'Utkast' && inv.dueDate) {
+                const dueDateKey = inv.dueDate.substring(0, 7);
+                if (dueDateKey === monthKey) {
+                    monthlyIncome += inv.balance;
+                }
+            }
+        });
+
+        // 3. Lägg till obetalda inkommande fakturor (pengar ut)
+        allBills.forEach(bill => {
+            if (bill.status !== 'Betald' && bill.dueDate) {
+                const dueDateKey = bill.dueDate.substring(0, 7);
+                if (dueDateKey === monthKey) {
+                    monthlyExpense += bill.balance;
+                }
+            }
+        });
+        
+        cashFlowData.income.push(monthlyIncome);
+        cashFlowData.expense.push(monthlyExpense);
     }
 
     return {
@@ -279,6 +306,7 @@ function renderCashFlowChart() {
     }
 }
 
+// Denna funktion behövs fortfarande för företagsöversikten
 export async function renderAllCompaniesDashboard() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = renderSpinner();
