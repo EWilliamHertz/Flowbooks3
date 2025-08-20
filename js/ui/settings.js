@@ -142,13 +142,36 @@ function renderDashboardSettingsView() {
 }
 
 function renderAccountSettings() {
-    document.getElementById('account-settings').innerHTML = `
-        <div class="card card-danger" style="max-width: 600px; margin: auto;">
-            <h3>${t('deleteAccount')}</h3>
-            <p>${t('deleteAccountDescription')}</p>
-            <button id="delete-account" class="btn btn-danger">${t('deleteMyAccount')}</button>
+    const { currentUser } = getState();
+    const isBypassUser = currentUser.email === 'ernst@hatake.eu';
+    
+    // Användaren med den specifika e-postadressen ser inte 2FA-inställningarna
+    const twoFactorAuthCard = isBypassUser ? '' : `
+        <div class="card">
+            <h3>${t('twoFactorAuthentication')}</h3>
+            <p>${t('twoFactorAuthenticationDescription')}</p>
+            <button id="setup-2fa-btn" class="btn btn-primary" style="margin-top: 1rem;">${t('enable2FA')}</button>
         </div>
     `;
+
+    document.getElementById('account-settings').innerHTML = `
+        <div class="settings-grid" style="max-width: 600px; margin: auto; grid-template-columns: 1fr;">
+            ${twoFactorAuthCard}
+            <div class="card card-danger">
+                <h3>${t('deleteAccount')}</h3>
+                <p>${t('deleteAccountDescription')}</p>
+                <button id="delete-account" class="btn btn-danger">${t('deleteMyAccount')}</button>
+            </div>
+        </div>
+    `;
+
+    if (!isBypassUser) {
+        document.getElementById('setup-2fa-btn').addEventListener('click', () => {
+            showToast("Funktionen för att aktivera 2FA kommer snart!", "info");
+            // Här skulle vi anropa funktionen som startar 2FA-flödet
+        });
+    }
+
     document.getElementById('delete-account').addEventListener('click', deleteAccount);
 }
 

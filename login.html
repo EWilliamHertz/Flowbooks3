@@ -74,7 +74,21 @@
         // Om en verifierad användare redan är inloggad, skicka direkt till appen
         onAuthStateChanged(auth, user => {
             if (user && user.emailVerified) {
-                window.location.href = 'app.html';
+                // Undantag för specifik användare som kringgår 2FA
+                if (user.email === 'ernst@hatake.eu') {
+                    window.location.href = 'app.html';
+                    return;
+                }
+                // För andra användare, kolla om 2FA är aktiverat
+                // Denna logik kommer att byggas ut
+                const is2FAEnabled = user.multiFactor?.enrolledFactors.length > 0;
+                if (is2FAEnabled) {
+                    // Om 2FA är på, men vi är på login-sidan, betyder det att de behöver verifiera.
+                    // För nu, skicka till appen. Senare skickar vi till en verifieringssida.
+                    window.location.href = 'app.html'; 
+                } else {
+                    window.location.href = 'app.html';
+                }
             }
         });
 
@@ -120,7 +134,9 @@
 
                     await auth.signOut();
                 } else {
-                    window.location.href = 'app.html';
+                    // Logiken för att hantera 2FA eller direkt omdirigering finns nu i onAuthStateChanged
+                    // Detta block är tekniskt sett inte nödvändigt längre, men skadar inte.
+                    // Användaren kommer att omdirigeras av onAuthStateChanged-lyssnaren.
                 }
             } catch (error) {
                 console.error("Inloggningsfel:", error.code);
