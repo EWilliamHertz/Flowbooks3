@@ -7,6 +7,9 @@ import { checkNotifications } from './notifications.js';
 import { showToast, closeModal } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
+// Importera kommandopalett-funktioner
+import { initializeCommandPalette, openCommandPalette } from './command-palette.js';
+
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
@@ -75,6 +78,7 @@ export function initializeAppUI() {
     updateProfileIcon();
     setupCompanySelector();
     setupEventListeners();
+    initializeCommandPalette(); // <-- INITIERA KOMMANDOPALETTEN
     checkNotifications();
     navigateTo('allCompaniesOverview');
     document.getElementById('app-container').style.visibility = 'visible';
@@ -212,6 +216,14 @@ function setupEventListeners() {
             searchResults.style.display = 'none';
         }
     });
+
+    // NYTT: Lyssnare för kortkommando
+    document.addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+            event.preventDefault();
+            openCommandPalette();
+        }
+    });
 }
 
 function handleGlobalSearch() {
@@ -289,7 +301,7 @@ function handleGlobalSearch() {
                         });
                         break;
                     case 'invoice':
-                        renderInvoiceEditor(id);
+                        editors.renderInvoiceEditor(id);
                         break;
                     case 'quote':
                         editors.renderQuoteEditor(id);

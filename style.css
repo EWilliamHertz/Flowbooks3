@@ -942,3 +942,77 @@ tr.corrected td { font-style: italic; }
 .tab-content.active {
     display: block;
 }
+/* =================================================================
+   28. Kommandopalett / Snabbsök (NYTT)
+   ================================================================= */
+
+.command-palette-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 15vh;
+    z-index: 3000;
+}
+
+.command-palette {
+    width: 100%;
+    max-width: 600px;
+    background-color: var(--card-background);
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.command-palette-search {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#command-palette-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1.1rem;
+    border: none;
+    outline: none;
+    background: transparent;
+}
+
+.command-palette-results {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.command-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.command-item.selected,
+.command-item:hover {
+    background-color: var(--background-color);
+}
+
+.command-title {
+    font-weight: 500;
+}
+
+.command-category {
+    font-size: 0.8rem;
+    color: var(--text-color-light);
+    background-color: var(--border-color);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+}
