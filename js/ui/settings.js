@@ -7,104 +7,151 @@ import { db, storage, auth } from '../../firebase-config.js';
 import { fetchAllCompanyData, fetchInitialData } from '../services/firestore.js';
 import { renderMailSettingsPage } from './mail-settings.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
+import { t } from '../i18n.js';
 
 export function renderSettingsPage() {
-    const { currentCompany } = getState();
-    const isOwner = currentCompany.role === 'owner';
-
-    const dangerZoneHTML = isOwner ? `
-        <div class="card card-danger">
-            <h3>Danger Zone</h3>
-            <p>This action is irreversible. All associated data (invoices, products, etc.) will be permanently deleted.</p>
-            <button id="delete-company-btn" class="btn btn-danger" style="margin-top: 1rem;">Delete This Company</button>
-        </div>
-    ` : '';
-
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
+        <div class="settings-container">
+            <div class="settings-tabs">
+                <button class="tab-link active" data-tab="company-settings">${t('company')}</button>
+                <button class="tab-link" data-tab="invoice-settings">${t('invoicesAndQuotes')}</button>
+                <button class="tab-link" data-tab="email-settings">${t('email')}</button>
+                <button class="tab-link" data-tab="dashboard-settings">${t('overview')}</button>
+                <button class="tab-link" data-tab="account-settings">${t('account')}</button>
+            </div>
+            <div id="company-settings" class="tab-content active"></div>
+            <div id="invoice-settings" class="tab-content"></div>
+            <div id="email-settings" class="tab-content"></div>
+            <div id="dashboard-settings" class="tab-content"></div>
+            <div id="account-settings" class="tab-content"></div>
+        </div>
+    `;
+
+    renderCompanySettings();
+    renderInvoiceSettings();
+    renderEmailSettings();
+    renderDashboardSettingsView();
+    renderAccountSettings();
+
+    document.querySelectorAll('.tab-link').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.tab-link, .tab-content').forEach(el => el.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
+}
+
+function renderCompanySettings() {
+    const { currentCompany } = getState();
+    const isOwner = currentCompany.role === 'owner';
+    const dangerZoneHTML = isOwner ? `
+        <div class="card card-danger">
+            <h3>${t('dangerZone')}</h3>
+            <p>${t('dangerZoneDescription')}</p>
+            <button id="delete-company-btn" class="btn btn-danger" style="margin-top: 1rem;">${t('deleteThisCompany')}</button>
+        </div>
+    ` : '';
+    document.getElementById('company-settings').innerHTML = `
         <div class="settings-grid">
             <div class="card">
-                <h3>Företagsinformation</h3>
+                <h3>${t('companyInformation')}</h3>
                 <div class="input-group">
-                    <label>Företagsnamn</label>
+                    <label>${t('companyName')}</label>
                     <input id="setting-company" class="form-input" value="${currentCompany.name || ''}">
                 </div>
                 <div class="input-group">
-                    <label>Organisationsnummer</label>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <input id="setting-org-number" class="form-input" value="${currentCompany.orgNumber || ''}" placeholder="T.ex. 556677-8899" style="flex-grow: 1;">
-                        <button id="copy-org-number" class="btn btn-sm btn-secondary" title="Kopiera till urklipp">📋</button>
-                    </div>
+                    <label>${t('organizationNumber')}</label>
+                    <input id="setting-org-number" class="form-input" value="${currentCompany.orgNumber || ''}" placeholder="Eg. 556677-8899">
                 </div>
-                <button id="save-company" class="btn btn-primary">Spara Företagsinfo</button>
+                 <div class="input-group">
+                    <label>${t('bankgiroNumber')}</label>
+                    <input id="setting-bankgiro" class="form-input" value="${currentCompany.bankgiro || ''}" placeholder="Eg. 123-4567">
+                </div>
+                <button id="save-company" class="btn btn-primary">${t('saveCompanyInfo')}</button>
             </div>
-
             <div class="card">
-                <h3>Inställningar för fakturapåminnelser</h3>
-                <p>Aktivera och ställ in automatiska e-postpåminnelser för obetalda fakturor. Kräver fungerande e-postinställningar.</p>
-                <div id="reminder-settings-container">
-                    </div>
-                <button id="save-reminder-settings" class="btn btn-primary" style="margin-top: 1rem;">Spara Påminnelseinställningar</button>
+                <h3>${t('companyLogo')}</h3>
+                <p>${t('usedOnInvoices')}</p>
+                <div class="input-group"><label>${t('uploadFile')}</label><input type="file" id="logo-upload" accept="image/*"></div>
+                <div class="input-group"><label>${t('pasteImageLink')}</label><input id="logo-url" class="form-input" placeholder="https://..." value="${currentCompany.logoUrl || ''}"></div>
+                <button id="save-logo" class="btn btn-primary">${t('saveLogo')}</button>
             </div>
-            
-            <div class="card">
-                <h3>Inställningar för Översikt</h3>
-                <p>Välj vilka vyer som ska visas på din översiktssida.</p>
-                <div id="dashboard-settings-container"></div>
-                <button id="save-dashboard-settings" class="btn btn-primary" style="margin-top: 1rem;">Spara Översiktsval</button>
-            </div>
-
-            <div class="card">
-                <h3>E-postklient Inställningar</h3>
-                <p>Anslut ditt företags e-postkonto för att skicka och ta emot e-post direkt från FlowBooks.</p>
-                <button id="manage-mail-btn" class="btn btn-secondary" style="margin-top: 1rem;">Hantera E-postkonton</button>
-            </div>
-
-            <div class="card">
-                <h3>Utgiftskategorier</h3>
-                <p>Hantera de kategorier som används för att klassificera dina utgifter.</p>
-                <button id="manage-categories-btn" class="btn btn-secondary" style="margin-top: 1rem;">Hantera Kategorier</button>
-            </div>
-
-            <div class="card">
-                <h3>Företagslogotyp</h3>
-                <p>Används på fakturor.</p>
-                <div class="input-group"><label>Ladda upp fil</label><input type="file" id="logo-upload" accept="image/*"></div>
-                <div class="input-group"><label>Eller klistra in bildlänk</label><input id="logo-url" class="form-input" placeholder="https://..." value="${currentCompany.logoUrl || ''}"></div>
-                <button id="save-logo" class="btn btn-primary">Spara Logotyp</button>
-            </div>
-            
-            <div class="card">
-                <h3>Standardtext för Fakturor</h3>
-                <p>Denna text (t.ex. betalningsvillkor) läggs automatiskt till på alla nya fakturor.</p>
-                <div class="input-group"><textarea id="setting-invoice-text" class="form-input" rows="4">${currentCompany.defaultInvoiceText || ''}</textarea></div>
-                <button id="save-invoice-text" class="btn btn-primary">Spara Standardtext</button>
-            </div>
-
-            <div class="card card-danger">
-                <h3>Ta bort konto</h3>
-                <p>Din användare raderas permanent. Företagsdata påverkas inte.</p>
-                <button id="delete-account" class="btn btn-danger">Ta bort mitt konto</button>
+             <div class="card">
+                <h3>${t('expenseCategories')}</h3>
+                <p>${t('manageExpenseCategories')}</p>
+                <button id="manage-categories-btn" class="btn btn-secondary" style="margin-top: 1rem;">${t('manageCategories')}</button>
             </div>
             ${dangerZoneHTML}
-        </div>`;
-    
-    renderDashboardSettings();
-    renderReminderSettings();
+        </div>
+    `;
     document.getElementById('save-company').addEventListener('click', saveCompanyInfo);
     document.getElementById('save-logo').addEventListener('click', saveCompanyLogo);
-    document.getElementById('delete-account').addEventListener('click', deleteAccount);
     document.getElementById('manage-categories-btn').addEventListener('click', renderCategoryManagerModal);
-    document.getElementById('copy-org-number').addEventListener('click', copyOrgNumber);
-    document.getElementById('save-invoice-text').addEventListener('click', saveInvoiceDefaultText);
-    document.getElementById('manage-mail-btn').addEventListener('click', renderMailSettingsPage);
-    document.getElementById('save-dashboard-settings').addEventListener('click', saveDashboardSettings);
-    document.getElementById('save-reminder-settings').addEventListener('click', saveReminderSettings);
-    
     if (isOwner) {
         document.getElementById('delete-company-btn').addEventListener('click', handleDeleteCompany);
     }
 }
+
+function renderInvoiceSettings() {
+    const { currentCompany } = getState();
+    document.getElementById('invoice-settings').innerHTML = `
+        <div class="settings-grid">
+             <div class="card">
+                <h3>${t('defaultInvoiceText')}</h3>
+                <p>${t('defaultInvoiceTextDescription')}</p>
+                <div class="input-group"><textarea id="setting-invoice-text" class="form-input" rows="4">${currentCompany.defaultInvoiceText || ''}</textarea></div>
+                <button id="save-invoice-text" class="btn btn-primary">${t('saveDefaultText')}</button>
+            </div>
+            <div class="card">
+                <h3>${t('invoiceReminderSettings')}</h3>
+                <p>${t('invoiceReminderSettingsDescription')}</p>
+                <div id="reminder-settings-container"></div>
+                <button id="save-reminder-settings" class="btn btn-primary" style="margin-top: 1rem;">${t('saveReminderSettings')}</button>
+            </div>
+        </div>
+    `;
+    renderReminderSettings();
+    document.getElementById('save-invoice-text').addEventListener('click', saveInvoiceDefaultText);
+    document.getElementById('save-reminder-settings').addEventListener('click', saveReminderSettings);
+}
+
+function renderEmailSettings() {
+    document.getElementById('email-settings').innerHTML = `
+        <div class="card" style="max-width: 600px; margin: auto;">
+            <h3>${t('emailClientSettings')}</h3>
+            <p>${t('emailClientSettingsDescription')}</p>
+            <button id="manage-mail-btn" class="btn btn-secondary" style="margin-top: 1rem;">${t('manageEmailAccounts')}</button>
+        </div>
+    `;
+    document.getElementById('manage-mail-btn').addEventListener('click', renderMailSettingsPage);
+}
+
+function renderDashboardSettingsView() {
+    document.getElementById('dashboard-settings').innerHTML = `
+        <div class="card">
+            <h3>${t('overviewSettings')}</h3>
+            <p>${t('overviewSettingsDescription')}</p>
+            <div id="dashboard-settings-container"></div>
+            <button id="save-dashboard-settings" class="btn btn-primary" style="margin-top: 1rem;">${t('saveOverviewSettings')}</button>
+        </div>
+    `;
+    renderDashboardSettings();
+    document.getElementById('save-dashboard-settings').addEventListener('click', saveDashboardSettings);
+}
+
+function renderAccountSettings() {
+    document.getElementById('account-settings').innerHTML = `
+        <div class="card card-danger" style="max-width: 600px; margin: auto;">
+            <h3>${t('deleteAccount')}</h3>
+            <p>${t('deleteAccountDescription')}</p>
+            <button id="delete-account" class="btn btn-danger">${t('deleteMyAccount')}</button>
+        </div>
+    `;
+    document.getElementById('delete-account').addEventListener('click', deleteAccount);
+}
+
 
 function renderReminderSettings() {
     const { currentCompany } = getState();
@@ -114,19 +161,19 @@ function renderReminderSettings() {
     container.innerHTML = `
         <div class="form-check" style="margin-bottom: 1rem;">
             <input type="checkbox" id="reminder-enabled" ${settings.enabled ? 'checked' : ''}>
-            <label for="reminder-enabled"><strong>Aktivera automatiska påminnelser</strong></label>
+            <label for="reminder-enabled"><strong>${t('enableAutomaticReminders')}</strong></label>
         </div>
         <div class="input-group">
             <input type="checkbox" id="reminder-before" ${settings.before ? 'checked' : ''}>
-            <label for="reminder-before">Skicka <input type="number" id="reminder-days-before" value="${settings.daysBefore || 3}" style="width: 60px;"> dagar innan förfallodatum.</label>
+            <label for="reminder-before">${t('send')} <input type="number" id="reminder-days-before" value="${settings.daysBefore || 3}" style="width: 60px;"> ${t('daysBeforeDueDate')}</label>
         </div>
         <div class="input-group">
             <input type="checkbox" id="reminder-on" ${settings.on ? 'checked' : ''}>
-            <label for="reminder-on">Skicka på förfallodagen.</label>
+            <label for="reminder-on">${t('sendOnDueDate')}</label>
         </div>
         <div class="input-group">
             <input type="checkbox" id="reminder-after" ${settings.after ? 'checked' : ''}>
-            <label for="reminder-after">Skicka <input type="number" id="reminder-days-after" value="${settings.daysAfter || 7}" style="width: 60px;"> dagar efter förfallodatum.</label>
+            <label for="reminder-after">${t('send')} <input type="number" id="reminder-days-after" value="${settings.daysAfter || 7}" style="width: 60px;"> ${t('daysAfterDueDate')}</label>
         </div>
     `;
 }
@@ -145,18 +192,18 @@ async function saveReminderSettings() {
     };
     
     btn.disabled = true;
-    btn.textContent = 'Sparar...';
+    btn.textContent = t('saving');
 
     try {
         await updateDoc(doc(db, 'companies', currentCompany.id), { reminderSettings: newSettings });
         setState({ currentCompany: { ...currentCompany, reminderSettings: newSettings } });
-        showToast('Påminnelseinställningar sparade!', 'success');
+        showToast('reminderSettingsSaved', 'success');
     } catch (error) {
         console.error("Fel vid sparning av påminnelseinställningar:", error);
-        showToast("Kunde inte spara inställningarna.", "error");
+        showToast("couldNotSaveSettings", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Spara Påminnelseinställningar';
+        btn.textContent = t('saveReminderSettings');
     }
 }
 
@@ -165,12 +212,12 @@ function renderDashboardSettings() {
     const container = document.getElementById('dashboard-settings-container');
     
     const allWidgets = {
-        metrics: 'Nyckeltal (Intäkter, Utgifter, Resultat)',
-        cashFlow: 'Kassaflödesprognos',
-        categoryExpenses: 'Utgifter per Kategori',
-        incomeVsExpense: 'Intäkter vs Utgifter',
-        unpaidInvoices: 'Obetalda Fakturor',
-        topProducts: 'Toppsäljande Produkter'
+        metrics: 'keyFigures',
+        cashFlow: 'cashFlowForecast',
+        categoryExpenses: 'expensesByCategory',
+        incomeVsExpense: 'incomeVsExpenses',
+        unpaidInvoices: 'unpaidInvoices',
+        topProducts: 'topSellingProducts'
     };
 
     const currentSettings = currentCompany.dashboardSettings || {
@@ -184,7 +231,7 @@ function renderDashboardSettings() {
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" value="${key}" id="check-${key}" ${currentSettings[key] ? 'checked' : ''}>
                 <label class="form-check-label" for="check-${key}">
-                    ${allWidgets[key]}
+                    ${t(allWidgets[key])}
                 </label>
             </div>
         `;
@@ -202,29 +249,19 @@ async function saveDashboardSettings() {
     });
 
     btn.disabled = true;
-    btn.textContent = 'Sparar...';
+    btn.textContent = t('saving');
 
     try {
         await updateDoc(doc(db, 'companies', currentCompany.id), { dashboardSettings: newSettings });
         setState({ currentCompany: { ...currentCompany, dashboardSettings: newSettings } });
-        showToast('Inställningar för översikt har sparats!', 'success');
+        showToast('overviewSettingsSaved', 'success');
     } catch (error) {
         console.error("Fel vid sparning av översiktsinställningar:", error);
-        showToast("Kunde inte spara inställningarna.", "error");
+        showToast("couldNotSaveSettings", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Spara Översiktsval';
+        btn.textContent = t('saveOverviewSettings');
     }
-}
-
-// ... (Resten av settings.js, t.ex. saveCompanyInfo, saveCompanyLogo, etc. förblir oförändrad)
-function copyOrgNumber() {
-    const orgNumberInput = document.getElementById('setting-org-number');
-    navigator.clipboard.writeText(orgNumberInput.value).then(() => {
-        showToast("Organisationsnummer kopierat!", "success");
-    }).catch(err => {
-        showToast("Kunde inte kopiera.", "error");
-    });
 }
 
 async function saveInvoiceDefaultText() {
@@ -233,18 +270,18 @@ async function saveInvoiceDefaultText() {
     const { currentCompany } = getState();
 
     btn.disabled = true;
-    btn.textContent = 'Sparar...';
+    btn.textContent = t('saving');
 
     try {
         await updateDoc(doc(db, 'companies', currentCompany.id), { defaultInvoiceText: defaultText });
         setState({ currentCompany: { ...currentCompany, defaultInvoiceText: defaultText } });
-        showToast('Standardtext för fakturor har sparats!', 'success');
+        showToast('defaultInvoiceTextSaved', 'success');
     } catch (error) {
         console.error("Fel vid sparning av standardtext:", error);
-        showToast("Kunde inte spara texten.", "error");
+        showToast("couldNotSaveText", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Spara Standardtext';
+        btn.textContent = t('saveDefaultText');
     }
 }
 
@@ -254,8 +291,8 @@ function renderCategoryManagerModal() {
         <li class="category-manager-item" data-id="${cat.id}">
             <span>${cat.name}</span>
             <div class="actions">
-                <button class="btn btn-sm btn-secondary btn-edit-cat">Redigera</button>
-                <button class="btn btn-sm btn-danger btn-delete-cat">Ta bort</button>
+                <button class="btn btn-sm btn-secondary btn-edit-cat">${t('edit')}</button>
+                <button class="btn btn-sm btn-danger btn-delete-cat">${t('delete')}</button>
             </div>
         </li>
     `).join('');
@@ -263,22 +300,22 @@ function renderCategoryManagerModal() {
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content">
-                <h3>Hantera Utgiftskategorier</h3>
-                <p>Lägg till, ändra eller ta bort kategorier.</p>
+                <h3>${t('manageExpenseCategories')}</h3>
+                <p>${t('addEditDeleteCategories')}</p>
                 
                 <ul class="category-manager-list">
-                    ${categoryItems.length > 0 ? categoryItems : '<li class="category-manager-item">Inga kategorier har lagts till.</li>'}
+                    ${categoryItems.length > 0 ? categoryItems : `<li class="category-manager-item">${t('noCategoriesAdded')}</li>`}
                 </ul>
 
                 <div class="category-manager-add-form">
                     <div class="input-group">
-                        <input id="new-category-name" class="form-input" placeholder="Nytt kategorinamn...">
+                        <input id="new-category-name" class="form-input" placeholder="${t('newCategoryName')}">
                     </div>
-                    <button id="add-category-btn" class="btn btn-primary">Lägg till</button>
+                    <button id="add-category-btn" class="btn btn-primary">${t('add')}</button>
                 </div>
 
                 <div class="modal-actions" style="margin-top: 1.5rem;">
-                    <button id="modal-close" class="btn btn-secondary">Stäng</button>
+                    <button id="modal-close" class="btn btn-secondary">${t('close')}</button>
                 </div>
             </div>
         </div>
@@ -295,7 +332,7 @@ function renderCategoryManagerModal() {
             const item = e.target.closest('.category-manager-item');
             const categoryId = item.dataset.id;
             const category = categories.find(c => c.id === categoryId);
-            const newName = prompt("Ange nytt namn för kategorin:", category.name);
+            const newName = prompt(t('enterNewCategoryName'), category.name);
             if (newName && newName.trim() !== "") {
                 handleSaveCategory(e.target, categoryId, newName.trim());
             }
@@ -317,13 +354,13 @@ async function handleSaveCategory(btnElement, categoryId = null, newName = null)
     const name = newName || nameInput.value.trim();
 
     if (!name) {
-        showToast("Kategorinamn kan inte vara tomt.", "warning");
+        showToast("categoryNameCannotBeEmpty", "warning");
         return;
     }
     
     const originalText = btnElement.textContent;
     btnElement.disabled = true;
-    btnElement.textContent = 'Sparar...';
+    btnElement.textContent = t('saving');
 
     const data = { name: name, companyId: currentCompany.id };
 
@@ -336,12 +373,12 @@ async function handleSaveCategory(btnElement, categoryId = null, newName = null)
         
         await fetchAllCompanyData();
         renderCategoryManagerModal();
-        showToast("Kategori sparad!", "success");
+        showToast("categorySaved", "success");
         if (!categoryId && nameInput) nameInput.value = '';
 
     } catch (error) {
         console.error("Kunde inte spara kategori:", error);
-        showToast("Kunde inte spara kategorin.", "error");
+        showToast("couldNotSaveCategory", "error");
     } finally {
         btnElement.disabled = false;
         btnElement.textContent = originalText;
@@ -354,12 +391,12 @@ function handleDeleteCategory(categoryId) {
             await deleteDoc(doc(db, 'categories', categoryId));
             await fetchAllCompanyData();
             renderCategoryManagerModal();
-            showToast("Kategorin har tagits bort.", "success");
+            showToast("categoryDeleted", "success");
         } catch (error) {
             console.error("Kunde inte radera kategori:", error);
-            showToast("Kunde inte ta bort kategorin.", "error");
+            showToast("couldNotDeleteCategory", "error");
         }
-    }, "Ta bort kategori", "Är du säker? Detta kan inte ångras.");
+    }, "deleteCategory", "confirmDeleteCategory");
 }
 
 async function saveCompanyInfo() {
@@ -367,32 +404,33 @@ async function saveCompanyInfo() {
     const { currentUser, currentCompany } = getState();
     const newName = document.getElementById('setting-company').value;
     const newOrgNumber = document.getElementById('setting-org-number').value;
+    const newBankgiro = document.getElementById('setting-bankgiro').value;
 
     if (!newName) {
-        showToast("Företagsnamn kan inte vara tomt.", "warning");
+        showToast("companyNameCannotBeEmpty", "warning");
         return;
     }
     
     btn.disabled = true;
-    btn.textContent = "Sparar...";
+    btn.textContent = t('saving');
 
     try {
-        const dataToUpdate = { name: newName, orgNumber: newOrgNumber };
+        const dataToUpdate = { name: newName, orgNumber: newOrgNumber, bankgiro: newBankgiro };
         await updateDoc(doc(db, 'companies', currentCompany.id), dataToUpdate);
         await updateDoc(doc(db, 'users', currentUser.uid), { companyName: newName });
         
         setState({ 
-            currentCompany: { ...currentCompany, name: newName, orgNumber: newOrgNumber },
+            currentCompany: { ...currentCompany, name: newName, orgNumber: newOrgNumber, bankgiro: newBankgiro },
             userData: { ...getState().userData, companyName: newName }
         });
         document.dispatchEvent(new Event('stateUpdated'));
-        showToast('Företagsinformationen är sparad!', 'success');
+        showToast('companyInfoSaved', 'success');
     } catch (error) {
         console.error("Fel vid sparning:", error);
-        showToast("Kunde inte spara.", "error");
+        showToast("couldNotSaveChanges", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = "Spara Företagsinfo";
+        btn.textContent = t('saveCompanyInfo');
     }
 }
 
@@ -406,7 +444,7 @@ async function saveCompanyLogo() {
     let logoUrl = '';
 
     btn.disabled = true;
-    btn.textContent = "Sparar...";
+    btn.textContent = t('saving');
 
     try {
         if (file) {
@@ -415,7 +453,7 @@ async function saveCompanyLogo() {
             logoUrl = await getDownloadURL(storageRef);
         } else if (url) {
             if (!url.match(/\.(jpeg|jpg|gif|png)$/)) {
-                showToast("Ange en direktlänk till en bild (jpg, png, etc).", "error");
+                showToast("invalidImageLink", "error");
                 return;
             }
             logoUrl = url;
@@ -424,13 +462,13 @@ async function saveCompanyLogo() {
         }
         await updateDoc(doc(db, 'companies', currentCompany.id), { logoUrl: logoUrl });
         setState({ currentCompany: { ...currentCompany, logoUrl: logoUrl } });
-        showToast('Logotypen har sparats!', 'success');
+        showToast('logoSaved', 'success');
     } catch (error) {
         console.error("Kunde inte spara logotyp:", error);
-        showToast("Kunde inte spara logotypen.", "error");
+        showToast("couldNotSaveLogo", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = "Spara Logotyp";
+        btn.textContent = t('saveLogo');
     }
 }
 
@@ -439,13 +477,13 @@ async function deleteAccount() {
         try {
             const { currentUser } = getState();
             await auth.currentUser.delete();
-            showToast("Ditt konto har tagits bort.", "info");
+            showToast("accountDeleted", "info");
             window.location.href = 'login.html';
         } catch (error) {
             console.error("Fel vid borttagning:", error);
-            showToast("Kunde inte ta bort kontot. Logga ut och in igen.", "error");
+            showToast("couldNotDeleteAccount", "error");
         }
-    }, "Ta bort konto", "Är du helt säker? Skriv 'RADERA' för att bekräfta.", 'RADERA');
+    }, "deleteAccount", "confirmDeleteAccount", 'DELETE');
 }
 
 function handleDeleteCompany() {
@@ -459,7 +497,7 @@ function handleDeleteCompany() {
             const deleteCompanyFunc = httpsCallable(getFunctions(), 'deleteCompany');
             await deleteCompanyFunc({ companyId: currentCompany.id });
             
-            showToast("Company successfully deleted!", "success");
+            showToast("companyDeleted", "success");
             
             await fetchInitialData(getState().currentUser);
             window.navigateTo('allCompaniesOverview');
@@ -468,8 +506,8 @@ function handleDeleteCompany() {
             console.error("Failed to delete company:", error);
             showToast(error.message, "error");
             btn.disabled = false;
-            btn.textContent = 'Delete This Company';
+            btn.textContent = t('deleteThisCompany');
         }
 
-    }, "Delete Company", `Are you absolutely sure you want to delete "${currentCompany.name}"? This cannot be undone. Type the company name to confirm.`, currentCompany.name);
+    }, "deleteCompany", "confirmDeleteCompany", currentCompany.name);
 }

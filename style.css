@@ -674,6 +674,9 @@ tr.corrected td { font-style: italic; }
     background-color: var(--success-color);
     color: white;
 }
+.btn-success:hover {
+    background-color: #27ae60;
+}
 /* --- 21. Global Search --- */
 .global-search-container {
     position: relative;
@@ -903,4 +906,39 @@ tr.corrected td { font-style: italic; }
 }
 .match-suggestion span {
     font-size: 0.9rem;
+}
+
+/* =================================================================
+   27. Settings Tabs
+   ================================================================= */
+.settings-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 1.5rem;
+}
+
+.tab-link {
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    border: none;
+    background-color: transparent;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-color-light);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px; /* Överlappar den nedre kanten */
+}
+
+.tab-link.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    font-weight: 600;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
 }

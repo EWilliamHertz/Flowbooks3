@@ -240,6 +240,8 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
                 ${invoice.payments.map(p => `<li class="history-item"><span>${p.date}</span><span class="text-right green">${(p.amount || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</span></li>`).join('')}
             </ul>
         </div>` : '';
+    
+    const inventorySyncButton = invoiceId ? `<button id="sync-inventory-btn" class="btn btn-secondary">Synkronisera lager</button>` : '';
 
     mainView.innerHTML = `
         <div class="invoice-editor">
@@ -273,6 +275,7 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
                 <textarea id="invoice-notes" class="form-input" rows="4" placeholder="T.ex. information om betalningsvillkor..." ${isLocked ? 'disabled' : ''}>${notes}</textarea>
             </div>
             <div class="invoice-actions-footer">
+                ${inventorySyncButton}
                 <button id="back-btn" class="btn btn-secondary">Tillbaka till översikt</button>
                 ${!isLocked ? `
                     <button id="save-draft-btn" class="btn btn-secondary">Spara som Utkast</button>
@@ -287,6 +290,10 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
     renderInvoiceItems(isLocked);
     document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('invoices'));
 
+    if (invoiceId) {
+        document.getElementById('sync-inventory-btn').addEventListener('click', () => syncInventoryFromInvoice(invoiceId));
+    }
+    
     if(!isLocked) {
         document.getElementById('add-item-btn').addEventListener('click', () => {
             invoiceItems.push({ productId: null, description: '', quantity: 1, price: 0, vatRate: 25, priceSelection: 'custom' });
@@ -299,6 +306,41 @@ export function renderInvoiceEditor(invoiceId = null, dataFromSource = null) {
         document.getElementById('pdf-btn').addEventListener('click', () => generateInvoicePDF(invoiceId));
         document.getElementById('email-btn').addEventListener('click', () => initiateSingleSendProcess(invoiceId));
     }
+}
+
+async function syncInventoryFromInvoice(invoiceId) {
+    showConfirmationModal(async () => {
+        const { allInvoices, allProducts } = getState();
+        const invoice = allInvoices.find(inv => inv.id === invoiceId);
+        if (!invoice) {
+            showToast("Fakturan hittades inte.", "error");
+            return;
+        }
+
+        const batch = writeBatch(db);
+        const updates = [];
+
+        invoice.items.forEach(item => {
+            if (item.productId) {
+                const product = allProducts.find(p => p.id === item.productId);
+                if (product) {
+                    const newStock = (product.stock || 0) - item.quantity;
+                    const productRef = doc(db, 'products', item.productId);
+                    batch.update(productRef, { stock: newStock });
+                    updates.push(`${product.name}: ${product.stock} -> ${newStock}`);
+                }
+            }
+        });
+        
+        if (updates.length > 0) {
+            await batch.commit();
+            await fetchAllCompanyData();
+            showToast("Lagersaldon har synkroniserats!", "success");
+            showInfoModal("Lageruppdateringar", updates.join('<br>'));
+        } else {
+            showToast("Inga produkter på fakturan att synkronisera.", "info");
+        }
+    }, "Synkronisera Lager", "Detta kommer att justera lagersaldot för alla produkter på denna faktura. Är du säker?");
 }
 
 async function initiateSingleSendProcess(invoiceId) {
@@ -567,6 +609,10 @@ async function saveInvoice(btn, invoiceId, status) {
                 await batch.commit();
             }
 
+            if (status === 'Skickad') {
+                await adjustInventoryOnSave(invoiceItems);
+            }
+
             sourceTimeEntryIds = [];
             await fetchAllCompanyData();
             showToast(status === 'Skickad' ? 'Fakturan har bokförts och låsts!' : 'Utkast sparat!', 'success');
@@ -580,6 +626,29 @@ async function saveInvoice(btn, invoiceId, status) {
         }
     }, confirmTitle, confirmMessage);
 }
+
+async function adjustInventoryOnSave(items) {
+    const { allProducts } = getState();
+    const batch = writeBatch(db);
+    let updated = false;
+
+    items.forEach(item => {
+        if (item.productId) {
+            const product = allProducts.find(p => p.id === item.productId);
+            if (product) {
+                const newStock = (product.stock || 0) - item.quantity;
+                const productRef = doc(db, 'products', item.productId);
+                batch.update(productRef, { stock: newStock });
+                updated = true;
+            }
+        }
+    });
+
+    if (updated) {
+        await batch.commit();
+    }
+}
+
 
 function showPaymentModal(invoiceId) {
     const { allInvoices } = getState();
@@ -763,6 +832,9 @@ async function createPdfContent(doc, invoice, company) {
     doc.text(company.name || '', 15, startY += 5);
     doc.setFont(undefined, 'normal');
     doc.text(`Org.nr: ${company.orgNumber || ''}`, 15, startY += 5);
+    if(company.bankgiro) {
+        doc.text(`Bankgiro: ${company.bankgiro}`, 15, startY += 5);
+    }
 
     startY = 50;
     doc.text('Faktura till:', 130, startY);
