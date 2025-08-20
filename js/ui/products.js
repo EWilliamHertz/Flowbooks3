@@ -4,7 +4,6 @@ import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/f
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
-import { editors } from './editors.js';
 
 let inventoryChartInstance = null;
 
@@ -73,13 +72,13 @@ function attachProductPageEventListeners() {
         if (!productId) return;
 
         if (target.classList.contains('btn-edit-product')) {
-            editors.renderProductForm(productId);
+            renderProductForm(productId);
         } else if (target.classList.contains('btn-delete-product')) {
-            editors.deleteProduct(productId);
+            deleteProduct(productId);
         } else if (target.classList.contains('product-thumbnail')) {
             const productName = target.alt;
             const imageUrl = target.src;
-            editors.showProductImage(imageUrl, productName);
+            showProductImage(imageUrl, productName);
         }
     });
 
@@ -261,13 +260,15 @@ export function renderProductForm(productId = null) {
                 </form>
             </div>
         </div>`;
-    renderModal({
-        title: isEdit ? 'Redigera Produkt' : 'Ny Produkt',
-        content: modalHtml,
-        actions: [
-            { id: 'modal-cancel', text: 'Avbryt', style: 'secondary', handler: closeModal },
-            { id: 'save-product-btn', text: isEdit ? 'Uppdatera' : 'Skapa', style: 'primary', handler: () => saveProductHandler(document.getElementById('save-product-btn'), productId) }
-        ]
+    
+    document.getElementById('modal-container').innerHTML = modalHtml;
+    
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    
+    document.getElementById('product-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        saveProductHandler(btn, productId);
     });
 }
 
