@@ -196,5 +196,8 @@
   "ctaTitle": "Redo att förenkla din bokföring?",
   "ctaSubtitle": "Skapa ett konto och upptäck hur smidigt det kan vara. Det är gratis att komma igång.",
   "ctaButton": "Börja din resa med FlowBooks",
-  "footerText": "© 2025 FlowBooks. Byggt för företagare, av företagare."
+  "footerText": "© 2025 FlowBooks. Byggt för företagare, av företagare.",
+  "twoFactorAuthentication": "Tvåfaktorsautentisering (2FA)",
+"twoFactorAuthenticationDescription": "Skydda ditt konto från obehörig åtkomst genom att kräva en andra verifieringsmetod vid inloggning.",
+"enable2FA": "Aktivera 2FA"
 }

@@ -196,5 +196,8 @@
   "ctaTitle": "Ready to simplify your bookkeeping?",
   "ctaSubtitle": "Create an account and discover how smooth it can be. It's free to get started.",
   "ctaButton": "Start your journey with FlowBooks",
-  "footerText": "© 2025 FlowBooks. Built for entrepreneurs, by entrepreneurs."
+  "footerText": "© 2025 FlowBooks. Built for entrepreneurs, by entrepreneurs.",
+  "twoFactorAuthentication": "Two-Factor Authentication (2FA)",
+"twoFactorAuthenticationDescription": "Protect your account from unauthorized access by requiring a second verification method upon login.",
+"enable2FA": "Enable 2FA"
 }

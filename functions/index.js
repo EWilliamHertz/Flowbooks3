@@ -8,18 +8,80 @@ const nodemailer = require("nodemailer");
 const cors = require("cors")({origin: true});
 const { simpleParser } = require("mailparser");
 const { google } = require("googleapis");
+const speakeasy = require("speakeasy");
+const qrcode = require("qrcode");
 
 admin.initializeApp();
 const db = admin.firestore();
 const fieldValue = admin.firestore.FieldValue;
 
-// ... (Alla andra funktioner som encrypt, decrypt, listInbox etc. förblir oförändrade) ...
+// Du måste ställa in dessa hemligheter i Google Cloud Secret Manager
+// firebase functions:secrets:set ENCRYPTION_KEY
+// firebase functions:secrets:set GOOGLE_CLIENT_ID
+// firebase functions:secrets:set GOOGLE_CLIENT_SECRET
+// firebase functions:secrets:set GEMINI_API_KEY
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const IV_LENGTH = 16;
 const OAUTH_REDIRECT_URI = `https://us-central1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/handleGoogleAuthCallback`;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// ===================================
+//  2FA Functions
+// ===================================
+
+exports.generate2FASecret = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+    }
+    const uid = context.auth.uid;
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userEmail = userDoc.data().email;
+    const companyName = userDoc.data().companyName;
+
+    const secret = speakeasy.generateSecret({
+        name: `FlowBooks (${companyName}:${userEmail})`
+    });
+
+    await db.collection("users").doc(uid).update({
+        twoFactorSecret: secret.base32,
+        twoFactorEnabled: false
+    });
+    
+    const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url);
+
+    return { secret: secret.base32, qrCodeUrl: qrCodeUrl };
+});
+
+exports.verify2FAToken = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+    }
+    
+    const { token } = data;
+    const uid = context.auth.uid;
+    const userDoc = await db.collection("users").doc(uid).get();
+    const secret = userDoc.data().twoFactorSecret;
+
+    if (!secret) {
+        throw new functions.https.HttpsError("failed-precondition", "2FA is not set up for this user.");
+    }
+
+    const verified = speakeasy.totp.verify({
+        secret: secret,
+        encoding: 'base32',
+        token: token
+    });
+
+    if (verified) {
+        if (!userDoc.data().twoFactorEnabled) {
+            await db.collection("users").doc(uid).update({ twoFactorEnabled: true });
+        }
+    }
+
+    return { verified };
+});
 
 // ===================================
 //  Encryption Utilities
@@ -51,7 +113,6 @@ async function getMailSettings(uid, companyId) {
     const settingsRef = db.collection("companies").doc(companyId).collection("mailSettings").doc(uid);
     const settingsDoc = await settingsRef.get();
     if (!settingsDoc.exists) {
-        // Return null instead of throwing an error for the scheduler
         return null;
     }
     return settingsDoc.data();
@@ -135,13 +196,10 @@ exports.sendEmail = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
     return { success: true };
 });
 
-// UPPDATERAD FUNKTION
 exports.sendInvoiceWithAttachment = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
     }
-    
-    // Hämta companyId från datan som skickas från frontend
     const { to, subject, body, attachments, companyId } = data;
 
     if (!to || !subject || !body || !attachments || attachments.length === 0 || !companyId) {
@@ -153,7 +211,6 @@ exports.sendInvoiceWithAttachment = functions.runWith({ secrets: ["ENCRYPTION_KE
         throw new functions.https.HttpsError("unauthenticated", "User not found.");
     }
 
-    // Använd det companyId som skickades med för att hämta rätt inställningar
     const settings = await getMailSettings(context.auth.uid, companyId);
     if (!settings) { 
         throw new functions.https.HttpsError("not-found", "No mail settings found for this user. Please configure your email account first."); 
@@ -187,10 +244,6 @@ exports.sendInvoiceWithAttachment = functions.runWith({ secrets: ["ENCRYPTION_KE
     return { success: true };
 });
 
-// ... (Resten av dina funktioner, t.ex. sendInvoiceReminders, AI-funktioner, etc., förblir oförändrade) ...
-// ===================================
-//  Invoice Reminder Scheduler
-// ===================================
 exports.sendInvoiceReminders = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).pubsub.schedule('every day 09:00').onRun(async (context) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -251,10 +304,6 @@ exports.sendInvoiceReminders = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }
     return null;
 });
 
-// ===================================
-//  AI & Google Integration Functions
-// ===================================
-// (The rest of the functions: getAIEmailSuggestion, getGoogleAuthUrl, etc. remain unchanged)
 exports.getAIEmailSuggestion = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) { throw new functions.https.HttpsError("unauthenticated", "You must be logged in."); }
 
@@ -462,7 +511,6 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
     await batch.commit();
     return { success: true };
 });
-
 
 // ===================================
 //  Existing Banking Functions
