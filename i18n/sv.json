@@ -222,5 +222,7 @@
 
   "twoFactorAuthentication": "Tvåfaktorsautentisering (2FA)",
   "twoFactorAuthenticationDescription": "Skydda ditt konto från obehörig åtkomst genom att kräva en andra verifieringsmetod vid inloggning.",
-  "enable2FA": "Aktivera 2FA"
+  "enable2FA": "Aktivera 2FA",
+"purchaseOrders": "Inköpsordrar",
+  "newPurchaseOrder": "Ny Inköpsorder"
 }

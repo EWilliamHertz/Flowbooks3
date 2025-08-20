@@ -218,5 +218,7 @@
 
   "twoFactorAuthentication": "双重认证 (2FA)",
   "twoFactorAuthenticationDescription": "通过在登录时要求第二次验证来保护您的帐户免受未经授权的访问。",
-  "enable2FA": "启用 2FA"
+  "enable2FA": "启用 2FA",
+  "purchaseOrders": "采购订单",
+  "newPurchaseOrder": "新采购订单"
 }

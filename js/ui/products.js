@@ -23,8 +23,8 @@ export function renderProductsPage() {
                     <th><input type="checkbox" id="select-all-products"></th>
                     <th>Bild</th>
                     <th>Namn</th>
+                    <th>Leverantör</th>
                     <th>Pris Företag (exkl. moms)</th>
-                    <th>Pris Privat</th>
                     <th>Lager</th>
                     <th>Åtgärder</th>
                 </tr>
@@ -35,8 +35,8 @@ export function renderProductsPage() {
                         <td><input type="checkbox" class="product-select-checkbox" data-id="${p.id}"></td>
                         <td>${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" class="product-thumbnail">` : '-'}</td>
                         <td><strong>${p.name}</strong></td>
+                        <td>${p.supplierName || '-'}</td>
                         <td>${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr</td>
-                        <td>${(p.sellingPricePrivate || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${p.stock || 0}</td>
                         <td>
                             <button class="btn btn-sm btn-secondary btn-edit-product">Redigera</button>
@@ -234,15 +234,27 @@ function updateInventoryChart(data) {
 }
 
 export function renderProductForm(productId = null) {
-    const { allProducts } = getState();
+    const { allProducts, allContacts } = getState();
     const product = productId ? allProducts.find(p => p.id === productId) : null;
     const isEdit = !!product;
+
+    const supplierOptions = allContacts
+        .filter(c => c.type === 'supplier')
+        .map(s => `<option value="${s.id}" ${product?.supplierId === s.id ? 'selected' : ''}>${s.name}</option>`)
+        .join('');
+
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <h3>${isEdit ? 'Redigera Produkt' : 'Ny Produkt'}</h3>
                 <form id="product-form">
                     <div class="input-group"><label>Produktnamn *</label><input class="form-input" id="product-name" value="${product?.name || ''}" required></div>
+                    <div class="input-group"><label>Leverantör (valfritt)</label>
+                        <select id="product-supplier" class="form-input">
+                            <option value="">Ingen specifik leverantör</option>
+                            ${supplierOptions}
+                        </select>
+                    </div>
                     <div class="input-group"><label>Bild-URL (valfritt)</label><input class="form-input" id="product-image-url" value="${product?.imageUrl || ''}" placeholder="https://..."></div>
                     <div class="form-grid">
                         <div class="input-group"><label>Inköpspris</label><input class="form-input" id="product-purchase-price" type="number" step="0.01" value="${product?.purchasePrice || ''}" placeholder="0.00"></div>
@@ -273,8 +285,14 @@ export function renderProductForm(productId = null) {
 }
 
 async function saveProductHandler(btn, productId = null) {
+    const { allContacts } = getState();
+    const supplierId = document.getElementById('product-supplier').value;
+    const selectedSupplier = allContacts.find(c => c.id === supplierId);
+
     const productData = {
         name: document.getElementById('product-name').value,
+        supplierId: supplierId || null,
+        supplierName: selectedSupplier ? selectedSupplier.name : null,
         imageUrl: document.getElementById('product-image-url').value,
         purchasePrice: parseFloat(document.getElementById('product-purchase-price').value) || 0,
         stock: parseInt(document.getElementById('product-stock').value) || 0,

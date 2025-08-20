@@ -30,6 +30,7 @@ import { renderProjectsPage, renderProjectDetailView, renderProjectForm } from '
 import { renderTimeTrackingPage, renderTimeEntryForm } from './timetracking.js';
 import { renderTemplatesPage, renderTemplateEditor } from './templates.js';
 import { renderModal } from './components.js';
+import { renderPurchaseOrdersPage, renderPurchaseOrderEditor } from './purchase-orders.js';
 
 const pageRenderers = {
     'overview': renderDashboard,
@@ -47,6 +48,7 @@ const pageRenderers = {
     'import': renderImportPage,
     'invoices': renderInvoicesPage,
     'quotes': renderQuotesPage,
+    'purchaseOrders': renderPurchaseOrdersPage,
     'projects': renderProjectsPage,
     'timetracking': renderTimeTrackingPage,
     'templates': renderTemplatesPage,
@@ -56,8 +58,8 @@ const pageRenderers = {
 };
 
 const menuConfig = {
-    owner: ['allCompaniesOverview', 'overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'recurring', 'templates', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
-    member: ['overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'mail', 'income', 'expenses', 'recurring', 'templates', 'products', 'contacts', 'reports', 'settings'],
+    owner: ['allCompaniesOverview', 'overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'purchaseOrders', 'mail', 'income', 'expenses', 'recurring', 'templates', 'products', 'contacts', 'reports', 'import', 'team', 'settings'],
+    member: ['overview', 'summary', 'projects', 'timetracking', 'quotes', 'invoices', 'purchaseOrders', 'mail', 'income', 'expenses', 'recurring', 'templates', 'products', 'contacts', 'reports', 'settings'],
     readonly: ['overview', 'summary', 'projects', 'reports'],
 };
 
@@ -78,7 +80,7 @@ export function initializeAppUI() {
     updateProfileIcon();
     setupCompanySelector();
     setupEventListeners();
-    initializeCommandPalette(); // <-- INITIERA KOMMANDOPALETTEN
+    initializeCommandPalette(); 
     checkNotifications();
     navigateTo('allCompaniesOverview');
     document.getElementById('app-container').style.visibility = 'visible';
@@ -160,6 +162,11 @@ function renderPageContent(pageKey, id = null) {
             newItemBtn.style.display = 'block';
             newItemBtn.onclick = () => editors.renderQuoteEditor();
             break;
+        case 'purchaseOrders':
+            newItemBtn.textContent = t('newPurchaseOrder');
+            newItemBtn.style.display = 'block';
+            newItemBtn.onclick = () => renderPurchaseOrderEditor();
+            break;
         case 'projects':
             newItemBtn.textContent = 'Nytt Projekt';
             newItemBtn.style.display = 'block';
@@ -217,7 +224,6 @@ function setupEventListeners() {
         }
     });
 
-    // NYTT: Lyssnare för kortkommando
     document.addEventListener('keydown', (event) => {
         if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
             event.preventDefault();

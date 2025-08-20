@@ -222,5 +222,7 @@
 
   "twoFactorAuthentication": "Two-Factor Authentication (2FA)",
   "twoFactorAuthenticationDescription": "Protect your account from unauthorized access by requiring a second verification method upon login.",
-  "enable2FA": "Enable 2FA"
+  "enable2FA": "Enable 2FA",
+  "purchaseOrders": "Purchase Orders",
+  "newPurchaseOrder": "New Purchase Order"
 }

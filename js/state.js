@@ -12,8 +12,9 @@ const state = {
     allExpenses: [],
     allTransactions: [],
     allInvoices: [],
-    allBills: [], // <-- LÄGG TILL DENNA RAD
+    allBills: [],
     allQuotes: [], 
+    allPurchaseOrders: [], // <-- LÄGG TILL DENNA RAD
     recurringTransactions: [],
     categories: [],
     allContacts: [],
