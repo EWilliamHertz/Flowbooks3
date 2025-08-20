@@ -102,5 +102,8 @@
   "startForFree": "Try FlowBooks for free",
   "mailSettingsSaved": "Email account connected successfully!",
   "mailSettingsFailed": "Could not connect. Please check your credentials.",
-  "mailSettingsIncomplete": "Username and password are required."
+  "mailSettingsIncomplete": "Username and password are required.",
+  "projects": "Projects",
+  "timetracking": "Time Tracking",
+  "templates": "Templates"
 }

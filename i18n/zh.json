@@ -97,5 +97,9 @@
   "loginHere": "在此登录",
   "heroTitle": "您的全方位财务副驾驶。",
   "heroSubtitle": "从第一份报价到付款发票和自动记账。FlowBooks 是一个集所有财务功能于一体的AI平台，让您可以专注于自己最擅长的事情。",
-  "startForFree": "免费试用 FlowBooks"
+  "startForFree": "免费试用 FlowBooks",
+  "projects": "项目",
+  "timetracking": "工时记录",
+  "templates": "模板",
+  "mail-settings": "邮箱设置"
 }

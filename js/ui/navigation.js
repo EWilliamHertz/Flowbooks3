@@ -62,7 +62,11 @@ function renderSidebarMenu() {
     const { currentCompany } = getState();
     const role = currentCompany?.role || 'member';
     const allowedPages = menuConfig[role] || menuConfig.member;
-    const menuItems = allowedPages.map(pageKey => `<li><a href="#" data-page="${pageKey}">${t(pageKey)}</a></li>`).join('');
+    const menuItems = allowedPages.map(pageKey => {
+        const translatedText = t(pageKey);
+        const capitalizedText = translatedText.charAt(0).toUpperCase() + translatedText.slice(1);
+        return `<li><a href="#" data-page="${pageKey}">${capitalizedText}</a></li>`;
+    }).join('');
     const navList = document.querySelector('.sidebar-nav ul');
     if (navList) navList.innerHTML = menuItems;
 }

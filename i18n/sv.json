@@ -102,5 +102,8 @@
   "startForFree": "Testa FlowBooks gratis",
   "mailSettingsSaved": "E-postkontot har anslutits!",
   "mailSettingsFailed": "Kunde inte ansluta. Kontrollera dina inloggningsuppgifter.",
-  "mailSettingsIncomplete": "Användarnamn och lösenord är obligatoriskt."
+  "mailSettingsIncomplete": "Användarnamn och lösenord är obligatoriskt.",
+  "projects": "Projekt",
+  "timetracking": "Tidrapportering",
+  "templates": "Mallar"
 }
