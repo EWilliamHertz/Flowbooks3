@@ -6,6 +6,8 @@ import { doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9
 import { db } from '../../firebase-config.js';
 import { editors } from './editors.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
+import { renderBillProcessor } from './bill-processor.js';
+import { getAIBillDetails } from '../services/ai.js';
 
 const { jsPDF } = window.jspdf;
 let invoiceItems = [];
@@ -124,13 +126,71 @@ function renderOutgoingInvoiceList() {
 }
 
 function renderIncomingInvoiceList() {
+    const { allBills } = getState();
     const container = document.getElementById('incoming-invoices');
     if (!container) return;
-    // Detta är en platshållare tills logik för inkommande fakturor finns
+    
+    const rows = allBills.sort((a, b) => new Date(b.invoiceDate) - new Date(a.invoiceDate)).map(bill => `
+         <tr data-bill-id="${bill.id}">
+            <td><span class="invoice-status ${bill.status}">${bill.status}</span></td>
+            <td>${bill.invoiceNumber}</td>
+            <td>${bill.supplierName}</td>
+            <td>${bill.dueDate}</td>
+            <td class="text-right">${(bill.balance || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</td>
+            <td><button class="btn btn-sm btn-secondary">Visa</button></td>
+        </tr>
+    `).join('');
+
     container.innerHTML = `
-        <h3 class="card-title">Inkommande Fakturor (Leverantörsfakturor)</h3>
-        <p>Denna funktion är under utveckling. Här kommer du kunna registrera och hantera fakturor du tar emot från dina leverantörer.</p>
+        <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+             <h3 class="card-title" style="margin: 0;">Inkommande Fakturor (Leverantörsfakturor)</h3>
+             <div style="display: flex; gap: 1rem;">
+                <input type="file" id="bill-upload-input" accept="application/pdf,image/*" style="display: none;">
+                <button id="upload-bill-btn" class="btn btn-primary">Ladda upp Faktura</button>
+             </div>
+        </div>
+        <p>Ladda upp en PDF eller bild av en leverantörsfaktura för att låta AI:n tolka den automatiskt.</p>
+        <table class="data-table" id="bills-table">
+             <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Fakturanr.</th>
+                    <th>Leverantör</th>
+                    <th>Förfallodatum</th>
+                    <th class="text-right">Att Betala</th>
+                    <th>Åtgärder</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${allBills.length > 0 ? rows : '<tr><td colspan="6" class="text-center">Du har inga registrerade leverantörsfakturor.</td></tr>'}
+            </tbody>
+        </table>
     `;
+
+    document.getElementById('upload-bill-btn').addEventListener('click', () => {
+        document.getElementById('bill-upload-input').click();
+    });
+
+    document.getElementById('bill-upload-input').addEventListener('change', handleFileUpload);
+}
+
+async function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const modalContainer = document.getElementById('modal-container');
+    modalContainer.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Analyserar faktura med AI...</h3><p>Detta kan ta en liten stund, särskilt för PDF-filer.</p>${renderSpinner()}</div></div>`;
+    
+    try {
+        const aiData = await getAIBillDetails(file);
+        renderBillProcessor(aiData);
+    } catch (error) {
+        closeModal();
+        showToast(`Kunde inte analysera fakturan: ${error.message}`, "error");
+    }
+
+    // Rensa filinput så man kan ladda upp samma fil igen
+    event.target.value = '';
 }
 
 function attachInvoiceListEventListeners() {

@@ -1,8 +1,34 @@
 // js/services/ai.js
 import { getState } from '../state.js';
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
+const functions = getFunctions();
+const analyzeInvoicePdfFunc = httpsCallable(functions, 'analyzeInvoicePdf');
 const API_KEY = 'AIzaSyC9VG3fpf0VAsKfWgJE60lGWcmH6qObCN0'; // Din API-nyckel
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
+
+
+// NY FUNKTION för att analysera uppladdad leverantörsfaktura (PDF/Bild)
+export async function getAIBillDetails(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const fileBase64 = e.target.result.split(',')[1];
+            try {
+                const result = await analyzeInvoicePdfFunc({ 
+                    fileBase64: fileBase64, 
+                    mimeType: file.type 
+                });
+                resolve(result.data);
+            } catch (error) {
+                console.error("Fel i backend-anrop för fakturaanalys:", error);
+                reject(error);
+            }
+        };
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+    });
+}
 
 /**
  * NY, SMART FUNKTION: Föreslår en komplett produktprofil baserat på ett namn.

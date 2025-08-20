@@ -28,6 +28,77 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // ===================================
+//  NY FUNKTION: PDF-fakturaanalys
+// ===================================
+exports.analyzeInvoicePdf = functions.runWith({ secrets: ["GEMINI_API_KEY"], timeoutSeconds: 300 }).https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+    }
+
+    const { fileBase64, mimeType } = data;
+    if (!fileBase64 || !mimeType) {
+        throw new functions.https.HttpsError("invalid-argument", "Missing file data.");
+    }
+    
+    const model = 'gemini-pro-vision';
+    const visionApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const prompt = `
+        Agera som en AI-assistent för bokföring i ett svenskt företag. Analysera följande faktura-PDF.
+        Extrahera följande information och returnera den som ett JSON-objekt:
+        - supplierName: Leverantörens fullständiga namn.
+        - invoiceNumber: Fakturanummer.
+        - invoiceDate: Fakturadatum i formatet YYYY-MM-DD.
+        - dueDate: Förfallodatum i formatet YYYY-MM-DD.
+        - totalAmount: Totalbeloppet att betala (inkl. moms) som en siffra.
+        - vatAmount: Det totala momsbeloppet som en siffra.
+        - lineItems: En array av objekt, där varje objekt representerar en fakturarad och innehåller:
+            - description: En tydlig beskrivning av produkten/tjänsten.
+            - quantity: Antal som en siffra.
+            - unitPrice: Priset per enhet (exkl. moms) som en siffra.
+            - lineTotal: Totalbeloppet för raden (exkl. moms) som en siffra.
+
+        Svara med ENDAST ett giltigt JSON-objekt och ingen annan text. Om ett fält inte kan hittas, utelämna det eller sätt det till null.
+    `;
+    
+    try {
+        const response = await fetch(visionApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { inline_data: { mime_type: mimeType, data: fileBase64 } }
+                    ]
+                }]
+            }),
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error("API Error:", errorBody);
+            throw new functions.https.HttpsError("internal", `API call failed with status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts) {
+            let textResponse = result.candidates[0].content.parts[0].text;
+            textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+            return JSON.parse(textResponse);
+        } else {
+            console.error("AI analysis failed: Invalid response structure from API", result);
+            throw new functions.https.HttpsError("internal", "Failed to get AI suggestion due to invalid API response.");
+        }
+    } catch (error) {
+        console.error("Error analyzing PDF:", error);
+        throw new functions.https.HttpsError("internal", "An unexpected error occurred while analyzing the document.");
+    }
+});
+
+
+// ===================================
 //  2FA Functions
 // ===================================
 
