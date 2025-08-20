@@ -565,9 +565,19 @@ function removeInvoiceItem(event) {
 }
 
 async function saveInvoice(btn, invoiceId, status) {
+    const { allInvoices } = getState();
     const subtotal = invoiceItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0)), 0);
     const totalVat = invoiceItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0) * ((item.vatRate || 0) / 100)), 0);
     const grandTotal = subtotal + totalVat;
+
+    // Bestäm fakturanummer
+    let nextInvoiceNumber;
+    if (invoiceId) {
+        nextInvoiceNumber = allInvoices.find(i => i.id === invoiceId).invoiceNumber;
+    } else {
+        const highestInvoiceNumber = allInvoices.reduce((max, inv) => inv.invoiceNumber > max ? inv.invoiceNumber : max, 0);
+        nextInvoiceNumber = highestInvoiceNumber + 1;
+    }
 
     const invoiceData = {
         customerName: document.getElementById('customerName').value,
@@ -582,7 +592,7 @@ async function saveInvoice(btn, invoiceId, status) {
         payments: [],
         notes: document.getElementById('invoice-notes').value,
         status: status,
-        invoiceNumber: invoiceId ? getState().allInvoices.find(i => i.id === invoiceId).invoiceNumber : Date.now()
+        invoiceNumber: nextInvoiceNumber
     };
 
     if (!invoiceData.customerName || invoiceItems.length === 0) {

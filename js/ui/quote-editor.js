@@ -128,9 +128,18 @@ function removeQuoteItem(event) {
 }
 
 async function saveQuote(btn, quoteId, status) {
+    const { allQuotes } = getState();
     const subtotal = quoteItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     const totalVat = quoteItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.vatRate / 100)), 0);
     
+    let nextQuoteNumber;
+    if (quoteId) {
+        nextQuoteNumber = allQuotes.find(q => q.id === quoteId).quoteNumber;
+    } else {
+        const highestQuoteNumber = allQuotes.reduce((max, q) => q.quoteNumber > max ? q.quoteNumber : max, 0);
+        nextQuoteNumber = highestQuoteNumber + 1;
+    }
+
     const quoteData = {
         customerName: document.getElementById('customerName').value,
         quoteDate: document.getElementById('quoteDate').value,
@@ -141,7 +150,7 @@ async function saveQuote(btn, quoteId, status) {
         grandTotal: subtotal + totalVat,
         notes: document.getElementById('quote-notes').value,
         status: status,
-        quoteNumber: quoteId ? getState().allQuotes.find(q => q.id === quoteId).quoteNumber : Date.now()
+        quoteNumber: nextQuoteNumber
     };
 
     if (!quoteData.customerName || quoteItems.length === 0) {
