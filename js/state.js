@@ -12,13 +12,14 @@ const state = {
     allExpenses: [],
     allTransactions: [],
     allInvoices: [],
-    allQuotes: [], // <-- LÄGG TILL DENNA RAD
+    allBills: [], // <-- LÄGG TILL DENNA RAD
+    allQuotes: [], 
     recurringTransactions: [],
     categories: [],
     allContacts: [],
-    allProjects: [], // <-- LÄGG TILL DENNA RAD
+    allProjects: [], 
     allTimeEntries: [],
-    allTemplates: [], // <-- LÄGG TILL
+    allTemplates: [], 
 
     // Produkt- och lagerdata
     allProducts: [],

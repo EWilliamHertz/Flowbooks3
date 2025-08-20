@@ -53,9 +53,18 @@ export function renderDashboard() {
 // ---- WIDGET RENDERERS ----
 
 function renderMetricsWidget() {
-    const { allIncomes, allExpenses, allProducts, currentCompany } = getState();
+    const { allIncomes, allExpenses, allProducts, allInvoices, allBills, currentCompany } = getState();
     const totalIncome = allIncomes.reduce((sum, doc) => sum + doc.amount, 0);
     const totalExpense = allExpenses.reduce((sum, doc) => sum + doc.amount, 0);
+
+    const unpaidInvoiceBalance = allInvoices
+        .filter(inv => inv.status !== 'Betald' && inv.status !== 'Utkast')
+        .reduce((sum, inv) => sum + inv.balance, 0);
+
+    const unpaidBillsBalance = allBills
+        .filter(bill => bill.status !== 'Betald')
+        .reduce((sum, bill) => sum + bill.balance, 0);
+
     const privateSplitPercent = currentCompany.inventoryProjectionSplit || 60;
     const businessSplitPercent = 100 - privateSplitPercent;
     let calculatedInventoryRevenue = 0;
@@ -67,7 +76,9 @@ function renderMetricsWidget() {
         const privateValue = stock * (privateSplitPercent / 100) * privatePrice;
         calculatedInventoryRevenue += businessValue + privateValue;
     });
-    const projectedProfit = (totalIncome + calculatedInventoryRevenue) - totalExpense;
+    
+    // Uppdaterad beräkning
+    const projectedProfit = (totalIncome + calculatedInventoryRevenue + unpaidInvoiceBalance) - (totalExpense + unpaidBillsBalance);
 
     return `
         <div class="dashboard-widget metrics-widget">
@@ -90,6 +101,7 @@ function renderMetricsWidget() {
         </div>
     `;
 }
+//... (resten av dashboard.js är oförändrad förutom renderAllCompaniesDashboard) ...
 
 function renderUnpaidInvoicesWidget() {
     const { allInvoices } = getState();
@@ -267,7 +279,6 @@ function renderCashFlowChart() {
     }
 }
 
-// Denna funktion behövs fortfarande för företagsöversikten
 export async function renderAllCompaniesDashboard() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = renderSpinner();
@@ -275,10 +286,12 @@ export async function renderAllCompaniesDashboard() {
         const { userCompanies, userData } = getState();
         const companiesDataPromises = (userCompanies || []).map(async (company) => {
             const companyId = company.id;
-            const [incomesSnap, expensesSnap, productsSnap] = await Promise.all([
+            const [incomesSnap, expensesSnap, productsSnap, invoicesSnap, billsSnap] = await Promise.all([
                 getDocs(query(collection(db, 'incomes'), where('companyId', '==', companyId))),
                 getDocs(query(collection(db, 'expenses'), where('companyId', '==', companyId))),
-                getDocs(query(collection(db, 'products'), where('companyId', '==', companyId)))
+                getDocs(query(collection(db, 'products'), where('companyId', '==', companyId))),
+                getDocs(query(collection(db, 'invoices'), where('companyId', '==', companyId))),
+                getDocs(query(collection(db, 'bills'), where('companyId', '==', companyId)))
             ]);
             const totalIncome = incomesSnap.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
             const totalExpenses = expensesSnap.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
@@ -296,12 +309,22 @@ export async function renderAllCompaniesDashboard() {
                 inventoryValue += businessValue + privateValue;
             });
 
+            const unpaidInvoiceBalance = invoicesSnap.docs
+                .map(d => d.data())
+                .filter(inv => inv.status !== 'Betald' && inv.status !== 'Utkast')
+                .reduce((sum, inv) => sum + inv.balance, 0);
+
+            const unpaidBillsBalance = billsSnap.docs
+                .map(d => d.data())
+                .filter(bill => bill.status !== 'Betald')
+                .reduce((sum, bill) => sum + bill.balance, 0);
+
             return {
                 ...company,
                 totalIncome,
                 totalExpenses,
                 inventoryValue,
-                projectedProfit: (totalIncome + inventoryValue) - totalExpenses,
+                projectedProfit: (totalIncome + inventoryValue + unpaidInvoiceBalance) - (totalExpenses + unpaidBillsBalance),
                 productCount: productsSnap.size,
                 transactionCount: incomesSnap.size + expensesSnap.size
             };
@@ -315,7 +338,7 @@ export async function renderAllCompaniesDashboard() {
                 <h1 class="logo">FlowBooks</h1>
                 <p>Välkommen, ${userData.firstName}. Du har tillgång till ${companiesData.length} företag.</p>
                 <div class="portal-total-profit">
-                    <span>Totalt Projicerat Resultat (inkl. lagervärde):</span>
+                    <span>Totalt Projicerat Resultat (inkl. lagervärde & obetalda fakturor):</span>
                     <strong class="${grandTotalProjectedProfit >= 0 ? 'green' : 'red'}">${grandTotalProjectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</strong>
                 </div>
             </div>

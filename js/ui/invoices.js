@@ -15,17 +15,64 @@ const sendInvoiceWithAttachmentFunc = httpsCallable(getFunctions(), 'sendInvoice
 export function renderInvoicesPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
-        <div class="card">
-            <div id="invoice-list-container">
-                ${renderSpinner()}
+        <div id="invoice-summary-container"></div>
+        <div class="card" style="margin-top: 1.5rem;">
+            <div class="settings-tabs">
+                <button class="tab-link active" data-tab="outgoing-invoices">Fakturor Ut</button>
+                <button class="tab-link" data-tab="incoming-invoices">Fakturor In</button>
             </div>
+            <div id="outgoing-invoices" class="tab-content active"></div>
+            <div id="incoming-invoices" class="tab-content"></div>
         </div>`;
-    renderInvoiceList();
+
+    renderInvoiceSummary();
+    renderOutgoingInvoiceList();
+    renderIncomingInvoiceList();
+
+    document.querySelectorAll('.tab-link').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.tab-link, .tab-content').forEach(el => el.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
 }
 
-function renderInvoiceList() {
+function renderInvoiceSummary() {
+    const { allInvoices, allBills } = getState();
+    const container = document.getElementById('invoice-summary-container');
+
+    const expectedIncome = allInvoices
+        .filter(inv => inv.status !== 'Betald' && inv.status !== 'Utkast')
+        .reduce((sum, inv) => sum + inv.balance, 0);
+
+    const expectedExpense = allBills
+        .filter(bill => bill.status !== 'Betald')
+        .reduce((sum, bill) => sum + bill.balance, 0);
+        
+    const totalResult = expectedIncome - expectedExpense;
+
+    container.innerHTML = `
+        <div class="dashboard-metrics" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="card text-center">
+                <h3>Förväntat In</h3>
+                <p class="metric-value green">${expectedIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+            </div>
+            <div class="card text-center">
+                <h3>Förväntat Ut</h3>
+                <p class="metric-value red">${expectedExpense.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+            </div>
+            <div class="card text-center">
+                <h3>Nettoresultat</h3>
+                <p class="metric-value ${totalResult >= 0 ? 'blue' : 'red'}">${totalResult.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderOutgoingInvoiceList() {
     const { allInvoices } = getState();
-    const container = document.getElementById('invoice-list-container');
+    const container = document.getElementById('outgoing-invoices');
     if (!container) return;
 
     const rows = allInvoices.sort((a, b) => b.invoiceNumber - a.invoiceNumber).map(invoice => `
@@ -48,7 +95,7 @@ function renderInvoiceList() {
 
     container.innerHTML = `
         <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="card-title" style="margin: 0;">Fakturor</h3>
+            <h3 class="card-title" style="margin: 0;">Skickade Fakturor</h3>
             <div id="bulk-actions-container" style="display: none; gap: 0.5rem;">
                  <button id="download-selected-invoices-btn" class="btn btn-secondary">Ladda ner valda</button>
                  <button id="send-selected-invoices-btn" class="btn btn-primary">Skicka valda</button>
@@ -74,6 +121,16 @@ function renderInvoiceList() {
         </table>`;
     
     attachInvoiceListEventListeners();
+}
+
+function renderIncomingInvoiceList() {
+    const container = document.getElementById('incoming-invoices');
+    if (!container) return;
+    // Detta är en platshållare tills logik för inkommande fakturor finns
+    container.innerHTML = `
+        <h3 class="card-title">Inkommande Fakturor (Leverantörsfakturor)</h3>
+        <p>Denna funktion är under utveckling. Här kommer du kunna registrera och hantera fakturor du tar emot från dina leverantörer.</p>
+    `;
 }
 
 function attachInvoiceListEventListeners() {
@@ -135,7 +192,7 @@ function attachInvoiceListEventListeners() {
                     });
                     await batch.commit();
                     await fetchAllCompanyData();
-                    renderInvoiceList();
+                    renderOutgoingInvoiceList();
                     if(count > 0){
                         showToast(`${count} fakturautkast har tagits bort!`, 'success');
                     } else {
@@ -741,7 +798,7 @@ async function registerPayment(invoiceId) {
         
         const currentPage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
         if (currentPage === 'invoices') {
-            renderInvoiceList();
+            renderInvoicesPage();
         } else if (document.querySelector('.invoice-editor')) {
             renderInvoiceEditor(invoiceId);
         }

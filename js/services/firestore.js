@@ -87,6 +87,7 @@ export async function fetchAllCompanyData() {
             getDocs(query(collection(db, 'projects'), where('companyId', '==', companyId), orderBy('name'))),
             getDocs(query(collection(db, 'timeEntries'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'templates'), where('companyId', '==', companyId))),
+            getDocs(query(collection(db, 'bills'), where('companyId', '==', companyId))), // <-- LÄGG TILL DENNA RAD
         ];
         
         if (memberUIDs.length > 0) {
@@ -106,14 +107,15 @@ export async function fetchAllCompanyData() {
         const allProjects = results[8].docs.map(d => ({ id: d.id, ...d.data() }));
         const allTimeEntries = results[9].docs.map(d => ({ id: d.id, ...d.data() }));
         const allTemplates = results[10].docs.map(d => ({ id: d.id, ...d.data() }));
-        const teamMembers = results.length > 11 ? results[11].docs.map(d => ({ id: d.id, ...d.data() })) : [];
+        const allBills = results[11].docs.map(d => ({ id: d.id, ...d.data() })); // <-- LÄGG TILL DENNA RAD
+        const teamMembers = results.length > 12 ? results[12].docs.map(d => ({ id: d.id, ...d.data() })) : []; // <-- ÄNDRA INDEX
         
         const allTransactions = [
             ...allIncomes.map(t => ({ ...t, type: 'income' })),
             ...allExpenses.map(t => ({ ...t, type: 'expense' }))
         ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allQuotes, allContacts, allProjects, allTimeEntries, allTemplates, teamMembers, allTransactions });
+        setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allBills, allQuotes, allContacts, allProjects, allTimeEntries, allTemplates, teamMembers, allTransactions });
     } catch (error) {
         console.error("Kunde inte ladda all företagsdata:", error);
         showToast("Kunde inte ladda all företagsdata.", "error");
