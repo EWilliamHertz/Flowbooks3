@@ -2,6 +2,7 @@
 import { getState } from '../state.js';
 import { editors } from './editors.js';
 import { renderTransactionForm } from './transactions.js';
+import { t } from '../i18n.js'; // Importera översättningsfunktionen
 
 let commandPaletteOpen = false;
 let commands = [];
@@ -11,32 +12,32 @@ function getCommands() {
     const { allContacts } = getState();
     let dynamicCommands = [
         // Navigation
-        { id: 'navigate_overview', title: 'Gå till Översikt', category: 'Navigering', action: () => window.navigateTo('overview') },
-        { id: 'navigate_invoices', title: 'Gå till Fakturor', category: 'Navigering', action: () => window.navigateTo('invoices') },
-        { id: 'navigate_products', title: 'Gå till Produkter', category: 'Navigering', action: () => window.navigateTo('products') },
-        { id: 'navigate_contacts', title: 'Gå till Kontakter', category: 'Navigering', action: () => window.navigateTo('contacts') },
-        { id: 'navigate_expenses', title: 'Gå till Utgifter', category: 'Navigering', action: () => window.navigateTo('expenses') },
-        { id: 'navigate_income', title: 'Gå till Intäkter', category: 'Navigering', action: () => window.navigateTo('income') },
-        { id: 'navigate_settings', title: 'Gå till Inställningar', category: 'Navigering', action: () => window.navigateTo('settings') },
+        { id: 'navigate_overview', title: t('cmd_goToOverview'), category: t('cmdPalette_cat_navigation'), action: () => window.navigateTo('overview') },
+        { id: 'navigate_invoices', title: t('cmd_goToInvoices'), category: t('cmdPalette_cat_navigation'), action: () => window.navigateTo('invoices') },
+        { id: 'navigate_products', title: t('cmd_goToProducts'), category: t('cmdPalette_cat_navigation'), action: () => window.navigateTo('products') },
+        { id: 'navigate_contacts', title: t('cmd_goToContacts'), category: t('cmdPalette_cat_navigation'), action: () => window.navigateTo('contacts') },
+        { id: 'navigate_expenses', title: t('cmd_goToExpenses'), category: t('cmdPalette_cat_navigation'), action: () => window.navigateTo('expenses') },
+        { id: 'navigate_income', title: t('cmd_goToIncome'), category: t('cmdPalette_cat_navigation'), action: () => window.navigateTo('income') },
+        { id: 'navigate_settings', title: t('cmd_goToSettings'), category: t('cmdPalette_cat_navigation'), action: () => window.navigateTo('settings') },
 
         // Skapa-kommandon
-        { id: 'create_invoice', title: 'Skapa Ny Faktura', category: 'Skapa', action: () => editors.renderInvoiceEditor() },
-        { id: 'create_quote', title: 'Skapa Ny Offert', category: 'Skapa', action: () => editors.renderQuoteEditor() },
-        { id: 'create_product', title: 'Skapa Ny Produkt', category: 'Skapa', action: () => editors.renderProductForm() },
-        { id: 'create_contact', title: 'Skapa Ny Kontakt', category: 'Skapa', action: () => editors.renderContactForm() },
-        { id: 'create_expense', title: 'Registrera Ny Utgift', category: 'Skapa', action: () => renderTransactionForm('expense') },
-        { id: 'create_income', title: 'Registrera Ny Intäkt', category: 'Skapa', action: () => renderTransactionForm('income') },
+        { id: 'create_invoice', title: t('cmd_createInvoice'), category: t('cmdPalette_cat_create'), action: () => editors.renderInvoiceEditor() },
+        { id: 'create_quote', title: t('cmd_createQuote'), category: t('cmdPalette_cat_create'), action: () => editors.renderQuoteEditor() },
+        { id: 'create_product', title: t('cmd_createProduct'), category: t('cmdPalette_cat_create'), action: () => editors.renderProductForm() },
+        { id: 'create_contact', title: t('cmd_createContact'), category: t('cmdPalette_cat_create'), action: () => editors.renderContactForm() },
+        { id: 'create_expense', title: t('cmd_createExpense'), category: t('cmdPalette_cat_create'), action: () => renderTransactionForm('expense') },
+        { id: 'create_income', title: t('cmd_createIncome'), category: t('cmdPalette_cat_create'), action: () => renderTransactionForm('income') },
 
         // Åtgärder
-        { id: 'action_logout', title: 'Logga ut', category: 'Åtgärd', action: () => document.getElementById('logout-btn').click() },
+        { id: 'action_logout', title: t('cmd_actionLogout'), category: t('cmdPalette_cat_action'), action: () => document.getElementById('logout-btn').click() },
     ];
 
     // Dynamiskt lägg till kommandon för varje kund
     allContacts.forEach(contact => {
         dynamicCommands.push({
             id: `view_contact_${contact.id}`,
-            title: `Visa kund: ${contact.name}`,
-            category: 'Kontakter',
+            title: t('cmd_viewContact').replace('{contactName}', contact.name),
+            category: t('cmdPalette_cat_contacts'),
             action: () => window.navigateTo('contacts', contact.id)
         });
     });
@@ -49,7 +50,7 @@ function renderResults(filteredCommands) {
     if (!resultsContainer) return;
 
     if (filteredCommands.length === 0) {
-        resultsContainer.innerHTML = `<li class="command-item">Inga resultat...</li>`;
+        resultsContainer.innerHTML = `<li class="command-item">${t('cmdPalette_noResults')}</li>`;
         return;
     }
 
@@ -127,6 +128,8 @@ export function openCommandPalette() {
 
     const overlay = document.getElementById('command-palette-overlay');
     const input = document.getElementById('command-palette-input');
+    
+    input.placeholder = t('cmdPalette_placeholder'); // Sätt platshållartext
 
     overlay.style.display = 'flex';
     input.value = '';
