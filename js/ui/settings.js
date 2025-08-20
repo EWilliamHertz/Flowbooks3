@@ -9,6 +9,10 @@ import { renderMailSettingsPage } from './mail-settings.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 import { t } from '../i18n.js';
 
+const functions = getFunctions();
+const generate2FASecret = httpsCallable(functions, 'generate2FASecret');
+const verify2FAToken = httpsCallable(functions, 'verify2FAToken');
+
 export function renderSettingsPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
@@ -142,17 +146,22 @@ function renderDashboardSettingsView() {
 }
 
 function renderAccountSettings() {
-    const { currentUser } = getState();
+    const { currentUser, userData } = getState();
     const isBypassUser = currentUser.email === 'ernst@hatake.eu';
-    
-    // Användaren med den specifika e-postadressen ser inte 2FA-inställningarna
-    const twoFactorAuthCard = isBypassUser ? '' : `
-        <div class="card">
-            <h3>${t('twoFactorAuthentication')}</h3>
-            <p>${t('twoFactorAuthenticationDescription')}</p>
-            <button id="setup-2fa-btn" class="btn btn-primary" style="margin-top: 1rem;">${t('enable2FA')}</button>
-        </div>
-    `;
+    const is2FAEnabled = userData.twoFactorEnabled;
+
+    let twoFactorAuthCard = '';
+    if (!isBypassUser) {
+        twoFactorAuthCard = `
+            <div class="card">
+                <h3>${t('twoFactorAuthentication')}</h3>
+                <p>${t('twoFactorAuthenticationDescription')}</p>
+                <button id="setup-2fa-btn" class="btn ${is2FAEnabled ? 'btn-danger' : 'btn-primary'}" style="margin-top: 1rem;">
+                    ${is2FAEnabled ? t('disable2FA') : t('enable2FA')}
+                </button>
+            </div>
+        `;
+    }
 
     document.getElementById('account-settings').innerHTML = `
         <div class="settings-grid" style="max-width: 600px; margin: auto; grid-template-columns: 1fr;">
@@ -166,13 +175,98 @@ function renderAccountSettings() {
     `;
 
     if (!isBypassUser) {
-        document.getElementById('setup-2fa-btn').addEventListener('click', () => {
-            showToast("Funktionen för att aktivera 2FA kommer snart!", "info");
-            // Här skulle vi anropa funktionen som startar 2FA-flödet
-        });
+        document.getElementById('setup-2fa-btn').addEventListener('click', is2FAEnabled ? handleDisable2FA : handleSetUp2FA);
     }
 
     document.getElementById('delete-account').addEventListener('click', deleteAccount);
+}
+
+
+async function handleSetUp2FA() {
+    const btn = document.getElementById('setup-2fa-btn');
+    btn.disabled = true;
+    btn.textContent = t('creating');
+    try {
+        const result = await generate2FASecret();
+        const { qrCodeUrl } = result.data;
+        show2FASetupModal(qrCodeUrl);
+    } catch (error) {
+        console.error("Kunde inte generera 2FA-hemlighet:", error);
+        showToast("Ett fel uppstod vid 2FA-inställningen.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = t('enable2FA');
+    }
+}
+
+function show2FASetupModal(qrCodeUrl) {
+    const modalHtml = `
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <h3>Aktivera Tvåfaktorsautentisering</h3>
+                <p>1. Skanna QR-koden med din autentiseringsapp (t.ex. Google Authenticator).</p>
+                <div style="text-align: center; margin: 1.5rem 0;">
+                    <img src="${qrCodeUrl}" alt="QR-kod för 2FA">
+                </div>
+                <p>2. Ange den 6-siffriga koden från appen för att verifiera och slutföra installationen.</p>
+                <div class="input-group">
+                    <label for="2fa-token-input">Verifieringskod</label>
+                    <input id="2fa-token-input" class="form-input" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+                </div>
+                <div class="modal-actions">
+                    <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
+                    <button id="modal-verify-2fa" class="btn btn-primary">Verifiera & Aktivera</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modal-container').innerHTML = modalHtml;
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('modal-verify-2fa').addEventListener('click', handleVerify2FASetup);
+}
+
+async function handleVerify2FASetup() {
+    const token = document.getElementById('2fa-token-input').value;
+    const btn = document.getElementById('modal-verify-2fa');
+    btn.disabled = true;
+    btn.textContent = t('verifying');
+
+    try {
+        const result = await verify2FAToken({ token });
+        if (result.data.verified) {
+            showToast("2FA har aktiverats!", "success");
+            closeModal();
+            // Ladda om användardata och rendera om inställningssidan för att visa den nya statusen
+            await fetchInitialData(getState().currentUser);
+            renderAccountSettings();
+        } else {
+            showToast("Felaktig kod. Försök igen.", "error");
+        }
+    } catch (error) {
+        console.error("Fel vid verifiering av 2FA-kod:", error);
+        showToast("Ett oväntat fel uppstod.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Verifiera & Aktivera";
+    }
+}
+
+async function handleDisable2FA() {
+    showConfirmationModal(async () => {
+        try {
+            const uid = getState().currentUser.uid;
+            await updateDoc(doc(db, "users", uid), {
+                twoFactorEnabled: false,
+                twoFactorSecret: null
+            });
+            showToast("2FA har inaktiverats.", "success");
+            await fetchInitialData(getState().currentUser);
+            renderAccountSettings();
+        } catch (error) {
+            console.error("Kunde inte inaktivera 2FA:", error);
+            showToast("Ett fel uppstod.", "error");
+        }
+    }, "Inaktivera 2FA", "Är du säker på att du vill ta bort det extra skyddet för ditt konto?");
 }
 
 
@@ -528,8 +622,6 @@ function handleDeleteCompany() {
         } catch (error) {
             console.error("Failed to delete company:", error);
             showToast(error.message, "error");
-            btn.disabled = false;
-            btn.textContent = t('deleteThisCompany');
         }
 
     }, "deleteCompany", "confirmDeleteCompany", currentCompany.name);

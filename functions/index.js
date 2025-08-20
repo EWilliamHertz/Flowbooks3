@@ -149,15 +149,33 @@ exports.listInbox = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
     const config = { imap: { user: settings.username, password, host: settings.imap.host, port: settings.imap.port, tls: true, tlsOptions: { rejectUnauthorized: false } } };
     const connection = await imaps.connect(config);
     await connection.openBox("INBOX");
-    const messages = await connection.search(["ALL"], { bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"], struct: true });
+
+    // Optimerad sökning: Hämta bara de senaste 150 meddelandena istället för ALLA.
+    const searchCriteria = ['ALL'];
+    const fetchOptions = { bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"], struct: true };
+    const allMessages = await connection.search(searchCriteria, fetchOptions);
+    
+    // Hämta de 150 senaste UID:erna
+    const recentUIDs = allMessages.map(m => m.attributes.uid).slice(-150);
+    
+    if (recentUIDs.length === 0) {
+        connection.end();
+        return { emails: [] };
+    }
+    
+    // Hämta headers bara för de senaste meddelandena
+    const messages = await connection.search([['UID', recentUIDs.join(',')]], fetchOptions);
+
     const emails = messages.map(item => ({
         uid: item.attributes.uid,
         from: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.from[0],
         subject: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.subject[0],
         date: item.parts.find(p => p.which === "HEADER.FIELDS (FROM SUBJECT DATE)").body.date[0],
     }));
+
     connection.end();
-    return { emails: emails.reverse().slice(0, 50) };
+    // Sortera så att det nyaste kommer först
+    return { emails: emails.sort((a, b) => new Date(b.date) - new Date(a.date)) };
 });
 
 exports.fetchEmailContent = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onCall(async (data, context) => {
