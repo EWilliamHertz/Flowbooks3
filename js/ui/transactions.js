@@ -29,15 +29,16 @@ export function renderTransactionsPage(type) {
     setTimeout(() => {
         applyFiltersAndRender(dataToList);
         document.getElementById('export-transactions-btn').addEventListener('click', () => {
-             exportToCSV(currentFilteredList.map(t => ({
-                 [t('date')]: t.date,
-                 [t('description')]: t.description,
-                 [t('party')]: t.party || '',
-                 [t('type')]: t.type,
-                 [t('amount')]: t.amount,
-                 [t('vat')]: t.vatAmount || 0,
-                 [t('category')]: getState().categories.find(c => c.id === t.categoryId)?.name || '',
-                 [t('project')]: getState().allProjects.find(p => p.id === t.projectId)?.name || ''
+             // KORRIGERING: Ändrade 't' till 'transaction' i .map() för att undvika namnkollision
+             exportToCSV(currentFilteredList.map(transaction => ({
+                 [t('date')]: transaction.date,
+                 [t('description')]: transaction.description,
+                 [t('party')]: transaction.party || '',
+                 [t('type')]: transaction.type,
+                 [t('amount')]: transaction.amount,
+                 [t('vat')]: transaction.vatAmount || 0,
+                 [t('category')]: getState().categories.find(c => c.id === transaction.categoryId)?.name || '',
+                 [t('project')]: getState().allProjects.find(p => p.id === transaction.projectId)?.name || ''
              })), 'transactions.csv');
         });
         document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList));
@@ -291,7 +292,7 @@ async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
             await batch.commit();
             await fetchAllCompanyData();
             window.navigateTo('summary');
-            showToast(t('transactionsFromTemplateSaved').replace('{templateName}', template.name), "success");
+            showToast(t('transactionsFromTemplateSaved', { templateName: template.name }), "success");
         } catch (error) {
             console.error("Error saving from template:", error);
             showToast("couldNotSaveFromTemplate", "error");
@@ -299,7 +300,7 @@ async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
             btn.disabled = false;
             btn.textContent = originalText;
         }
-    }, "confirmBookingTitle", t('confirmTemplatePosting').replace('{count}', template.lines.length));
+    }, "confirmBookingTitle", t('confirmTemplatePosting', { count: template.lines.length }));
 }
 
 async function handleSave(btn, type, data) {
