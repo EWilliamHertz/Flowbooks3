@@ -4,6 +4,7 @@ import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/f
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { writeBatch, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js';
 import { db } from '../../firebase-config.js';
+import { t } from '../i18n.js';
 
 let poItems = [];
 
@@ -26,7 +27,7 @@ function renderPurchaseOrderList() {
 
     const rows = allPurchaseOrders.sort((a, b) => b.poNumber - a.poNumber).map(po => `
         <tr data-po-id="${po.id}">
-            <td><span class="invoice-status ${po.status}">${po.status}</span></td>
+            <td><span class="invoice-status ${po.status}">${t(po.status)}</span></td>
             <td>#${po.poNumber}</td>
             <td>${po.supplierName}</td>
             <td>${po.orderDate}</td>
@@ -34,29 +35,29 @@ function renderPurchaseOrderList() {
             <td class="text-right">${(po.totalAmount || 0).toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</td>
             <td>
                 <div class="action-menu" style="display: flex; gap: 0.5rem;">
-                    <button class="btn btn-sm btn-secondary btn-edit-po">Visa / Redigera</button>
-                    ${po.status === 'Beställd' ? `<button class="btn btn-sm btn-success btn-receive-po">Mottag Leverans</button>` : ''}
+                    <button class="btn btn-sm btn-secondary btn-edit-po">${t('show')}</button>
+                    ${po.status === 'Beställd' ? `<button class="btn btn-sm btn-success btn-receive-po">${t('receiveDelivery')}</button>` : ''}
                 </div>
             </td>
         </tr>
     `).join('');
 
     container.innerHTML = `
-        <h3 class="card-title">Inköpsordrar</h3>
+        <h3 class="card-title">${t('purchaseOrders')}</h3>
         <table class="data-table" id="po-table">
             <thead>
                 <tr>
-                    <th>Status</th>
-                    <th>Ordernr.</th>
-                    <th>Leverantör</th>
-                    <th>Orderdatum</th>
-                    <th>Förväntad lev.</th>
-                    <th class="text-right">Totalsumma</th>
-                    <th>Åtgärder</th>
+                    <th>${t('status')}</th>
+                    <th>${t('poNumber')}</th>
+                    <th>${t('supplier')}</th>
+                    <th>${t('orderDate')}</th>
+                    <th>${t('expectedDeliveryDate')}</th>
+                    <th class="text-right">${t('totalAmount')}</th>
+                    <th>${t('actions')}</th>
                 </tr>
             </thead>
             <tbody>
-                ${allPurchaseOrders.length > 0 ? rows : '<tr><td colspan="7" class="text-center">Du har inga inköpsordrar än.</td></tr>'}
+                ${allPurchaseOrders.length > 0 ? rows : `<tr><td colspan="7" class="text-center">${t('noPurchaseOrdersYet')}</td></tr>`}
             </tbody>
         </table>`;
     
@@ -95,30 +96,30 @@ export function renderPurchaseOrderEditor(poId = null) {
     mainView.innerHTML = `
         <div class="invoice-editor">
             <div class="card">
-                <h3>${poId ? `Inköpsorder #${po.poNumber}` : 'Skapa Ny Inköpsorder'}</h3>
-                ${po ? `<p><strong>Status:</strong> <span class="invoice-status ${po.status}">${po.status}</span></p>` : ''}
+                <h3>${poId ? `${t('purchaseOrder')} #${po.poNumber}` : t('newPurchaseOrder')}</h3>
+                ${po ? `<p><strong>${t('status')}:</strong> <span class="invoice-status ${po.status}">${t(po.status)}</span></p>` : ''}
                 <div class="input-group">
-                    <label>Leverantör</label>
+                    <label>${t('supplier')}</label>
                     <select id="po-supplier" class="form-input" ${isLocked ? 'disabled' : ''}>
-                        <option value="">Välj leverantör...</option>
+                        <option value="">${t('selectSupplierPlaceholder')}</option>
                         ${supplierOptions}
                     </select>
                 </div>
                 <div class="invoice-form-grid" style="margin-top: 1rem;">
-                    <div class="input-group"><label>Orderdatum</label><input id="po-order-date" type="date" class="form-input" value="${po?.orderDate || today}" ${isLocked ? 'disabled' : ''}></div>
-                    <div class="input-group"><label>Förväntat leveransdatum</label><input id="po-delivery-date" type="date" class="form-input" value="${po?.expectedDeliveryDate || ''}" ${isLocked ? 'disabled' : ''}></div>
+                    <div class="input-group"><label>${t('orderDate')}</label><input id="po-order-date" type="date" class="form-input" value="${po?.orderDate || today}" ${isLocked ? 'disabled' : ''}></div>
+                    <div class="input-group"><label>${t('expectedDeliveryDate')}</label><input id="po-delivery-date" type="date" class="form-input" value="${po?.expectedDeliveryDate || ''}" ${isLocked ? 'disabled' : ''}></div>
                 </div>
             </div>
             <div class="card">
-                <h3 class="card-title">Produktrader</h3>
+                <h3 class="card-title">${t('poLines')}</h3>
                 <div id="po-items-container"></div>
-                ${!isLocked ? `<button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem;">+ Lägg till Produkt</button>` : ''}
+                ${!isLocked ? `<button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem;">+ ${t('addProduct')}</button>` : ''}
             </div>
             <div class="invoice-actions-footer">
-                <button id="back-btn" class="btn btn-secondary">Tillbaka</button>
+                <button id="back-btn" class="btn btn-secondary">${t('back')}</button>
                 ${!isLocked ? `
-                    <button id="save-draft-btn" class="btn btn-secondary">Spara Utkast</button>
-                    <button id="save-order-btn" class="btn btn-primary">Lägg Beställning</button>
+                    <button id="save-draft-btn" class="btn btn-secondary">${t('saveDraft')}</button>
+                    <button id="save-order-btn" class="btn btn-primary">${t('placeOrder')}</button>
                 ` : ''}
             </div>
         </div>`;
@@ -149,10 +150,10 @@ function renderPOItems(isLocked = false) {
 
     container.innerHTML = `
         <table class="data-table">
-            <thead><tr><th>Produkt</th><th>Antal</th><th class="text-right">Inköpspris</th><th class="text-right">Summa</th><th></th></tr></thead>
+            <thead><tr><th>${t('product')}</th><th>${t('quantity')}</th><th class="text-right">${t('purchasePrice')}</th><th class="text-right">${t('totalAmount')}</th><th></th></tr></thead>
             <tbody>${tableRows}</tbody>
             <tfoot>
-                <tr><td colspan="3" class="text-right" style="font-size: 1.2em;"><strong>Totalsumma:</strong></td><td class="text-right" style="font-size: 1.2em;"><strong>${totalAmount.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="3" class="text-right" style="font-size: 1.2em;"><strong>${t('totalAmount')}</strong></td><td class="text-right" style="font-size: 1.2em;"><strong>${totalAmount.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
             </tfoot>
         </table>`;
 
@@ -185,16 +186,16 @@ function showProductSelectorForPO() {
             <img src="${p.imageUrl || 'https://via.placeholder.com/40'}" alt="${p.name}">
             <div class="product-selector-item-info">
                 <strong>${p.name}</strong>
-                <span>Pris: ${(p.purchasePrice || 0).toLocaleString('sv-SE')} kr | Lager: ${p.stock}</span>
+                <span>${t('price')}: ${(p.purchasePrice || 0).toLocaleString('sv-SE')} kr | ${t('productStock')}: ${p.stock}</span>
             </div>
         </div>`).join('');
 
     const modalHtml = `
         <div class="modal-overlay" id="product-selector-overlay">
             <div class="modal-content">
-                <h3>Välj Produkt</h3>
-                <div class="product-selector-dropdown show">${productItems.length > 0 ? productItems : '<p style="padding: 1rem;">Inga produkter hittades för denna leverantör.</p>'}</div>
-                <div class="modal-actions"><button id="modal-cancel" class="btn btn-secondary">Avbryt</button></div>
+                <h3>${t('selectProduct')}</h3>
+                <div class="product-selector-dropdown show">${productItems.length > 0 ? productItems : `<p style="padding: 1rem;">${t('noProductsFoundForSupplier')}</p>`}</div>
+                <div class="modal-actions"><button id="modal-cancel" class="btn btn-secondary">${t('cancel')}</button></div>
             </div>
         </div>`;
     document.getElementById('modal-container').innerHTML = modalHtml;
@@ -243,20 +244,20 @@ async function savePurchaseOrder(btn, poId, status) {
     };
 
     if (!poData.supplierId || poItems.length === 0) {
-        showToast("Leverantör och minst en produktrad är obligatoriskt.", "warning");
+        showToast(t('poSupplierAndLinesRequired'), "warning");
         return;
     }
 
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "Sparar...";
+    btn.textContent = t('saving');
     try {
         await saveDocument('purchaseOrders', poData, poId);
         await fetchAllCompanyData();
-        showToast(status === 'Beställd' ? 'Inköpsordern är skapad!' : 'Utkast sparat!', 'success');
+        showToast(status === 'Beställd' ? t('poCreated') : t('poDraftSaved'), 'success');
         window.navigateTo('purchaseOrders');
     } catch (error) {
-        showToast('Kunde inte spara inköpsordern.', 'error');
+        showToast(t('couldNotSavePo'), 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -285,7 +286,7 @@ async function receivePurchaseOrder(poId) {
             const vatAmount = po.totalAmount - (po.totalAmount / 1.25); // Antar 25% moms
             const expenseData = {
                 date: new Date().toISOString().slice(0, 10),
-                description: `Inköp enl. order #${po.poNumber} från ${po.supplierName}`,
+                description: t('poExpenseDescription', { poNumber: po.poNumber, supplierName: po.supplierName }),
                 party: po.supplierName,
                 amount: po.totalAmount,
                 amountExclVat: po.totalAmount - vatAmount,
@@ -302,11 +303,11 @@ async function receivePurchaseOrder(poId) {
 
             await batch.commit();
             await fetchAllCompanyData();
-            showToast("Leverans mottagen, lagersaldo och utgifter har uppdaterats!", 'success');
+            showToast(t('poReceivedSuccess'), 'success');
             renderPurchaseOrderList();
         } catch (error) {
             console.error(error);
-            showToast("Ett fel uppstod vid mottagandet.", "error");
+            showToast(t('poReceivedError'), "error");
         }
-    }, "Mottag Leverans", `Detta kommer att öka lagersaldot för alla produkter på ordern och skapa en motsvarande utgift. Är du säker?`);
+    }, t('receiveDelivery'), t('receiveDeliveryConfirm'));
 }

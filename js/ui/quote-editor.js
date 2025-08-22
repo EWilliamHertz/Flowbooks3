@@ -3,6 +3,7 @@ import { getState } from '../state.js';
 import { fetchAllCompanyData, saveDocument } from '../services/firestore.js';
 import { showToast, showConfirmationModal, closeModal } from './utils.js';
 import { editors } from './editors.js';
+import { t } from '../i18n.js';
 
 let quoteItems = [];
 
@@ -24,39 +25,39 @@ export function renderQuoteEditor(quoteId = null) {
     mainView.innerHTML = `
         <div class="invoice-editor">
             <div class="card">
-                <h3>${quoteId ? `Offert #${quote.quoteNumber}` : 'Skapa Ny Offert'}</h3>
-                ${quote ? `<p><strong>Status:</strong> <span class="invoice-status ${quote.status}">${quote.status}</span></p>` : ''}
+                <h3>${quoteId ? `${t('quoteNumber')} #${quote.quoteNumber}` : t('createQuote')}</h3>
+                ${quote ? `<p><strong>${t('status')}:</strong> <span class="invoice-status ${quote.status}">${t(quote.status)}</span></p>` : ''}
                 <div class="input-group">
-                    <label>Kundnamn</label>
+                    <label>${t('customer')}</label>
                     <input id="customerName" class="form-input" value="${quote?.customerName || ''}" ${isLocked ? 'disabled' : ''}>
                 </div>
                 <div class="invoice-form-grid" style="margin-top: 1rem;">
-                    <div class="input-group"><label>Offertdatum</label><input id="quoteDate" type="date" class="form-input" value="${quote?.quoteDate || todayStr}" ${isLocked ? 'disabled' : ''}></div>
-                    <div class="input-group"><label>Giltig till</label><input id="validUntilDate" type="date" class="form-input" value="${quote?.validUntilDate || validUntilStr}" ${isLocked ? 'disabled' : ''}></div>
+                    <div class="input-group"><label>${t('quoteDate')}</label><input id="quoteDate" type="date" class="form-input" value="${quote?.quoteDate || todayStr}" ${isLocked ? 'disabled' : ''}></div>
+                    <div class="input-group"><label>${t('validUntilDate')}</label><input id="validUntilDate" type="date" class="form-input" value="${quote?.validUntilDate || validUntilStr}" ${isLocked ? 'disabled' : ''}></div>
                 </div>
             </div>
 
             <div class="card">
-                <h3 class="card-title">Offertrader</h3>
+                <h3 class="card-title">${t('quoteItems')}</h3>
                 <div id="quote-items-container"></div>
                 ${!isLocked ? `
-                    <button id="add-item-btn" class="btn btn-secondary" style="margin-top: 1rem;">+ Lägg till Egen Rad</button>
-                    <button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem; margin-left: 1rem;">+ Lägg till Produkt</button>
-                ` : '<p>Offerten är låst och kan inte redigeras.</p>'}
+                    <button id="add-item-btn" class="btn btn-secondary" style="margin-top: 1rem;">${t('addCustomLine')}</button>
+                    <button id="add-product-btn" class="btn btn-primary" style="margin-top: 1rem; margin-left: 1rem;">${t('addProduct')}</button>
+                ` : `<p>${t('quoteLocked')}</p>`}
             </div>
             
             <div class="card">
-                <h3 class="card-title">Villkor och Kommentarer</h3>
-                <textarea id="quote-notes" class="form-input" rows="4" placeholder="T.ex. information om leveransvillkor..." ${isLocked ? 'disabled' : ''}>${defaultNotes}</textarea>
+                <h3 class="card-title">${t('quoteNotes')}</h3>
+                <textarea id="quote-notes" class="form-input" rows="4" placeholder="${t('quoteNotesPlaceholder')}" ${isLocked ? 'disabled' : ''}>${defaultNotes}</textarea>
             </div>
             
             <div class="invoice-actions-footer">
                 ${!isLocked ? `
-                    <button id="save-draft-btn" class="btn btn-secondary">Spara som Utkast</button>
-                    <button id="save-send-btn" class="btn btn-primary">Spara och Markera som Skickad</button>
+                    <button id="save-draft-btn" class="btn btn-secondary">${t('saveDraft')}</button>
+                    <button id="save-send-btn" class="btn btn-primary">${t('saveAndSend')}</button>
                 ` : `
-                    <button id="back-btn" class="btn btn-secondary">Tillbaka till översikt</button>
-                    <button id="convert-to-invoice-btn" class="btn btn-success">Omvandla till Faktura</button>
+                    <button id="back-btn" class="btn btn-secondary">${t('backToOverview')}</button>
+                    <button id="convert-to-invoice-btn" class="btn btn-success">${t('convertToInvoice')}</button>
                 `}
             </div>
         </div>`;
@@ -71,7 +72,7 @@ export function renderQuoteEditor(quoteId = null) {
         document.getElementById('save-draft-btn').addEventListener('click', (e) => saveQuote(e.target, quoteId, 'Utkast'));
         document.getElementById('save-send-btn').addEventListener('click', (e) => saveQuote(e.target, quoteId, 'Skickad'));
     } else {
-        document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('Offerter'));
+        document.getElementById('back-btn').addEventListener('click', () => window.navigateTo('quotes'));
         document.getElementById('convert-to-invoice-btn').addEventListener('click', () => convertToInvoice(quote));
     }
 }
@@ -81,7 +82,7 @@ function renderQuoteItems(isLocked = false) {
     
     const tableRows = quoteItems.map((item, index) => `
         <tr>
-            <td>${isLocked ? item.description : `<input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="Beskrivning">`}</td>
+            <td>${isLocked ? item.description : `<input class="form-input item-description" data-index="${index}" value="${item.description}" placeholder="${t('lineDescription')}">`}</td>
             <td>${isLocked ? item.quantity : `<input type="number" class="form-input item-quantity" data-index="${index}" value="${item.quantity}" style="width: 80px;">`}</td>
             <td>${isLocked ? item.price.toFixed(2) : `<input type="number" step="0.01" class="form-input item-price" data-index="${index}" value="${item.price}" placeholder="0.00">`}</td>
             <td>${isLocked ? `${item.vatRate}%` : `<select class="form-input item-vatRate" data-index="${index}" style="width: 90px;"><option value="25" ${item.vatRate == 25 ? 'selected' : ''}>25%</option><option value="12" ${item.vatRate == 12 ? 'selected' : ''}>12%</option><option value="6" ${item.vatRate == 6 ? 'selected' : ''}>6%</option><option value="0" ${item.vatRate == 0 ? 'selected' : ''}>0%</option></select>`}</td>
@@ -95,12 +96,12 @@ function renderQuoteItems(isLocked = false) {
     
     container.innerHTML = `
         <table class="data-table">
-            <thead><tr><th>Beskrivning</th><th>Antal</th><th>Pris (exkl. moms)</th><th>Moms</th><th class="text-right">Summa</th><th></th></tr></thead>
+            <thead><tr><th>${t('lineDescription')}</th><th>${t('quantity')}</th><th>${t('priceExclVat')}</th><th>${t('vat')}</th><th class="text-right">${t('amount')}</th><th></th></tr></thead>
             <tbody>${tableRows}</tbody>
             <tfoot>
-                <tr><td colspan="4" class="text-right"><strong>Summa (exkl. moms):</strong></td><td class="text-right"><strong>${subtotal.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
-                <tr><td colspan="4" class="text-right"><strong>Moms:</strong></td><td class="text-right"><strong>${totalVat.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
-                <tr><td colspan="4" class="text-right" style="font-size: 1.2em;"><strong>Totalsumma:</strong></td><td class="text-right" style="font-size: 1.2em;"><strong>${grandTotal.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right"><strong>${t('subtotalExclVat')}</strong></td><td class="text-right"><strong>${subtotal.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right"><strong>${t('totalVat')}</strong></td><td class="text-right"><strong>${totalVat.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
+                <tr><td colspan="4" class="text-right" style="font-size: 1.2em;"><strong>${t('totalAmount')}</strong></td><td class="text-right" style="font-size: 1.2em;"><strong>${grandTotal.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</strong></td><td></td></tr>
             </tfoot>
         </table>`;
     
@@ -154,21 +155,21 @@ async function saveQuote(btn, quoteId, status) {
     };
 
     if (!quoteData.customerName || quoteItems.length === 0) {
-        showToast("Kundnamn och minst en offertrad är obligatoriskt.", "warning");
+        showToast(t('fillAllFieldsWarning'), "warning");
         return;
     }
 
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "Sparar...";
+    btn.textContent = t('saving');
     try {
         await saveDocument('quotes', quoteData, quoteId);
         await fetchAllCompanyData();
-        showToast(status === 'Skickad' ? 'Offerten har sparats och låsts!' : 'Utkast sparat!', 'success');
-        window.navigateTo('Offerter');
+        showToast(status === 'Skickad' ? t('quoteSentAndLocked') : t('quoteDraftSaved'), 'success');
+        window.navigateTo('quotes');
     } catch (error) {
         console.error("Kunde inte spara offert:", error);
-        showToast('Kunde inte spara offerten.', 'error');
+        showToast(t('couldNotSaveQuote'), 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -185,6 +186,6 @@ async function convertToInvoice(quote) {
         await saveDocument('quotes', { status: 'Accepterad' }, quote.id);
         await fetchAllCompanyData();
         editors.renderInvoiceEditor(null, invoiceDataFromQuote);
-        showToast("Offerten har accepterats. Fyll i fakturadetaljer.", "success");
-    }, "Omvandla till Faktura", "En ny faktura kommer att skapas baserat på denna offert. Offerten kommer att markeras som 'Accepterad'. Är du säker?");
+        showToast(t('quoteAcceptedInvoiceDetails'), "success");
+    }, t('convertConfirmTitle'), t('convertConfirmBody'));
 }

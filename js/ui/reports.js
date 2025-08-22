@@ -1,5 +1,6 @@
 // js/ui/reports.js
 import { getState } from '../state.js';
+import { t } from '../i18n.js';
 
 export function renderReportsPage() {
     const { allIncomes, allExpenses, allProducts, allContacts, allInvoices } = getState();
@@ -53,48 +54,48 @@ export function renderReportsPage() {
     mainView.innerHTML = `
         <div class="settings-grid">
             <div class="card">
-                <h3>Momsrapport (Underlag)</h3>
-                <p>En förenklad sammanställning för hela perioden. Konsultera alltid med en redovisningsekonom.</p>
+                <h3>${t('reportsVAT')}</h3>
+                <p>${t('vatReportInfo')}</p>
                 <div class="report-result">
-                    <h4>Utgående moms (på din försäljning)</h4>
-                    <p><span>Total försäljning (exkl. moms):</span> <strong>${totalSalesExclVat.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
-                    <p><span>Beräknad utgående moms (25%):</span> <strong class="red">${outgoingVatTotal.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                    <h4>${t('outgoingVat')}</h4>
+                    <p><span>${t('totalSalesExclVat')}</span> <strong>${totalSalesExclVat.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                    <p><span>${t('calculatedOutgoingVat', { vatRate: 25 })}</span> <strong class="red">${outgoingVatTotal.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                     <hr>
-                    <h4>Ingående moms (på dina inköp)</h4>
+                    <h4>${t('incomingVat')}</h4>
                     ${Object.keys(incomingVatByRate).map(rate => `
-                        <p><span>Underlag för ${rate}% moms:</span> <strong>${(incomingVatByRate[rate].base || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
-                        <p><span>Ingående moms (${rate}%):</span> <strong class="green">${(incomingVatByRate[rate].vat || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                        <p><span>${t('vatBasisForRate', { vatRate: rate })}</span> <strong>${(incomingVatByRate[rate].base || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                        <p><span>${t('incomingVatForRate', { vatRate: rate })}</span> <strong class="green">${(incomingVatByRate[rate].vat || 0).toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                     `).join('')}
                     <hr>
-                    <p><span><strong>Total ingående moms:</strong></span> <strong class="green">${incomingVatTotal.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                    <p><span><strong>${t('totalIncomingVat')}</strong></span> <strong class="green">${incomingVatTotal.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                     <hr>
-                    <h4>Att betala / få tillbaka</h4>
-                    <p><span><strong>Resultat:</strong></span> <strong style="font-size: 1.2em;" class="${vatToPayOrReceive >= 0 ? 'red' : 'green'}">${vatToPayOrReceive.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})} ${vatToPayOrReceive >= 0 ? '(att betala)' : '(att få tillbaka)'}</strong></p>
+                    <h4>${t('vatResult')}</h4>
+                    <p><span><strong>${t('vatResultValue')}</strong></span> <strong style="font-size: 1.2em;" class="${vatToPayOrReceive >= 0 ? 'red' : 'green'}">${vatToPayOrReceive.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})} ${vatToPayOrReceive >= 0 ? t('toPay') : t('toReceiveBack')}</strong></p>
                 </div>
             </div>
             <div class="card">
-                <h3>Förenklat Årsbokslut (Underlag)</h3>
-                <p>Ett underlag baserat på dina transaktioner. Värdeminskningar och periodiseringar är inte medräknade.</p>
+                <h3>${t('reportsProfit')}</h3>
+                <p>${t('profitReportInfo')}</p>
                  <div class="report-result">
-                    <h4>Resultaträkning</h4>
-                    <p><span>Summa rörelsens intäkter:</span> <strong>${totalRevenue.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
-                    <p><span>Summa rörelsens kostnader:</span> <strong class="red">${totalCosts.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                    <h4>${t('incomeStatement')}</h4>
+                    <p><span>${t('totalOperatingIncome')}</span> <strong>${totalRevenue.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                    <p><span>${t('totalOperatingCosts')}</span> <strong class="red">${totalCosts.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                     <hr>
-                    <p><span><strong>Rörelseresultat före finansiella poster:</strong></span> <strong>${profitBeforeTax.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
+                    <p><span><strong>${t('profitBeforeFinancials')}</strong></span> <strong>${profitBeforeTax.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></p>
                  </div>
             </div>
             <div class="card" style="grid-column: 1 / -1;">
-                <h3>Lagerrapport</h3>
+                <h3>${t('reportsInventory')}</h3>
                 <table class="data-table">
-                    <thead><tr><th>Produkt</th><th class="text-right">Antal i lager</th><th class="text-right">Inköpspris</th><th class="text-right">Totalt värde</th></tr></thead>
+                    <thead><tr><th>${t('inventoryTableProduct')}</th><th class="text-right">${t('inventoryTableStock')}</th><th class="text-right">${t('inventoryTablePurchasePrice')}</th><th class="text-right">${t('inventoryTableTotalValue')}</th></tr></thead>
                     <tbody>${inventoryReport}</tbody>
-                    <tfoot><tr><td colspan="3" class="text-right"><strong>Totalt lagervärde</strong></td><td class="text-right"><strong>${totalInventoryValue.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></td></tr></tfoot>
+                    <tfoot><tr><td colspan="3" class="text-right"><strong>${t('totalInventoryValue')}</strong></td><td class="text-right"><strong>${totalInventoryValue.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></td></tr></tfoot>
                 </table>
             </div>
             <div class="card" style="grid-column: 1 / -1;">
-                <h3>Kundrapport (baserat på betalda fakturor)</h3>
+                <h3>${t('reportsCustomer')}</h3>
                 <table class="data-table">
-                    <thead><tr><th>Kund</th><th class="text-right">Totalt fakturerat</th></tr></thead>
+                    <thead><tr><th>${t('customerReportTableCustomer')}</th><th class="text-right">${t('customerReportTableTotalBilled')}</th></tr></thead>
                     <tbody>${customerReport}</tbody>
                 </table>
             </div>

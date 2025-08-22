@@ -67,11 +67,11 @@ function renderCompanySettings() {
                 </div>
                 <div class="input-group">
                     <label>${t('organizationNumber')}</label>
-                    <input id="setting-org-number" class="form-input" value="${currentCompany.orgNumber || ''}" placeholder="Eg. 556677-8899">
+                    <input id="setting-org-number" class="form-input" value="${currentCompany.orgNumber || ''}" placeholder="${t('orgNumberPlaceholder')}">
                 </div>
                  <div class="input-group">
                     <label>${t('bankgiroNumber')}</label>
-                    <input id="setting-bankgiro" class="form-input" value="${currentCompany.bankgiro || ''}" placeholder="Eg. 123-4567">
+                    <input id="setting-bankgiro" class="form-input" value="${currentCompany.bankgiro || ''}" placeholder="${t('bankgiroPlaceholder')}">
                 </div>
                 <button id="save-company" class="btn btn-primary">${t('saveCompanyInfo')}</button>
             </div>
@@ -192,7 +192,7 @@ async function handleSetUp2FA() {
         show2FASetupModal(qrCodeUrl);
     } catch (error) {
         console.error("Kunde inte generera 2FA-hemlighet:", error);
-        showToast("Ett fel uppstod vid 2FA-inställningen.", "error");
+        showToast(t('twoFactorSetupError'), "error");
     } finally {
         btn.disabled = false;
         btn.textContent = t('enable2FA');
@@ -203,19 +203,19 @@ function show2FASetupModal(qrCodeUrl) {
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content">
-                <h3>Aktivera Tvåfaktorsautentisering</h3>
-                <p>1. Skanna QR-koden med din autentiseringsapp (t.ex. Google Authenticator).</p>
+                <h3>${t('enableTwoFactorAuth')}</h3>
+                <p>${t('scanQrCodeInstruction')}</p>
                 <div style="text-align: center; margin: 1.5rem 0;">
-                    <img src="${qrCodeUrl}" alt="QR-kod för 2FA">
+                    <img src="${qrCodeUrl}" alt="${t('qrCodeFor2FA')}">
                 </div>
-                <p>2. Ange den 6-siffriga koden från appen för att verifiera och slutföra installationen.</p>
+                <p>${t('enterCodeInstruction')}</p>
                 <div class="input-group">
-                    <label for="2fa-token-input">Verifieringskod</label>
+                    <label for="2fa-token-input">${t('verificationCode')}</label>
                     <input id="2fa-token-input" class="form-input" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
                 </div>
                 <div class="modal-actions">
-                    <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
-                    <button id="modal-verify-2fa" class="btn btn-primary">Verifiera & Aktivera</button>
+                    <button id="modal-cancel" class="btn btn-secondary">${t('cancel')}</button>
+                    <button id="modal-verify-2fa" class="btn btn-primary">${t('verifyAndActivate')}</button>
                 </div>
             </div>
         </div>
@@ -234,20 +234,20 @@ async function handleVerify2FASetup() {
     try {
         const result = await verify2FAToken({ token });
         if (result.data.verified) {
-            showToast("2FA har aktiverats!", "success");
+            showToast(t('twoFactorEnabled'), "success");
             closeModal();
             // Ladda om användardata och rendera om inställningssidan för att visa den nya statusen
             await fetchInitialData(getState().currentUser);
             renderAccountSettings();
         } else {
-            showToast("Felaktig kod. Försök igen.", "error");
+            showToast(t('incorrectCode'), "error");
         }
     } catch (error) {
         console.error("Fel vid verifiering av 2FA-kod:", error);
-        showToast("Ett oväntat fel uppstod.", "error");
+        showToast(t('unexpectedError'), "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = "Verifiera & Aktivera";
+        btn.textContent = t('verifyAndActivate');
     }
 }
 
@@ -259,14 +259,14 @@ async function handleDisable2FA() {
                 twoFactorEnabled: false,
                 twoFactorSecret: null
             });
-            showToast("2FA har inaktiverats.", "success");
+            showToast(t('twoFactorDisabled'), "success");
             await fetchInitialData(getState().currentUser);
             renderAccountSettings();
         } catch (error) {
             console.error("Kunde inte inaktivera 2FA:", error);
-            showToast("Ett fel uppstod.", "error");
+            showToast(t('couldNotDisableTwoFactor'), "error");
         }
-    }, "Inaktivera 2FA", "Är du säker på att du vill ta bort det extra skyddet för ditt konto?");
+    }, t('disableTwoFactorTitle'), t('disableTwoFactorBody'));
 }
 
 
@@ -314,10 +314,10 @@ async function saveReminderSettings() {
     try {
         await updateDoc(doc(db, 'companies', currentCompany.id), { reminderSettings: newSettings });
         setState({ currentCompany: { ...currentCompany, reminderSettings: newSettings } });
-        showToast('reminderSettingsSaved', 'success');
+        showToast(t('reminderSettingsSaved'), 'success');
     } catch (error) {
         console.error("Fel vid sparning av påminnelseinställningar:", error);
-        showToast("couldNotSaveSettings", "error");
+        showToast(t('couldNotSaveSettings'), "error");
     } finally {
         btn.disabled = false;
         btn.textContent = t('saveReminderSettings');
@@ -371,10 +371,10 @@ async function saveDashboardSettings() {
     try {
         await updateDoc(doc(db, 'companies', currentCompany.id), { dashboardSettings: newSettings });
         setState({ currentCompany: { ...currentCompany, dashboardSettings: newSettings } });
-        showToast('overviewSettingsSaved', 'success');
+        showToast(t('overviewSettingsSaved'), 'success');
     } catch (error) {
         console.error("Fel vid sparning av översiktsinställningar:", error);
-        showToast("couldNotSaveSettings", "error");
+        showToast(t('couldNotSaveSettings'), "error");
     } finally {
         btn.disabled = false;
         btn.textContent = t('saveOverviewSettings');
@@ -392,10 +392,10 @@ async function saveInvoiceDefaultText() {
     try {
         await updateDoc(doc(db, 'companies', currentCompany.id), { defaultInvoiceText: defaultText });
         setState({ currentCompany: { ...currentCompany, defaultInvoiceText: defaultText } });
-        showToast('defaultInvoiceTextSaved', 'success');
+        showToast(t('defaultInvoiceTextSaved'), 'success');
     } catch (error) {
         console.error("Fel vid sparning av standardtext:", error);
-        showToast("couldNotSaveText", "error");
+        showToast(t('couldNotSaveText'), "error");
     } finally {
         btn.disabled = false;
         btn.textContent = t('saveDefaultText');
@@ -471,7 +471,7 @@ async function handleSaveCategory(btnElement, categoryId = null, newName = null)
     const name = newName || nameInput.value.trim();
 
     if (!name) {
-        showToast("categoryNameCannotBeEmpty", "warning");
+        showToast(t('categoryNameCannotBeEmpty'), "warning");
         return;
     }
     
@@ -490,12 +490,12 @@ async function handleSaveCategory(btnElement, categoryId = null, newName = null)
         
         await fetchAllCompanyData();
         renderCategoryManagerModal();
-        showToast("categorySaved", "success");
+        showToast(t('categorySaved'), "success");
         if (!categoryId && nameInput) nameInput.value = '';
 
     } catch (error) {
         console.error("Kunde inte spara kategori:", error);
-        showToast("couldNotSaveCategory", "error");
+        showToast(t('couldNotSaveCategory'), "error");
     } finally {
         btnElement.disabled = false;
         btnElement.textContent = originalText;
@@ -508,12 +508,12 @@ function handleDeleteCategory(categoryId) {
             await deleteDoc(doc(db, 'categories', categoryId));
             await fetchAllCompanyData();
             renderCategoryManagerModal();
-            showToast("categoryDeleted", "success");
+            showToast(t('categoryDeleted'), "success");
         } catch (error) {
             console.error("Kunde inte radera kategori:", error);
-            showToast("couldNotDeleteCategory", "error");
+            showToast(t('couldNotDeleteCategory'), "error");
         }
-    }, "deleteCategory", "confirmDeleteCategory");
+    }, t('deleteCategory'), t('confirmDeleteCategory'));
 }
 
 async function saveCompanyInfo() {
@@ -524,7 +524,7 @@ async function saveCompanyInfo() {
     const newBankgiro = document.getElementById('setting-bankgiro').value;
 
     if (!newName) {
-        showToast("companyNameCannotBeEmpty", "warning");
+        showToast(t('companyNameCannotBeEmpty'), "warning");
         return;
     }
     
@@ -541,10 +541,10 @@ async function saveCompanyInfo() {
             userData: { ...getState().userData, companyName: newName }
         });
         document.dispatchEvent(new Event('stateUpdated'));
-        showToast('companyInfoSaved', 'success');
+        showToast(t('companyInfoSaved'), 'success');
     } catch (error) {
         console.error("Fel vid sparning:", error);
-        showToast("couldNotSaveChanges", "error");
+        showToast(t('couldNotSaveChanges'), "error");
     } finally {
         btn.disabled = false;
         btn.textContent = t('saveCompanyInfo');
@@ -570,7 +570,7 @@ async function saveCompanyLogo() {
             logoUrl = await getDownloadURL(storageRef);
         } else if (url) {
             if (!url.match(/\.(jpeg|jpg|gif|png)$/)) {
-                showToast("invalidImageLink", "error");
+                showToast(t('invalidImageLink'), "error");
                 return;
             }
             logoUrl = url;
@@ -579,10 +579,10 @@ async function saveCompanyLogo() {
         }
         await updateDoc(doc(db, 'companies', currentCompany.id), { logoUrl: logoUrl });
         setState({ currentCompany: { ...currentCompany, logoUrl: logoUrl } });
-        showToast('logoSaved', 'success');
+        showToast(t('logoSaved'), 'success');
     } catch (error) {
         console.error("Kunde inte spara logotyp:", error);
-        showToast("couldNotSaveLogo", "error");
+        showToast(t('couldNotSaveLogo'), "error");
     } finally {
         btn.disabled = false;
         btn.textContent = t('saveLogo');
@@ -594,13 +594,13 @@ async function deleteAccount() {
         try {
             const { currentUser } = getState();
             await auth.currentUser.delete();
-            showToast("accountDeleted", "info");
+            showToast(t('accountDeleted'), "info");
             window.location.href = 'login.html';
         } catch (error) {
             console.error("Fel vid borttagning:", error);
-            showToast("couldNotDeleteAccount", "error");
+            showToast(t('couldNotDeleteAccount'), "error");
         }
-    }, "deleteAccount", "confirmDeleteAccount", 'DELETE');
+    }, t('deleteAccount'), t('confirmDeleteAccount'), 'DELETE');
 }
 
 function handleDeleteCompany() {
@@ -614,7 +614,7 @@ function handleDeleteCompany() {
             const deleteCompanyFunc = httpsCallable(getFunctions(), 'deleteCompany');
             await deleteCompanyFunc({ companyId: currentCompany.id });
             
-            showToast("companyDeleted", "success");
+            showToast(t('companyDeleted'), "success");
             
             await fetchInitialData(getState().currentUser);
             window.navigateTo('allCompaniesOverview');
@@ -624,5 +624,5 @@ function handleDeleteCompany() {
             showToast(error.message, "error");
         }
 
-    }, "deleteCompany", "confirmDeleteCompany", currentCompany.name);
+    }, t('deleteCompany'), t('confirmDeleteCompany', { companyName: currentCompany.name }), currentCompany.name);
 }

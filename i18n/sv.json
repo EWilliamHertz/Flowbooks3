@@ -724,5 +724,6 @@
   "couldNotSaveTimeEntry": "Kunde inte spara tidsposten.",
   "deleteTimeEntry": "Ta bort Tidspost",
   "timeEntryDeleted": "Tidsposten har tagits bort!",
-  "couldNotDeleteTimeEntry": "Kunde inte ta bort tidsposten."
+  "couldNotDeleteTimeEntry": "Kunde inte ta bort tidsposten.",
+
 }

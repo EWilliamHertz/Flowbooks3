@@ -3,6 +3,7 @@ import { getState } from '../state.js';
 import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { editors } from './editors.js';
+import { t } from '../i18n.js';
 
 export function renderProjectsPage() {
     const mainView = document.getElementById('main-view');
@@ -30,8 +31,8 @@ function renderProjectsList() {
         return `
             <tr data-project-id="${project.id}" style="cursor:pointer;">
                 <td><strong>${project.name}</strong></td>
-                <td>${project.customerName || '-'}</td>
-                <td><span class="project-status ${project.status}">${project.status}</span></td>
+                <td>${project.customerName || t('noCustomerSpecified')}</td>
+                <td><span class="project-status ${project.status}">${t(project.status)}</span></td>
                 <td class="text-right green">${income.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
                 <td class="text-right red">${expense.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</td>
                 <td class="text-right ${profit >= 0 ? 'blue' : 'red'}"><strong>${profit.toLocaleString('sv-SE', {style: 'currency', currency: 'SEK'})}</strong></td>
@@ -40,21 +41,21 @@ function renderProjectsList() {
     }).join('');
 
     container.innerHTML = `
-        <h3 class="card-title">Projekt</h3>
-        <p>Skapa projekt för att följa upp lönsamheten för specifika uppdrag. Klicka på ett projekt för att se detaljer.</p>
+        <h3 class="card-title">${t('projectsTitle')}</h3>
+        <p>${t('projectsDescription')}</p>
         <table class="data-table" id="projects-table" style="margin-top: 1.5rem;">
             <thead>
                 <tr>
-                    <th>Projektnamn</th>
-                    <th>Kund</th>
-                    <th>Status</th>
-                    <th class="text-right">Intäkter</th>
-                    <th class="text-right">Kostnader</th>
-                    <th class="text-right">Resultat</th>
+                    <th>${t('projectName')}</th>
+                    <th>${t('projectCustomer')}</th>
+                    <th>${t('projectStatus')}</th>
+                    <th class="text-right">${t('projectIncome')}</th>
+                    <th class="text-right">${t('projectCosts')}</th>
+                    <th class="text-right">${t('projectProfit')}</th>
                 </tr>
             </thead>
             <tbody>
-                ${allProjects.length > 0 ? rows : '<tr><td colspan="6" class="text-center">Du har inte skapat några projekt än.</td></tr>'}
+                ${allProjects.length > 0 ? rows : `<tr><td colspan="6" class="text-center">${t('noProjectsYet')}</td></tr>`}
             </tbody>
         </table>`;
     
@@ -96,25 +97,25 @@ export function renderProjectDetailView(projectId) {
     const detailHtml = `
         <div class="project-detail-header" data-project-id="${project.id}">
             <div>
-                <h2>${project.name} <span class="project-status ${project.status}">${project.status}</span></h2>
-                <p style="color: var(--text-color-light);">Kund: ${project.customerName || 'Ingen kund angiven'}</p>
+                <h2>${project.name} <span class="project-status ${project.status}">${t(project.status)}</span></h2>
+                <p style="color: var(--text-color-light);">${t('customer')}: ${project.customerName || t('noCustomerSpecified')}</p>
             </div>
             <div>
-                <button class="btn btn-success btn-invoice-time">Fakturera Obetald Tid</button>
-                <button class="btn btn-secondary btn-edit-project">Redigera Projekt</button>
-                <button class="btn btn-danger btn-delete-project">Ta bort Projekt</button>
+                <button class="btn btn-success btn-invoice-time">${t('invoiceUnpaidTime')}</button>
+                <button class="btn btn-secondary btn-edit-project">${t('editProject')}</button>
+                <button class="btn btn-danger btn-delete-project">${t('deleteProject')}</button>
             </div>
         </div>
         <div class="dashboard-metrics" style="grid-template-columns: repeat(3, 1fr);">
-            <div class="card text-center"><h3 class="card-title">Totala Intäkter</h3><p class="metric-value green">${income.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p></div>
-            <div class="card text-center"><h3 class="card-title">Totala Kostnader</h3><p class="metric-value red">${expense.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p></div>
-            <div class="card text-center"><h3 class="card-title">Resultat</h3><p class="metric-value ${profit >= 0 ? 'blue' : 'red'}">${profit.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p></div>
+            <div class="card text-center"><h3 class="card-title">${t('totalIncome')}</h3><p class="metric-value green">${income.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p></div>
+            <div class="card text-center"><h3 class="card-title">${t('totalCosts')}</h3><p class="metric-value red">${expense.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p></div>
+            <div class="card text-center"><h3 class="card-title">${t('projectProfit')}</h3><p class="metric-value ${profit >= 0 ? 'blue' : 'red'}">${profit.toLocaleString('sv-SE', {style:'currency', currency: 'SEK'})}</p></div>
         </div>
         <div class="card" style="margin-top: 1.5rem;">
-            <h3 class="card-title">Kopplade Transaktioner</h3>
+            <h3 class="card-title">${t('linkedTransactions')}</h3>
             <table class="data-table">
-                <thead><tr><th>Datum</th><th>Beskrivning</th><th>Kategori</th><th class="text-right">Belopp</th></tr></thead>
-                <tbody>${transactionRows.length > 0 ? transactionRows : '<tr><td colspan="4" class="text-center">Inga transaktioner kopplade till detta projekt.</td></tr>'}</tbody>
+                <thead><tr><th>${t('date')}</th><th>${t('description')}</th><th>${t('category')}</th><th class="text-right">${t('amount')}</th></tr></thead>
+                <tbody>${transactionRows.length > 0 ? transactionRows : `<tr><td colspan="4" class="text-center">${t('noTransactionsForProject')}</td></tr>`}</tbody>
             </table>
         </div>
     `;
@@ -132,7 +133,7 @@ function invoiceUnbilledTimeForProject(projectId) {
     const unbilledEntries = allTimeEntries.filter(e => e.projectId === projectId && !e.isBilled);
 
     if (unbilledEntries.length === 0) {
-        showToast("Det finns ingen ofakturerad tid för detta projekt.", "info");
+        showToast(t('noUnbilledTime'), "info");
         return;
     }
     
@@ -154,7 +155,7 @@ function invoiceUnbilledTimeForProject(projectId) {
 
         editors.renderInvoiceEditor(null, invoiceDataFromTime);
 
-    }, "Skapa Faktura?", `Detta kommer att skapa ett fakturautkast med ${unbilledEntries.length} tidsposter. Du kan justera timpris och detaljer innan du bokför.`);
+    }, t('createInvoiceQuestion'), t('createInvoiceFromTimeNotice', { lineCount: unbilledEntries.length }));
 }
 
 export function renderProjectForm(projectId = null) {
@@ -170,30 +171,30 @@ export function renderProjectForm(projectId = null) {
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content" onclick="event.stopPropagation()">
-                <h3>${isEdit ? 'Redigera Projekt' : 'Nytt Projekt'}</h3>
+                <h3>${isEdit ? t('editProject') : t('newProject')}</h3>
                 <form id="project-form">
                     <div class="input-group">
-                        <label>Projektnamn *</label>
+                        <label>${t('projectName')} *</label>
                         <input class="form-input" id="project-name" value="${project?.name || ''}" required>
                     </div>
                     <div class="input-group">
-                        <label>Kund</label>
+                        <label>${t('projectCustomer')}</label>
                         <select id="project-customer" class="form-input">
-                            <option value="">Ingen specifik kund</option>
+                            <option value="">${t('noSpecificCustomer')}</option>
                             ${customerOptions}
                         </select>
                     </div>
                     <div class="input-group">
-                        <label>Status</label>
+                        <label>${t('projectStatus')}</label>
                         <select id="project-status" class="form-input">
-                            <option value="Aktivt" ${project?.status === 'Aktivt' ? 'selected' : ''}>Aktivt</option>
-                            <option value="Slutfört" ${project?.status === 'Slutfört' ? 'selected' : ''}>Slutfört</option>
-                            <option value="Pausat" ${project?.status === 'Pausat' ? 'selected' : ''}>Pausat</option>
+                            <option value="Aktivt" ${project?.status === 'Aktivt' ? 'selected' : ''}>${t('Aktivt')}</option>
+                            <option value="Slutfört" ${project?.status === 'Slutfört' ? 'selected' : ''}>${t('Slutfört')}</option>
+                            <option value="Pausat" ${project?.status === 'Pausat' ? 'selected' : ''}>${t('Pausat')}</option>
                         </select>
                     </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
-                        <button type="submit" class="btn btn-primary">${isEdit ? 'Uppdatera' : 'Skapa'}</button>
+                        <button type="button" class="btn btn-secondary" id="modal-cancel">${t('cancel')}</button>
+                        <button type="submit" class="btn btn-primary">${isEdit ? t('updateTimeEntry') : t('create')}</button>
                     </div>
                 </form>
             </div>
@@ -214,17 +215,18 @@ async function saveProjectHandler(btn, projectId) {
     };
 
     if (!projectData.name) {
-        showToast("Projektnamn är obligatoriskt.", "warning");
+        showToast(t('projectNameIsRequired'), "warning");
         return;
     }
 
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Sparar...';
+    btn.textContent = t('saving');
 
     try {
         await saveDocument('projects', projectData, projectId);
-        showToast(`Projektet har ${projectId ? 'uppdaterats' : 'skapats'}!`, 'success');
+        const action = projectId ? 'uppdaterats' : 'skapats';
+        showToast(t('projectUpdatedOrCreated', { action: action }), 'success');
         closeModal();
         await fetchAllCompanyData();
         if (projectId) {
@@ -233,7 +235,7 @@ async function saveProjectHandler(btn, projectId) {
             renderProjectsList();
         }
     } catch (error) {
-        showToast('Kunde inte spara projektet.', 'error');
+        showToast(t('couldNotSaveProject'), 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -244,11 +246,11 @@ function deleteProject(projectId) {
     showConfirmationModal(async () => {
         try {
             await deleteDocument('projects', projectId);
-            showToast('Projektet har tagits bort!', 'success');
+            showToast(t('projectDeleted'), 'success');
             await fetchAllCompanyData();
             window.navigateTo('projects');
         } catch (error) {
-            showToast('Kunde inte ta bort projektet. Se till att inga transaktioner är kopplade till det.', 'error');
+            showToast(t('couldNotDeleteProject'), 'error');
         }
-    }, "Ta bort projekt", "Är du säker? Detta kan inte ångras. Transaktioner kopplade till projektet kommer inte att raderas.");
+    }, t('deleteProject'), t('deleteProjectWarning'));
 }
