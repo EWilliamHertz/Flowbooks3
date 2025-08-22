@@ -15,20 +15,14 @@ admin.initializeApp();
 const db = admin.firestore();
 const fieldValue = admin.firestore.FieldValue;
 
-// Du måste ställa in dessa hemligheter i Google Cloud Secret Manager
-// firebase functions:secrets:set ENCRYPTION_KEY
-// firebase functions:secrets:set GOOGLE_CLIENT_ID
-// firebase functions:secrets:set GOOGLE_CLIENT_SECRET
-// firebase functions:secrets:set GEMINI_API_KEY
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const IV_LENGTH = 16;
 const OAUTH_REDIRECT_URI = `https://us-central1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/handleGoogleAuthCallback`;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // ===================================
-//  NY FUNKTION: PDF-fakturaanalys
+//  ROBUST FUNKTION: PDF-fakturaanalys
 // ===================================
 exports.analyzeInvoicePdf = functions.runWith({ secrets: ["GEMINI_API_KEY"], timeoutSeconds: 300 }).https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -40,8 +34,15 @@ exports.analyzeInvoicePdf = functions.runWith({ secrets: ["GEMINI_API_KEY"], tim
         throw new functions.https.HttpsError("invalid-argument", "Missing file data.");
     }
     
-    const model = 'gemini-pro-vision';
-    const visionApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+        console.error("GEMINI_API_KEY secret is not defined in the environment.");
+        throw new functions.https.HttpsError("internal", "The AI API key is not configured on the server.");
+    }
+
+    // KORRIGERING: Byt ut modellnamnet mot den senaste rekommenderade versionen.
+    const model = 'gemini-1.5-flash-latest';
+    const visionApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
 
     const prompt = `
         Agera som en AI-assistent för bokföring i ett svenskt företag. Analysera följande faktura-PDF.
@@ -57,7 +58,6 @@ exports.analyzeInvoicePdf = functions.runWith({ secrets: ["GEMINI_API_KEY"], tim
             - quantity: Antal som en siffra.
             - unitPrice: Priset per enhet (exkl. moms) som en siffra.
             - lineTotal: Totalbeloppet för raden (exkl. moms) som en siffra.
-
         Svara med ENDAST ett giltigt JSON-objekt och ingen annan text. Om ett fält inte kan hittas, utelämna det eller sätt det till null.
     `;
     
@@ -75,28 +75,30 @@ exports.analyzeInvoicePdf = functions.runWith({ secrets: ["GEMINI_API_KEY"], tim
             }),
         });
 
+        const result = await response.json();
+
         if (!response.ok) {
-            const errorBody = await response.text();
-            console.error("API Error:", errorBody);
-            throw new functions.https.HttpsError("internal", `API call failed with status: ${response.status}`);
+            console.error("Gemini API Error Response:", JSON.stringify(result, null, 2));
+            const errorDetails = result.error?.message || `API call failed with status: ${response.status}`;
+            throw new functions.https.HttpsError("internal", errorDetails);
         }
         
-        const result = await response.json();
-        
-        if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts) {
+        if (result.candidates && result.candidates.length > 0 && result.candidates[0].content?.parts) {
             let textResponse = result.candidates[0].content.parts[0].text;
             textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
             return JSON.parse(textResponse);
         } else {
-            console.error("AI analysis failed: Invalid response structure from API", result);
-            throw new functions.https.HttpsError("internal", "Failed to get AI suggestion due to invalid API response.");
+            console.error("AI analysis failed: Invalid response structure from API", JSON.stringify(result, null, 2));
+            throw new functions.https.HttpsError("internal", "Failed to get AI suggestion due to invalid API response structure.");
         }
     } catch (error) {
-        console.error("Error analyzing PDF:", error);
-        throw new functions.https.HttpsError("internal", "An unexpected error occurred while analyzing the document.");
+        console.error("Error analyzing PDF:", error.message);
+        throw new functions.https.HttpsError("internal", error.message || "An unexpected error occurred while analyzing the document.");
     }
 });
 
+
+// ... Resten av filen är oförändrad ...
 
 // ===================================
 //  2FA Functions
@@ -221,12 +223,10 @@ exports.listInbox = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
     const connection = await imaps.connect(config);
     await connection.openBox("INBOX");
 
-    // Optimerad sökning: Hämta bara de senaste 150 meddelandena istället för ALLA.
     const searchCriteria = ['ALL'];
     const fetchOptions = { bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"], struct: true };
     const allMessages = await connection.search(searchCriteria, fetchOptions);
     
-    // Hämta de 150 senaste UID:erna
     const recentUIDs = allMessages.map(m => m.attributes.uid).slice(-150);
     
     if (recentUIDs.length === 0) {
@@ -234,7 +234,6 @@ exports.listInbox = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
         return { emails: [] };
     }
     
-    // Hämta headers bara för de senaste meddelandena
     const messages = await connection.search([['UID', recentUIDs.join(',')]], fetchOptions);
 
     const emails = messages.map(item => ({
@@ -245,7 +244,6 @@ exports.listInbox = functions.runWith({ secrets: ["ENCRYPTION_KEY"] }).https.onC
     }));
 
     connection.end();
-    // Sortera så att det nyaste kommer först
     return { emails: emails.sort((a, b) => new Date(b.date) - new Date(a.date)) };
 });
 
@@ -398,8 +396,8 @@ exports.getAIEmailSuggestion = functions.runWith({ secrets: ["GEMINI_API_KEY"] }
 
     const { prompt } = data;
     const fullPrompt = `You are a professional business assistant. Write a clear, concise, and polite email based on the following instruction. Respond with only the HTML body of the email. Instruction: "${prompt}"`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(url, {
         method: 'POST',

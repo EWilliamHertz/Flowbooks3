@@ -62,6 +62,7 @@ export function initializeLanguageSwitcher() {
 
 // Set the initial language on page load
 export function loadInitialLanguage() {
+    // This line sets 'sv' (Swedish) as the default if no language is saved
     const savedLang = localStorage.getItem('userLanguage') || 'sv';
     setLanguage(savedLang);
 }

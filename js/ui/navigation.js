@@ -2,12 +2,12 @@
 import { getState, setState } from '../state.js';
 import { handleSignOut } from '../services/auth.js';
 import { fetchAllCompanyData, fetchInitialData } from '../services/firestore.js';
-import { t } from '../i18n.js';
+import { t, applyTranslations } from '../i18n.js';
 import { checkNotifications } from './notifications.js';
 import { showToast, closeModal } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
-// Importera kommandopalett-funktioner
+// Import command palette functions
 import { initializeCommandPalette, openCommandPalette } from './command-palette.js';
 
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
@@ -69,8 +69,7 @@ function renderSidebarMenu() {
     const allowedPages = menuConfig[role] || menuConfig.member;
     const menuItems = allowedPages.map(pageKey => {
         const translatedText = t(pageKey);
-        const capitalizedText = translatedText.charAt(0).toUpperCase() + translatedText.slice(1);
-        return `<li><a href="#" data-page="${pageKey}">${capitalizedText}</a></li>`;
+        return `<li><a href="#" data-page="${pageKey}">${translatedText}</a></li>`;
     }).join('');
     const navList = document.querySelector('.sidebar-nav ul');
     if (navList) navList.innerHTML = menuItems;
@@ -89,7 +88,9 @@ export function initializeAppUI() {
 function navigateTo(pageKey, id = null) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
-    renderSidebarMenu();
+    
+    renderSidebarMenu(); // Re-render menu for potential language change
+
     if (pageKey === 'allCompaniesOverview') {
         appContainer.classList.add('portal-view');
         if (header) header.style.display = 'none';
@@ -103,12 +104,15 @@ function navigateTo(pageKey, id = null) {
 
     renderPageContent(pageKey, id);
     document.querySelector('.sidebar')?.classList.remove('open');
+    
+    // Apply translations AFTER new content is rendered
+    applyTranslations();
 }
 window.navigateTo = navigateTo;
 
 function renderPageContent(pageKey, id = null) {
     const pageTitleEl = document.querySelector('.page-title');
-    if (pageTitleEl) pageTitleEl.textContent = t(pageKey);
+    if (pageTitleEl) pageTitleEl.dataset.i18nKey = pageKey; // Use data-i18n-key for translation
 
     document.getElementById('main-view').innerHTML = '';
     const newItemBtn = document.getElementById('new-item-btn');
@@ -131,62 +135,25 @@ function renderPageContent(pageKey, id = null) {
     const renderFunction = pageRenderers[pageKey];
     if (renderFunction) renderFunction();
 
-    switch (pageKey) {
-        case 'income':
-            newItemBtn.textContent = t('newIncome');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderTransactionForm('income');
-            break;
-        case 'expenses':
-            newItemBtn.textContent = t('newExpense');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderTransactionForm('expense');
-            break;
-        case 'recurring':
-            newItemBtn.textContent = t('newRecurring');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderRecurringTransactionForm();
-            break;
-        case 'products':
-            newItemBtn.textContent = t('newProduct');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => editors.renderProductForm();
-            break;
-        case 'invoices':
-            newItemBtn.textContent = t('newInvoice');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => editors.renderInvoiceEditor();
-            break;
-        case 'quotes':
-            newItemBtn.textContent = t('newQuote');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => editors.renderQuoteEditor();
-            break;
-        case 'purchaseOrders':
-            newItemBtn.textContent = t('newPurchaseOrder');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderPurchaseOrderEditor();
-            break;
-        case 'projects':
-            newItemBtn.textContent = 'Nytt Projekt';
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderProjectForm();
-            break;
-        case 'timetracking':
-            newItemBtn.textContent = 'Ny Tidspost';
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderTimeEntryForm();
-            break;
-        case 'templates':
-            newItemBtn.textContent = 'Ny Mall';
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => renderTemplateEditor();
-            break;
-        case 'contacts':
-            newItemBtn.textContent = t('newContact');
-            newItemBtn.style.display = 'block';
-            newItemBtn.onclick = () => editors.renderContactForm();
-            break;
+    // Setup "New Item" button based on the page
+    const buttonSetup = {
+        income: { key: 'newIncome', action: () => renderTransactionForm('income') },
+        expenses: { key: 'newExpense', action: () => renderTransactionForm('expense') },
+        recurring: { key: 'newRecurring', action: () => renderRecurringTransactionForm() },
+        products: { key: 'newProduct', action: () => editors.renderProductForm() },
+        invoices: { key: 'newInvoice', action: () => editors.renderInvoiceEditor() },
+        quotes: { key: 'newQuote', action: () => editors.renderQuoteEditor() },
+        purchaseOrders: { key: 'newPurchaseOrder', action: () => renderPurchaseOrderEditor() },
+        projects: { key: 'newProject', action: () => renderProjectForm() },
+        timetracking: { key: 'newTimeEntry', action: () => renderTimeEntryForm() },
+        templates: { key: 'newTemplate', action: () => renderTemplateEditor() },
+        contacts: { key: 'newContact', action: () => editors.renderContactForm() },
+    };
+
+    if (buttonSetup[pageKey]) {
+        newItemBtn.dataset.i18nKey = buttonSetup[pageKey].key;
+        newItemBtn.style.display = 'block';
+        newItemBtn.onclick = buttonSetup[pageKey].action;
     }
 }
 
@@ -300,11 +267,7 @@ function handleGlobalSearch() {
 
                 switch (type) {
                     case 'contact':
-                        renderModal({
-                            title: 'Kontaktinformation',
-                            content: renderContactDetailView(id, true),
-                            actions: [{ id: 'modal-close', text: 'Stäng', style: 'secondary', handler: closeModal }]
-                        });
+                        renderContactDetailView(id); // Now renders the full page view
                         break;
                     case 'invoice':
                         editors.renderInvoiceEditor(id);
@@ -318,15 +281,15 @@ function handleGlobalSearch() {
                     case 'transaction':
                         const transaction = allTransactions.find(t => t.id === id);
                         renderModal({
-                            title: `Transaktionsdetaljer`,
+                            title: t('transactionDetails'),
                             content: `
-                                <p><strong>Datum:</strong> ${transaction.date}</p>
-                                <p><strong>Beskrivning:</strong> ${transaction.description}</p>
-                                <p><strong>Belopp:</strong> ${transaction.amount} kr</p>
-                                <p><strong>Typ:</strong> ${transaction.type === 'income' ? 'Intäkt' : 'Utgift'}</p>
-                                <p><strong>Kategori:</strong> ${getState().categories.find(c => c.id === transaction.categoryId)?.name || '-'}</p>
+                                <p><strong>${t('date')}:</strong> ${transaction.date}</p>
+                                <p><strong>${t('description')}:</strong> ${transaction.description}</p>
+                                <p><strong>${t('amount')}:</strong> ${transaction.amount} kr</p>
+                                <p><strong>${t('type')}:</strong> ${transaction.type === 'income' ? t('income') : t('expense')}</p>
+                                <p><strong>${t('category')}:</strong> ${getState().categories.find(c => c.id === transaction.categoryId)?.name || '-'}</p>
                             `,
-                            actions: [{ id: 'modal-close', text: 'Stäng', style: 'secondary', handler: closeModal }]
+                            actions: [{ id: 'modal-close', text: 'close', style: 'secondary', handler: closeModal }]
                         });
                         break;
                 }
@@ -367,7 +330,7 @@ function setupCompanySelector() {
 }
 
 export function showFatalError(message) {
-    document.body.innerHTML = `<div class="fatal-error-container"><div class="card card-danger"><h2 class="logo">FlowBooks</h2><h3 data-i18n-key="fatalErrorTitle">Ett allvarligt fel har uppstått</h3><p>${message}</p><button id="logout-btn-error" class="btn btn-primary" data-i18n-key="logout">Logga ut</button></div></div>`;
+    document.body.innerHTML = `<div class="fatal-error-container"><div class="card card-danger"><h2 class="logo">FlowBooks</h2><h3 data-i18n-key="fatalErrorTitle">${t('fatalErrorTitle')}</h3><p>${message}</p><button id="logout-btn-error" class="btn btn-primary" data-i18n-key="logout">${t('logout')}</button></div></div>`;
     document.getElementById('logout-btn-error').addEventListener('click', handleSignOut);
 }
 
@@ -387,30 +350,31 @@ function showAddCompanyModal() {
     modalContainer.innerHTML = `
         <div class="modal-overlay">
             <div class="modal-content">
-                <h3>Add or Create a Company</h3>
+                <h3 data-i18n-key="addOrCreateCompany">Add or Create a Company</h3>
                 <div id="create-company-section">
-                    <h4>Create a New Company</h4>
+                    <h4 data-i18n-key="createNewCompany">Create a New Company</h4>
                     <div class="input-group">
-                        <label>New Company Name</label>
-                        <input id="new-company-name" class="form-input" placeholder="e.g., FlowBooks Inc.">
+                        <label data-i18n-key="newCompanyName">New Company Name</label>
+                        <input id="new-company-name" class="form-input" data-i18n-placeholder="companyNamePlaceholder" placeholder="e.g., FlowBooks Inc.">
                     </div>
-                    <button id="create-company-btn" class="btn btn-primary">Create</button>
+                    <button id="create-company-btn" class="btn btn-primary" data-i18n-key="create">Create</button>
                 </div>
                 <hr style="margin: 2rem 0;">
                 <div id="join-company-section">
-                    <h4>Join an Existing Company</h4>
+                    <h4 data-i18n-key="joinExistingCompany">Join an Existing Company</h4>
                      <div class="input-group">
-                        <label>Company Referral ID</label>
-                        <input id="join-company-id" class="form-input" placeholder="Enter the ID provided to you">
+                        <label data-i18n-key="companyReferralId">Company Referral ID</label>
+                        <input id="join-company-id" class="form-input" data-i18n-placeholder="referralIdPlaceholder" placeholder="Enter the ID provided to you">
                     </div>
-                    <button id="join-company-btn" class="btn btn-secondary">Join</button>
+                    <button id="join-company-btn" class="btn btn-secondary" data-i18n-key="join">Join</button>
                 </div>
                  <div class="modal-actions" style="margin-top: 2rem;">
-                    <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                    <button id="modal-cancel" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
                 </div>
             </div>
         </div>`;
 
+    applyTranslations(); // Translate the modal content
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('create-company-btn').addEventListener('click', handleCreateCompany);
     document.getElementById('join-company-btn').addEventListener('click', handleJoinCompany);
@@ -425,7 +389,7 @@ async function handleCreateCompany() {
     }
 
     btn.disabled = true;
-    btn.textContent = "Creating...";
+    btn.textContent = t('creating');
 
     try {
         const createNewCompanyFunc = httpsCallable(getFunctions(), 'createNewCompany');
@@ -438,7 +402,7 @@ async function handleCreateCompany() {
         console.error("Failed to create company:", error);
         showToast("Could not create the company.", "error");
         btn.disabled = false;
-        btn.textContent = "Create";
+        btn.textContent = t('create');
     }
 }
 
@@ -451,7 +415,7 @@ async function handleJoinCompany() {
     }
 
     btn.disabled = true;
-    btn.textContent = "Joining...";
+    btn.textContent = t('joining');
 
     try {
         const joinCompanyFunc = httpsCallable(getFunctions(), 'joinCompany');
@@ -464,6 +428,6 @@ async function handleJoinCompany() {
         console.error("Failed to join company:", error);
         showToast(error.message, "error");
         btn.disabled = false;
-        btn.textContent = "Join";
+        btn.textContent = t('join');
     }
 }
