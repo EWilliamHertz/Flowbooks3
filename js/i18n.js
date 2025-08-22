@@ -41,8 +41,12 @@ export async function setLanguage(lang) {
 }
 
 // Function to be used by other modules for dynamic content
-export function t(key) {
-    return translations[key] || key;
+export function t(key, replacements = {}) {
+    let translation = translations[key] || key;
+    for (const placeholder in replacements) {
+        translation = translation.replace(`{${placeholder}}`, replacements[placeholder]);
+    }
+    return translation;
 }
 
 // Initialize the language switcher
@@ -62,7 +66,6 @@ export function initializeLanguageSwitcher() {
 
 // Set the initial language on page load
 export function loadInitialLanguage() {
-    // This line sets 'sv' (Swedish) as the default if no language is saved
-    const savedLang = localStorage.getItem('userLanguage') || 'sv';
+    const savedLang = localStorage.getItem('userLanguage') || 'sv'; // Default to Swedish
     setLanguage(savedLang);
 }

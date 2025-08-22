@@ -36,7 +36,7 @@
                         <span class="bar"></span>
                     </button>
                     <div class="global-search-container">
-                        <input type="text" id="global-search-input" data-i18n-key="searchPlaceholder" placeholder="Sök allt (kunder, fakturor, produkter)...">
+                        <input type="text" id="global-search-input" data-i18n-placeholder="searchPlaceholder">
                         <div id="global-search-results" class="global-search-results-dropdown"></div>
                     </div>
                 </div>
@@ -48,8 +48,8 @@
                     <div class="profile-container">
                         <div id="user-profile-icon" class="user-profile"></div>
                         <div id="profile-dropdown" class="profile-dropdown">
-                            <a href="#" id="settings-link" data-i18n-key="settings">Inställningar</a>
-                            <a href="#" id="logout-btn" data-i18n-key="logout">Logga ut</a>
+                            <a href="#" id="settings-link" data-i18n-key="settings"></a>
+                            <a href="#" id="logout-btn" data-i18n-key="logout"></a>
                         </div>
                     </div>
                 </div>
@@ -61,7 +61,7 @@
                 </div>
             </main>
 
-            <footer class="language-switcher">
+            <footer class="language-switcher" style="padding: 1rem; text-align: right;">
                 <a href="#sv">Svenska</a> |
                 <a href="#en">English</a> |
                 <a href="#zh">中文</a>
@@ -75,7 +75,7 @@
     <div id="command-palette-overlay" class="command-palette-overlay" style="display: none;">
         <div class="command-palette">
             <div class="command-palette-search">
-                <input type="text" id="command-palette-input" placeholder="Skriv ett kommando eller sök...">
+                <input type="text" id="command-palette-input" data-i18n-placeholder="cmdPalette_placeholder">
             </div>
             <ul id="command-palette-results" class="command-palette-results"></ul>
         </div>

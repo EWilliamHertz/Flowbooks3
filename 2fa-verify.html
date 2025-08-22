@@ -11,21 +11,25 @@
     <div class="auth-container">
         <div class="auth-box">
             <h2 class="logo">FlowBooks</h2>
-            <h3>Tvåfaktorsautentisering</h3>
-            <p>Ange den 6-siffriga koden från din autentiseringsapp.</p>
+            <h3 data-i18n-key="twoFactorAuth"></h3>
+            <p data-i18n-key="enter6DigitCode"></p>
             <p id="auth-error" class="error-message"></p>
             <div class="input-group">
-                <label for="2fa-code">Verifieringskod</label>
+                <label for="2fa-code" data-i18n-key="verificationCode"></label>
                 <input type="text" id="2fa-code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required>
             </div>
-            <button id="verify-btn" class="btn btn-primary btn-full-width">Verifiera</button>
+            <button id="verify-btn" class="btn btn-primary btn-full-width" data-i18n-key="verify"></button>
         </div>
     </div>
 
     <script type="module">
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
+        import { initializeLanguageSwitcher, loadInitialLanguage, t } from './js/i18n.js';
 
+        initializeLanguageSwitcher();
+        loadInitialLanguage();
+        
         const auth = getAuth();
         const functions = getFunctions();
         const verify2FAToken = httpsCallable(functions, 'verify2FAToken');
@@ -36,7 +40,6 @@
 
         onAuthStateChanged(auth, (user) => {
             if (!user) {
-                // Om ingen är inloggad, skicka tillbaka till loginsidan
                 window.location.href = 'login.html';
             }
         });
@@ -44,28 +47,27 @@
         const handleVerification = async () => {
             const token = codeInput.value.trim();
             if (!token || token.length !== 6 || !/^\d{6}$/.test(token)) {
-                errorEl.textContent = 'Ange en giltig 6-siffrig kod.';
+                errorEl.textContent = t('pleaseEnter6DigitCode');
                 return;
             }
 
             verifyBtn.disabled = true;
-            verifyBtn.textContent = 'Verifierar...';
+            verifyBtn.textContent = t('Verifying');
             errorEl.textContent = '';
 
             try {
                 const result = await verify2FAToken({ token });
                 if (result.data.verified) {
-                    // Lyckad verifiering, skicka till appen
                     window.location.href = 'app.html';
                 } else {
-                    errorEl.textContent = 'Felaktig kod. Försök igen.';
+                    errorEl.textContent = t('invalidCodeTryAgain');
                 }
             } catch (error) {
                 console.error("2FA verifieringsfel:", error);
-                errorEl.textContent = 'Ett fel uppstod. Försök igen.';
+                errorEl.textContent = t('anErrorOccurredTryAgain');
             } finally {
                 verifyBtn.disabled = false;
-                verifyBtn.textContent = 'Verifiera';
+                verifyBtn.textContent = t('verify');
             }
         };
 
