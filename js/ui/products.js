@@ -4,6 +4,7 @@ import { saveDocument, deleteDocument, fetchAllCompanyData } from '../services/f
 import { showToast, closeModal, showConfirmationModal, renderSpinner } from './utils.js';
 import { doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
+import { t } from '../i18n.js';
 
 let inventoryChartInstance = null;
 
@@ -21,12 +22,12 @@ export function renderProductsPage() {
             <thead>
                 <tr>
                     <th><input type="checkbox" id="select-all-products"></th>
-                    <th>Bild</th>
-                    <th>Namn</th>
-                    <th>Leverantör</th>
-                    <th>Pris Företag (exkl. moms)</th>
-                    <th>Lager</th>
-                    <th>Åtgärder</th>
+                    <th>${t('productImage')}</th>
+                    <th>${t('name')}</th>
+                    <th>${t('productSupplier')}</th>
+                    <th>${t('productPriceBusiness')}</th>
+                    <th>${t('productStock')}</th>
+                    <th>${t('productActions')}</th>
                 </tr>
             </thead>
             <tbody>
@@ -39,20 +40,20 @@ export function renderProductsPage() {
                         <td>${(p.sellingPriceBusiness || 0).toLocaleString('sv-SE')} kr</td>
                         <td>${p.stock || 0}</td>
                         <td>
-                            <button class="btn btn-sm btn-secondary btn-edit-product">Redigera</button>
-                            <button class="btn btn-sm btn-danger btn-delete-product">Ta bort</button>
+                            <button class="btn btn-sm btn-secondary btn-edit-product">${t('edit')}</button>
+                            <button class="btn btn-sm btn-danger btn-delete-product">${t('delete')}</button>
                         </td>
                     </tr>`).join('')}
             </tbody>
         </table>` : 
-        `<div class="empty-state"><h3>Inga produkter ännu</h3><p>Lägg till din första produkt via knappen "Ny Produkt" uppe till höger eller via "Importera Data" i menyn.</p></div>`;
+        `<div class="empty-state"><h3>${t('noProductsEmptyStateTitle')}</h3><p>${t('noProductsEmptyStateDescription')}</p></div>`;
 
     mainView.innerHTML = `
         <div id="inventory-projection-container" class="card" style="margin-bottom: 1.5rem;"></div>
         <div class="card">
             <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                <h3 class="card-title" style="margin: 0;">Produktregister</h3>
-                <button id="delete-selected-products-btn" class="btn btn-danger" style="display: none;">Ta bort valda</button>
+                <h3 class="card-title" style="margin: 0;">${t('productsTitle')}</h3>
+                <button id="delete-selected-products-btn" class="btn btn-danger" style="display: none;">${t('deleteSelected')}</button>
             </div>
             <div id="table-container">${productsHtml}</div>
         </div>`;
@@ -89,7 +90,7 @@ function attachProductPageEventListeners() {
     const toggleDeleteButton = () => {
         const selected = document.querySelectorAll('.product-select-checkbox:checked');
         deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
-        deleteBtn.textContent = `Ta bort valda (${selected.length})`;
+        deleteBtn.textContent = t('deleteSelected', { count: selected.length });
     };
 
     if (allCheckbox) {
@@ -113,8 +114,8 @@ function attachProductPageEventListeners() {
                     await batch.commit();
                     await fetchAllCompanyData();
                     renderProductsPage();
-                    showToast(`${selectedIds.length} produkter har tagits bort!`, 'success');
-                }, "Ta bort produkter", `Är du säker på att du vill ta bort ${selectedIds.length} produkter permanent?`);
+                    showToast(t('productsDeleted', { count: selectedIds.length }), 'success');
+                }, t('deleteProductsConfirm'), t('deleteProductsConfirmBody', { count: selectedIds.length }));
             }
         });
     }
@@ -128,23 +129,23 @@ function renderInventoryProjection() {
     const savedPrivateSplit = currentCompany.inventoryProjectionSplit || 60;
     
     container.innerHTML = `
-        <h3 class="card-title">Prognos för Inventarievärde</h3>
-        <p>Ställ in en procentuell fördelning för att se hur det påverkar den potentiella omsättningen från ditt lager. Inställningen sparas och visas på Översikt-sidan.</p>
+        <h3 class="card-title">${t('inventoryProjectionTitle')}</h3>
+        <p>${t('inventoryProjectionDescription')}</p>
         <div class="projection-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; margin-top: 1rem;">
             <div class="projection-inputs">
                 <div class="input-group">
-                    <label>Andel såld till Privat (%)</label>
+                    <label>${t('shareSoldToPrivate')}</label>
                     <input type="number" id="percent-private" class="form-input" value="${savedPrivateSplit}" min="0" max="100">
                 </div>
                 <div class="input-group">
-                    <label>Andel såld till Företag (%)</label>
+                    <label>${t('shareSoldToBusiness')}</label>
                     <input type="number" id="percent-business" class="form-input" value="${100 - savedPrivateSplit}" min="0" max="100">
                 </div>
                 <div id="projection-results" style="margin-top: 1.5rem; font-size: 1.1rem;">
-                    <p>Potentiell omsättning (Privat): <strong id="result-private" class="green"></strong></p>
-                    <p>Potentiell omsättning (Företag): <strong id="result-business" class="blue"></strong></p>
+                    <p>${t('potentialRevenuePrivate')}: <strong id="result-private" class="green"></strong></p>
+                    <p>${t('potentialRevenueBusiness')}: <strong id="result-business" class="blue"></strong></p>
                 </div>
-                 <button id="save-projection-btn" class="btn btn-primary" style="margin-top: 1rem;">Spara Prognosinställning</button>
+                 <button id="save-projection-btn" class="btn btn-primary" style="margin-top: 1rem;">${t('saveProjectionSettings')}</button>
             </div>
             <div class="projection-chart" style="position: relative; height: 250px;">
                 <canvas id="inventoryPieChart"></canvas>
@@ -198,19 +199,19 @@ function renderInventoryProjection() {
         const companyRef = doc(db, 'companies', currentCompany.id);
         
         saveBtn.disabled = true;
-        saveBtn.textContent = 'Sparar...';
+        saveBtn.textContent = t('saving');
 
         try {
             await updateDoc(companyRef, { inventoryProjectionSplit: newPrivateSplit });
             const updatedCompany = { ...currentCompany, inventoryProjectionSplit: newPrivateSplit };
             setState({ currentCompany: updatedCompany });
-            showToast("Prognosinställning sparad!", "success");
+            showToast(t("projectionSaved"), "success");
         } catch (error) {
             console.error("Kunde inte spara prognos:", error);
-            showToast("Kunde inte spara inställningen.", "error");
+            showToast(t("couldNotSaveProjection"), "error");
         } finally {
             saveBtn.disabled = false;
-            saveBtn.textContent = 'Spara Prognosinställning';
+            saveBtn.textContent = t('saveProjectionSettings');
         }
     });
 
@@ -228,7 +229,7 @@ function updateInventoryChart(data) {
     }
     inventoryChartInstance = new Chart(ctx, {
         type: 'pie',
-        data: { labels: ['Privat', 'Företag'], datasets: [{ data: data, backgroundColor: ['rgba(46, 204, 113, 0.8)', 'rgba(74, 144, 226, 0.8)'] }] },
+        data: { labels: [t('private'), t('business')], datasets: [{ data: data, backgroundColor: ['rgba(46, 204, 113, 0.8)', 'rgba(74, 144, 226, 0.8)'] }] },
         options: { responsive: true, maintainAspectRatio: false }
     });
 }
@@ -246,28 +247,28 @@ export function renderProductForm(productId = null) {
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content" onclick="event.stopPropagation()">
-                <h3>${isEdit ? 'Redigera Produkt' : 'Ny Produkt'}</h3>
+                <h3>${isEdit ? t('editProduct') : t('newProduct')}</h3>
                 <form id="product-form">
-                    <div class="input-group"><label>Produktnamn *</label><input class="form-input" id="product-name" value="${product?.name || ''}" required></div>
-                    <div class="input-group"><label>Leverantör (valfritt)</label>
+                    <div class="input-group"><label>${t('productName')} *</label><input class="form-input" id="product-name" value="${product?.name || ''}" required></div>
+                    <div class="input-group"><label>${t('productSupplier')} (${t('optional')})</label>
                         <select id="product-supplier" class="form-input">
-                            <option value="">Ingen specifik leverantör</option>
+                            <option value="">${t('noSpecificSupplier')}</option>
                             ${supplierOptions}
                         </select>
                     </div>
-                    <div class="input-group"><label>Bild-URL (valfritt)</label><input class="form-input" id="product-image-url" value="${product?.imageUrl || ''}" placeholder="https://..."></div>
+                    <div class="input-group"><label>${t('imageUrl')} (${t('optional')})</label><input class="form-input" id="product-image-url" value="${product?.imageUrl || ''}" placeholder="https://..."></div>
                     <div class="form-grid">
-                        <div class="input-group"><label>Inköpspris</label><input class="form-input" id="product-purchase-price" type="number" step="0.01" value="${product?.purchasePrice || ''}" placeholder="0.00"></div>
-                        <div class="input-group"><label>Lagerantal</label><input class="form-input" id="product-stock" type="number" value="${product?.stock || 0}"></div>
+                        <div class="input-group"><label>${t('purchasePrice')}</label><input class="form-input" id="product-purchase-price" type="number" step="0.01" value="${product?.purchasePrice || ''}" placeholder="0.00"></div>
+                        <div class="input-group"><label>${t('stockCount')}</label><input class="form-input" id="product-stock" type="number" value="${product?.stock || 0}"></div>
                     </div>
                     <hr>
                     <div class="form-grid">
-                        <div class="input-group"><label>Försäljningspris Företag (exkl. moms)</label><input class="form-input" id="product-selling-business" type="number" step="0.01" value="${product?.sellingPriceBusiness || ''}" placeholder="0.00"></div>
-                        <div class="input-group"><label>Försäljningspris Privat</label><input class="form-input" id="product-selling-private" type="number" step="0.01" value="${product?.sellingPricePrivate || ''}" placeholder="0.00"></div>
+                        <div class="input-group"><label>${t('productPriceBusiness')}</label><input class="form-input" id="product-selling-business" type="number" step="0.01" value="${product?.sellingPriceBusiness || ''}" placeholder="0.00"></div>
+                        <div class="input-group"><label>${t('productPricePrivate')}</label><input class="form-input" id="product-selling-private" type="number" step="0.01" value="${product?.sellingPricePrivate || ''}" placeholder="0.00"></div>
                     </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
-                        <button type="submit" class="btn btn-primary">${isEdit ? 'Uppdatera' : 'Skapa'}</button>
+                        <button type="button" class="btn btn-secondary" id="modal-cancel">${t('cancel')}</button>
+                        <button type="submit" class="btn btn-primary">${isEdit ? t('update') : t('create')}</button>
                     </div>
                 </form>
             </div>
@@ -300,23 +301,23 @@ async function saveProductHandler(btn, productId = null) {
         sellingPricePrivate: parseFloat(document.getElementById('product-selling-private').value) || 0,
     };
     if (!productData.name) {
-        showToast("Produktnamn är obligatoriskt.", "warning");
+        showToast(t('productNameRequired'), "warning");
         return;
     }
 
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Sparar...';
+    btn.textContent = t('saving');
 
     try {
         await saveDocument('products', productData, productId);
-        showToast(`Produkten har ${productId ? 'uppdaterats' : 'skapats'}!`, 'success');
+        showToast(t("productSaved"), 'success');
         closeModal();
         await fetchAllCompanyData();
         renderProductsPage();
     } catch (error) {
         console.error("Kunde inte spara produkt:", error);
-        showToast('Kunde inte spara produkten.', 'error');
+        showToast(t('couldNotSaveProduct'), 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -327,23 +328,23 @@ export function deleteProduct(productId) {
     showConfirmationModal(async () => {
         try {
             await deleteDocument('products', productId);
-            showToast('Produkten har tagits bort!', 'success');
+            showToast(t('productDeleted'), 'success');
             await fetchAllCompanyData();
             renderProductsPage();
         } catch (error) {
-            showToast('Kunde inte ta bort produkten.', 'error');
+            showToast(t('couldNotDeleteProduct'), 'error');
         }
-    }, "Ta bort produkt", "Är du säker på att du vill ta bort denna produkt permanent?");
+    }, t('deleteProductConfirm'), t('deleteProductConfirmBody'));
 }
 
 export function showProductImage(imageUrl, productName) {
     const modalHtml = `
         <div class="modal-overlay" id="image-modal-overlay">
             <div class="modal-content image-modal">
-                <h3>${productName}</h3>
+                <h3>${t('productImageModalTitle', { productName: productName })}</h3>
                 <img src="${imageUrl}" alt="${productName}" style="max-width: 100%; max-height: 70vh; margin-top: 1rem;">
                  <div class="modal-actions" style="margin-top: 1.5rem;">
-                    <button id="modal-close" class="btn btn-primary">Stäng</button>
+                    <button id="modal-close" class="btn btn-primary">${t('close')}</button>
                 </div>
             </div>
         </div>`;

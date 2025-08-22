@@ -88,7 +88,7 @@ export async function fetchAllCompanyData() {
             getDocs(query(collection(db, 'timeEntries'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'templates'), where('companyId', '==', companyId))),
             getDocs(query(collection(db, 'bills'), where('companyId', '==', companyId))),
-            getDocs(query(collection(db, 'purchaseOrders'), where('companyId', '==', companyId))), // <-- LÄGG TILL DENNA RAD
+            getDocs(query(collection(db, 'purchaseOrders'), where('companyId', '==', companyId))),
         ];
         
         if (memberUIDs.length > 0) {
@@ -109,8 +109,8 @@ export async function fetchAllCompanyData() {
         const allTimeEntries = results[9].docs.map(d => ({ id: d.id, ...d.data() }));
         const allTemplates = results[10].docs.map(d => ({ id: d.id, ...d.data() }));
         const allBills = results[11].docs.map(d => ({ id: d.id, ...d.data() }));
-        const allPurchaseOrders = results[12].docs.map(d => ({ id: d.id, ...d.data() })); // <-- LÄGG TILL DENNA RAD
-        const teamMembers = results.length > 13 ? results[13].docs.map(d => ({ id: d.id, ...d.data() })) : []; // <-- ÄNDRA INDEX
+        const allPurchaseOrders = results[12].docs.map(d => ({ id: d.id, ...d.data() }));
+        const teamMembers = results.length > 13 ? results[13].docs.map(d => ({ id: d.id, ...d.data() })) : []; 
         
         const allTransactions = [
             ...allIncomes.map(t => ({ ...t, type: 'income' })),
@@ -120,7 +120,7 @@ export async function fetchAllCompanyData() {
         setState({ allIncomes, allExpenses, recurringTransactions, allProducts, categories, allInvoices, allBills, allQuotes, allPurchaseOrders, allContacts, allProjects, allTimeEntries, allTemplates, teamMembers, allTransactions });
     } catch (error) {
         console.error("Kunde inte ladda all företagsdata:", error);
-        showToast("Kunde inte ladda all företagsdata.", "error");
+        showToast("couldNotLoadCompanyData", "error");
     }
 }
 

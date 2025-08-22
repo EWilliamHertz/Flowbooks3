@@ -26,8 +26,8 @@ async function renderInboxView() {
     const container = document.getElementById('mail-container');
     container.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-            <h3 class="card-title" style="margin:0;">Inkorg</h3>
-            <button id="new-mail-btn" class="btn btn-primary">Skriv nytt</button>
+            <h3 class="card-title" style="margin:0;">${t('mailInbox')}</h3>
+            <button id="new-mail-btn" class="btn btn-primary">${t('mailNewMail')}</button>
         </div>
         <div id="inbox-list">${renderSpinner()}</div>`;
     
@@ -39,14 +39,14 @@ async function renderInboxView() {
         const inboxList = document.getElementById('inbox-list');
 
         if (!emails || emails.length === 0) {
-            inboxList.innerHTML = "<p>Din inkorg är tom.</p>";
+            inboxList.innerHTML = `<p>${t('mailNoEmails')}</p>`;
             return;
         }
 
         inboxList.innerHTML = emails.map(email => `
             <div class="history-item" data-uid="${email.uid}" style="cursor: pointer;">
-                <span><strong>Från:</strong> ${email.from}</span>
-                <span>${email.subject || '(Inget ämne)'}</span>
+                <span><strong>${t('mailFrom')}:</strong> ${email.from}</span>
+                <span>${email.subject || `(${t('noSubject')})`}</span>
                 <span style="color: var(--text-color-light);">${new Date(email.date).toLocaleDateString()}</span>
             </div>
         `).join('');
@@ -57,7 +57,7 @@ async function renderInboxView() {
 
     } catch (error) {
         console.error("Could not fetch emails:", error);
-        container.innerHTML = '<p>Kunde inte ladda e-post. Har du konfigurerat ditt konto? <a href="#" id="goto-mail-settings">Gå till E-postinställningar.</a></p>';
+        container.innerHTML = `<p>${t('mailSettingsNotConfigured')} <a href="#" id="goto-mail-settings">${t('mailGoToSettings')}</a></p>`;
         document.getElementById('goto-mail-settings').addEventListener('click', (e) => {
             e.preventDefault();
             window.navigateTo('mail-settings');
@@ -76,18 +76,18 @@ async function renderReadingView(emailUid) {
 
         container.innerHTML = `
             <div class="email-reading-header">
-                <button id="back-to-inbox-btn" class="btn btn-secondary">&larr; Tillbaka till inkorgen</button>
+                <button id="back-to-inbox-btn" class="btn btn-secondary">&larr; ${t('mailBackToInbox')}</button>
                 <div class="email-actions">
-                    <button id="reply-btn" class="btn btn-primary">Svara</button>
-                    <button id="forward-btn" class="btn btn-secondary">Vidarebefordra</button>
+                    <button id="reply-btn" class="btn btn-primary">${t('mailReply')}</button>
+                    <button id="forward-btn" class="btn btn-secondary">${t('mailForward')}</button>
                 </div>
             </div>
             <hr style="margin: 1rem 0;">
             <div class="email-meta">
-                <p><strong>Från:</strong> ${email.from}</p>
-                <p><strong>Till:</strong> ${email.to}</p>
-                <p><strong>Ämne:</strong> ${email.subject}</p>
-                <p><strong>Datum:</strong> ${new Date(email.date).toLocaleString()}</p>
+                <p><strong>${t('mailFrom')}:</strong> ${email.from}</p>
+                <p><strong>${t('mailTo')}:</strong> ${email.to}</p>
+                <p><strong>${t('mailSubject')}:</strong> ${email.subject}</p>
+                <p><strong>${t('mailDate')}:</strong> ${new Date(email.date).toLocaleString()}</p>
             </div>
             <hr style="margin: 1rem 0;">
             <div class="email-body">
@@ -118,18 +118,18 @@ async function renderReadingView(emailUid) {
 
         document.getElementById('back-to-inbox-btn').addEventListener('click', renderInboxView);
         document.getElementById('reply-btn').addEventListener('click', () => {
-            const replySubject = `Re: ${email.subject}`;
-            const replyBody = `<br><br><hr>On ${new Date(email.date).toLocaleString()}, ${email.from} wrote:<br><blockquote>${email.html}</blockquote>`;
+            const replySubject = `${t('re')}: ${email.subject}`;
+            const replyBody = `<br><br><hr>${t('onDateFromUser', { date: new Date(email.date).toLocaleString(), from: email.from })}<br><blockquote>${email.html}</blockquote>`;
             renderComposeView({ to: email.from, subject: replySubject, body: replyBody });
         });
         document.getElementById('forward-btn').addEventListener('click', () => {
-            const forwardSubject = `Fwd: ${email.subject}`;
-            const forwardBody = `<br><br><hr>Forwarded message:<br>From: ${email.from}<br>Date: ${new Date(email.date).toLocaleString()}<br>Subject: ${email.subject}<br>To: ${email.to}<br><br>${email.html}`;
+            const forwardSubject = `${t('fwd')}: ${email.subject}`;
+            const forwardBody = `<br><br><hr>${t('forwardedMessage')}:<br>${t('mailFrom')}: ${email.from}<br>${t('mailDate')}: ${new Date(email.date).toLocaleString()}<br>${t('mailSubject')}: ${email.subject}<br>${t('mailTo')}: ${email.to}<br><br>${email.html}`;
             renderComposeView({ subject: forwardSubject, body: forwardBody });
         });
 
     } catch (error) {
-        showToast("Could not load email content.", "error");
+        showToast("mailLoadError", "error");
         console.error(error);
         renderInboxView();
     }
@@ -140,30 +140,30 @@ function renderComposeView(prefill = {}) {
     const container = document.getElementById('mail-container');
     
     container.innerHTML = `
-        <h3>Nytt E-postmeddelande</h3>
+        <h3>${t('mailNewMail')}</h3>
         <div class="input-group">
-            <label>Till</label>
+            <label>${t('mailTo')}</label>
             <div style="display: flex; gap: 0.5rem;">
-                <input id="compose-to" type="text" class="form-input" placeholder="Ange e-post, separera med kommatecken" value="${prefill.to || ''}" style="flex-grow: 1;">
-                <button id="add-from-contacts-btn" class="btn btn-secondary">Lägg till från kontakter</button>
+                <input id="compose-to" type="text" class="form-input" placeholder="${t('mailRecipientPlaceholder')}" value="${prefill.to || ''}" style="flex-grow: 1;">
+                <button id="add-from-contacts-btn" class="btn btn-secondary">${t('mailAddFromContacts')}</button>
             </div>
             <div id="contacts-dropdown-container" style="position: relative;"></div>
         </div>
         <div class="input-group">
-            <label>Ämne</label>
+            <label>${t('mailSubject')}</label>
             <input id="compose-subject" type="text" class="form-input" value="${prefill.subject || ''}">
         </div>
         <div class="input-group">
-             <label>Meddelande</label>
+             <label>${t('mailMessage')}</label>
              <div id="ai-helper" style="margin-bottom: 0.5rem; display: flex; gap: 0.5rem;">
-                <input id="ai-prompt" type="text" class="form-input" placeholder="AI-assistent: Skriv en påminnelse om faktura #123...">
-                <button id="ai-generate-btn" class="btn btn-secondary">Generera</button>
+                <input id="ai-prompt" type="text" class="form-input" placeholder="${t('mailAIAssistantPlaceholder')}">
+                <button id="ai-generate-btn" class="btn btn-secondary">${t('mailAIGenerate')}</button>
              </div>
             <textarea id="compose-body" class="form-input" rows="12">${prefill.body || ''}</textarea>
         </div>
         <div class="modal-actions">
-            <button id="cancel-compose-btn" class="btn btn-secondary">Avbryt</button>
-            <button id="send-mail-btn" class="btn btn-primary">Skicka</button>
+            <button id="cancel-compose-btn" class="btn btn-secondary">${t('cancel')}</button>
+            <button id="send-mail-btn" class="btn btn-primary">${t('send')}</button>
         </div>
     `;
     
@@ -196,9 +196,9 @@ function showContactsDropdown() {
     container.innerHTML = `
         <div class="product-selector-dropdown show" style="max-height: 250px;">
             <div style="padding: 0.5rem; position: sticky; top: 0; background: white;">
-                <input type="text" id="contact-search-input" class="form-input" placeholder="Sök kontakter...">
+                <input type="text" id="contact-search-input" class="form-input" placeholder="${t('searchContacts')}">
                 <div style="margin-top: 0.5rem; text-align: right;">
-                    <button id="add-selected-contacts-btn" class="btn btn-sm btn-primary">Lägg till valda</button>
+                    <button id="add-selected-contacts-btn" class="btn btn-sm btn-primary">${t('addSelected')}</button>
                 </div>
             </div>
             <div id="contact-list-for-mail">
@@ -240,22 +240,22 @@ async function sendEmail() {
         body: document.getElementById('compose-body').value,
     };
     if (!emailData.to || !emailData.subject) {
-        showToast("Mottagare och ämne är obligatoriskt.", "warning");
+        showToast("mailRecipientAndSubjectRequired", "warning");
         return;
     }
     
     btn.disabled = true;
-    btn.textContent = 'Skickar...';
+    btn.textContent = t('sending');
     try {
         await sendEmailFunc(emailData);
-        showToast("E-postmeddelandet har skickats!", "success");
+        showToast("mailSentSuccess", "success");
         renderInboxView();
     } catch (error) {
         console.error("Failed to send email:", error);
-        showToast("Kunde inte skicka e-post. Kontrollera dina inställningar och försök igen.", "error");
+        showToast("mailCouldNotSend", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Skicka';
+        btn.textContent = t('send');
     }
 }
 
@@ -263,19 +263,19 @@ async function generateAIEmail() {
     const btn = document.getElementById('ai-generate-btn');
     const prompt = document.getElementById('ai-prompt').value;
     if (!prompt) {
-        showToast("Vänligen ange en instruktion till AI-assistenten.", "warning");
+        showToast("mailAIPromptRequired", "warning");
         return;
     }
     
     btn.disabled = true;
-    btn.textContent = 'Tänker...';
+    btn.textContent = t('generating');
     try {
         const result = await getAIEmailSuggestionFunc({ prompt });
         document.getElementById('compose-body').value = result.data.suggestion;
     } catch (error) {
-        showToast("Kunde inte hämta AI-förslag.", "error");
+        showToast("mailAIGenerationFailed", "error");
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Generera';
+        btn.textContent = t('mailAIGenerate');
     }
 }

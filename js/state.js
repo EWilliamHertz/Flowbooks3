@@ -14,7 +14,7 @@ const state = {
     allInvoices: [],
     allBills: [],
     allQuotes: [], 
-    allPurchaseOrders: [], // <-- LÄGG TILL DENNA RAD
+    allPurchaseOrders: [],
     recurringTransactions: [],
     categories: [],
     allContacts: [],

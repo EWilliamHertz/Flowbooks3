@@ -12,13 +12,13 @@ export function renderContactsPage() {
     mainView.innerHTML = `
         <div class="card">
             <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                 <h3 class="card-title" style="margin: 0;">${t('contactsPageTitle')}</h3>
+                 <h3 class="card-title" style="margin: 0;">${t('contacts')}</h3>
                  <div>
-                    <button id="email-selected-btn" class="btn btn-secondary" style="display: none; margin-right: 10px;">${t('sendEmailToSelected')}</button>
-                    <button id="delete-selected-contacts-btn" class="btn btn-danger" style="display: none;">${t('deleteSelected')}</button>
+                    <button id="email-selected-btn" class="btn btn-secondary" style="display: none; margin-right: 10px;">${t('emailSelectedContacts')}</button>
+                    <button id="delete-selected-contacts-btn" class="btn btn-danger" style="display: none;">${t('deleteSelectedContacts')}</button>
                  </div>
             </div>
-            <p>${t('manageCustomersAndSuppliers')}</p>
+            <p>${t('contactsDescription')}</p>
             <div id="contacts-list-container" style="margin-top: 1.5rem;"></div>
         </div>
     `;
@@ -34,7 +34,7 @@ function renderContactsList() {
         <tr data-contact-id="${contact.id}" style="cursor: pointer;">
             <td><input type="checkbox" class="contact-select-checkbox" data-id="${contact.id}" data-email="${contact.email || ''}" onclick="event.stopPropagation();"></td>
             <td><strong>${contact.name}</strong></td>
-            <td>${contact.type === 'customer' ? t('customerType') : t('supplierType')}</td>
+            <td>${contact.type === 'customer' ? t('customer') : t('supplier')}</td>
             <td>${contact.orgNumber || '-'}</td>
             <td>${contact.email || '-'}</td>
         </tr>
@@ -46,13 +46,13 @@ function renderContactsList() {
                 <tr>
                     <th><input type="checkbox" id="select-all-contacts"></th>
                     <th>${t('name')}</th>
-                    <th>${t('type')}</th>
-                    <th>${t('orgPersonNumber')}</th>
-                    <th>${t('email')}</th>
+                    <th>${t('contactType')}</th>
+                    <th>${t('contactOrgNr')}</th>
+                    <th>${t('contactEmail')}</th>
                 </tr>
             </thead>
             <tbody>
-                ${allContacts.length > 0 ? rows : `<tr><td colspan="5" class="text-center">${t('noContactsAdded')}</td></tr>`}
+                ${allContacts.length > 0 ? rows : `<tr><td colspan="5" class="text-center">${t('noContactsYet')}</td></tr>`}
             </tbody>
         </table>
     `;
@@ -73,7 +73,7 @@ function renderContactsList() {
         emailBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
         deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
         if(selected.length > 0) {
-            deleteBtn.textContent = `${t('deleteSelected')} (${selected.length})`;
+            deleteBtn.textContent = `${t('deleteSelectedContacts')} (${selected.length})`;
         }
     };
 
@@ -112,8 +112,8 @@ function renderContactsList() {
                     await batch.commit();
                     await fetchAllCompanyData();
                     renderContactsList();
-                    showToast(t('contactsDeleted').replace('{count}', selectedIds.length), 'success');
-                }, t('deleteContacts'), t('areYouSureDeleteContacts').replace('{count}', selectedIds.length));
+                    showToast(t('contactsDeleted', { count: selectedIds.length }), 'success');
+                }, t('deleteContactsTitle'), t('areYouSureDeleteContacts', { count: selectedIds.length }));
             }
         });
     }
@@ -135,15 +135,15 @@ export function renderContactDetailView(contactId) {
     const contactQuotes = allQuotes.filter(q => q.customerName === contact.name);
     const contactTransactions = allTransactions.filter(t => t.party === contact.name);
 
-    const invoiceRows = contactInvoices.map(i => `<li data-id="${i.id}" data-type="invoice"><a href="#">${t('invoice')} #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})} (${i.status})</li>`).join('');
-    const quoteRows = contactQuotes.map(q => `<li data-id="${q.id}" data-type="quote"><a href="#">${t('quote')} #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})} (${q.status})</li>`).join('');
+    const invoiceRows = contactInvoices.map(i => `<li data-id="${i.id}" data-type="invoice"><a href="#">${t('invoice')} #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})} (${t(i.status)})</li>`).join('');
+    const quoteRows = contactQuotes.map(q => `<li data-id="${q.id}" data-type="quote"><a href="#">${t('quote')} #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})} (${t(q.status)})</li>`).join('');
     const transactionRows = contactTransactions.map(t => `<li class="${t.type === 'income' ? 'green' : 'red'}">${t.date}: ${t.description} - ${t.amount.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})}</li>`).join('');
 
     const detailHtml = `
         <div class="contact-detail-header" data-contact-id="${contact.id}">
             <div style="margin-bottom: 2rem;">
                 <h2>${contact.name}</h2>
-                <p style="color: var(--text-color-light);">${contact.type === 'customer' ? t('customerType') : t('supplierType')} | ${contact.email || t('noEmail')} | ${contact.orgNumber || t('noOrgNumber')}</p>
+                <p style="color: var(--text-color-light);">${contact.type === 'customer' ? t('customer') : t('supplier')} | ${contact.email || t('noEmail')} | ${contact.orgNumber || t('noOrgNumber')}</p>
             </div>
             <div>
                 <button class="btn btn-secondary btn-edit-contact">${t('edit')}</button>
@@ -152,16 +152,16 @@ export function renderContactDetailView(contactId) {
         </div>
         <div class="settings-grid">
             <div class="card">
-                <h3 class="card-title">${t('quotes')} (${contactQuotes.length})</h3>
-                <ul class="history-list" id="quote-history-list">${quoteRows || `<li>${t('noQuotes')}</li>`}</ul>
+                <h3 class="card-title">${t('contactHistoryQuotes', { count: contactQuotes.length })}</h3>
+                <ul class="history-list" id="quote-history-list">${quoteRows || `<li>${t('noQuotesFound')}</li>`}</ul>
             </div>
             <div class="card">
-                <h3 class="card-title">${t('invoices')} (${contactInvoices.length})</h3>
-                <ul class="history-list" id="invoice-history-list">${invoiceRows || `<li>${t('noInvoices')}</li>`}</ul>
+                <h3 class="card-title">${t('contactHistoryInvoices', { count: contactInvoices.length })}</h3>
+                <ul class="history-list" id="invoice-history-list">${invoiceRows || `<li>${t('noInvoicesFound')}</li>`}</ul>
             </div>
             <div class="card" style="grid-column: 1 / -1;">
-                <h3 class="card-title">${t('transactions')} (${contactTransactions.length})</h3>
-                <ul class="history-list">${transactionRows || `<li>${t('noTransactions')}</li>`}</ul>
+                <h3 class="card-title">${t('contactHistoryTransactions', { count: contactTransactions.length })}</h3>
+                <ul class="history-list">${transactionRows || `<li>${t('noTransactionsFound')}</li>`}</ul>
             </div>
         </div>
     `;
@@ -211,22 +211,22 @@ export function renderContactForm(contactId = null) {
                 <h3>${isEdit ? t('editContact') : t('newContact')}</h3>
                 <form id="contact-form">
                     <div class="input-group">
-                        <label>${t('name')} *</label>
+                        <label>${t('contactName')} *</label>
                         <input class="form-input" id="contact-name" value="${contact?.name || ''}" required>
                     </div>
                     <div class="input-group">
-                        <label>${t('type')}</label>
+                        <label>${t('contactType')}</label>
                         <select id="contact-type" class="form-input">
-                            <option value="customer" ${contact?.type === 'customer' ? 'selected' : ''}>${t('customerType')}</option>
-                            <option value="supplier" ${contact?.type === 'supplier' ? 'selected' : ''}>${t('supplierType')}</option>
+                            <option value="customer" ${contact?.type === 'customer' ? 'selected' : ''}>${t('customer')}</option>
+                            <option value="supplier" ${contact?.type === 'supplier' ? 'selected' : ''}>${t('supplier')}</option>
                         </select>
                     </div>
                     <div class="input-group">
-                        <label>${t('orgNumber')}</label>
+                        <label>${t('contactOrgNr')}</label>
                         <input class="form-input" id="contact-org-number" value="${contact?.orgNumber || ''}">
                     </div>
                     <div class="input-group">
-                        <label>${t('email')}</label>
+                        <label>${t('contactEmail')}</label>
                         <input class="form-input" id="contact-email" type="email" value="${contact?.email || ''}">
                     </div>
                     <div class="modal-actions">
@@ -254,7 +254,7 @@ async function saveContactHandler(btn, contactId) {
     };
 
     if (!contactData.name) {
-        showToast(t('fillAllFieldsWarning'), "warning");
+        showToast(t('contactNameRequired'), "warning");
         return;
     }
 
@@ -264,7 +264,7 @@ async function saveContactHandler(btn, contactId) {
 
     try {
         await saveDocument('contacts', contactData, contactId);
-        showToast(t('contactSaved').replace('{status}', contactId ? t('contactUpdated') : t('contactCreated')), 'success');
+        showToast(t('contactSaved', { status: contactId ? t('contactUpdated') : t('contactCreated') }), 'success');
         closeModal();
         await fetchAllCompanyData();
         const mainView = document.getElementById('main-view');
@@ -294,5 +294,5 @@ export function deleteContact(contactId) {
         } catch (error) {
             showToast(t('couldNotDeleteContact'), 'error');
         }
-    }, t('deleteContact'), t('areYouSureDeleteContact'));
+    }, t('deleteContactTitle'), t('deleteContactBody'));
 }

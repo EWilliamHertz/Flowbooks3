@@ -49,7 +49,7 @@ export function showInfoModal(title, message) {
                 <h3>${title}</h3>
                 <p>${message}</p>
                 <div class="modal-actions">
-                    <button id="modal-close" class="btn btn-primary">OK</button>
+                    <button id="modal-close" class="btn btn-primary">${t('close')}</button>
                 </div>
             </div>
         </div>`;
@@ -66,7 +66,7 @@ export function closeModal() {
 
 export function exportToCSV(data, filename) {
     if (!data || data.length === 0) {
-        showToast("Ingen data att exportera.", "warning");
+        showToast("noDataToExport", "warning");
         return;
     }
 

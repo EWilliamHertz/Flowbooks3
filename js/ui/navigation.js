@@ -285,7 +285,7 @@ function handleGlobalSearch() {
                                 <p><strong>${t('type')}:</strong> ${transaction.type === 'income' ? t('income') : t('expense')}</p>
                                 <p><strong>${t('category')}:</strong> ${getState().categories.find(c => c.id === transaction.categoryId)?.name || '-'}</p>
                             `,
-                            actions: [{ id: 'modal-close', text: 'close', style: 'secondary', handler: closeModal }]
+                            actions: [{ id: 'modal-close', text: t('close'), style: 'secondary', handler: closeModal }]
                         });
                         break;
                 }
@@ -380,7 +380,7 @@ async function handleCreateCompany() {
     const btn = document.getElementById('create-company-btn');
     const companyName = document.getElementById('new-company-name').value;
     if (!companyName) {
-        showToast("companyNameCannotBeEmpty", "warning");
+        showToast("companyNameIsRequired", "warning");
         return;
     }
 
@@ -391,7 +391,7 @@ async function handleCreateCompany() {
         const createNewCompanyFunc = httpsCallable(getFunctions(), 'createNewCompany');
         await createNewCompanyFunc({ companyName });
         await fetchInitialData(getState().currentUser);
-        showToast("companyCreated", "success");
+        showToast("companyCreatedSuccessfully", "success");
         closeModal();
         navigateTo('allCompaniesOverview');
     } catch (error) {
@@ -406,7 +406,7 @@ async function handleJoinCompany() {
     const btn = document.getElementById('join-company-btn');
     const companyId = document.getElementById('join-company-id').value;
     if (!companyId) {
-        showToast("pleaseEnterCompanyId", "warning");
+        showToast("companyIdIsRequired", "warning");
         return;
     }
 
@@ -417,7 +417,7 @@ async function handleJoinCompany() {
         const joinCompanyFunc = httpsCallable(getFunctions(), 'joinCompany');
         await joinCompanyFunc({ companyId });
         await fetchInitialData(getState().currentUser);
-        showToast("successfullyJoinedCompany", "success");
+        showToast("companyJoinedSuccessfully", "success");
         closeModal();
         navigateTo('allCompaniesOverview');
     } catch (error) {

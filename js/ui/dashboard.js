@@ -365,7 +365,7 @@ export async function renderAllCompaniesDashboard() {
         mainView.innerHTML = `
             <div class="portal-header">
                 <h1 class="logo">FlowBooks</h1>
-                <p>${t('welcomeUser').replace('{firstName}', userData.firstName).replace('{companyCount}', companiesData.length)}</p>
+                <p>${t('welcomeUser', { firstName: userData.firstName, companyCount: companiesData.length })}</p>
                 <div class="portal-total-profit">
                     <span>${t('totalProjectedProfit')}</span>
                     <strong class="${grandTotalProjectedProfit >= 0 ? 'green' : 'red'}">${formatCurrency(grandTotalProjectedProfit)}</strong>
@@ -385,8 +385,8 @@ export async function renderAllCompaniesDashboard() {
                             <div class="stat"><span class="label">${t('expenses')}</span><span class="value red">${formatCurrency(company.totalExpenses)}</span></div>
                         </div>
                         <div class="company-card-footer">
-                            <span>${t('transactionsCount').replace('{count}', company.transactionCount)}</span>
-                            <span>${t('productsCount').replace('{count}', company.productCount)}</span>
+                            <span>${t('transactionsCount', { count: company.transactionCount })}</span>
+                            <span>${t('productsCount', { count: company.productCount })}</span>
                         </div>
                     </div>`).join('')}
                  <div class="company-card add-company-card" id="add-company-btn" style="align-items: center; justify-content: center; text-align: center; cursor: pointer;">
