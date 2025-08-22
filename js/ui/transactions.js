@@ -6,20 +6,21 @@ import { getControlsHTML } from './components.js';
 import { exportToCSV } from './utils.js';
 import { writeBatch, doc, collection } from 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js';
 import { db } from '../../firebase-config.js';
+import { t } from '../i18n.js';
 
 let currentFilteredList = [];
 
 export function renderTransactionsPage(type) {
     const mainView = document.getElementById('main-view');
     const { allTransactions, allIncomes, allExpenses } = getState();
-    const title = type === 'income' ? 'Registrerade Intäkter' : (type === 'expense' ? 'Registrerade Utgifter' : 'Transaktionshistorik');
+    const title = type === 'income' ? t('income') : (type === 'expense' ? t('expenses') : t('summary'));
     const dataToList = type === 'income' ? allIncomes : (type === 'expense' ? allExpenses : allTransactions);
 
     mainView.innerHTML = `
         <div class="card">
              <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
                  <h3 class="card-title" style="margin: 0;">${title}</h3>
-                 <button id="export-transactions-btn" class="btn btn-secondary">Exportera till CSV</button>
+                 <button id="export-transactions-btn" class="btn btn-secondary">${t('exportToCsv')}</button>
             </div>
             ${getControlsHTML()}
             <div id="table-container">${renderSpinner()}</div>
@@ -29,15 +30,15 @@ export function renderTransactionsPage(type) {
         applyFiltersAndRender(dataToList);
         document.getElementById('export-transactions-btn').addEventListener('click', () => {
              exportToCSV(currentFilteredList.map(t => ({
-                 Datum: t.date,
-                 Beskrivning: t.description,
-                 Motpart: t.party || '',
-                 Typ: t.type,
-                 Belopp: t.amount,
-                 Moms: t.vatAmount || 0,
-                 Kategori: getState().categories.find(c => c.id === t.categoryId)?.name || '',
-                 Projekt: getState().allProjects.find(p => p.id === t.projectId)?.name || ''
-             })), 'transaktioner.csv');
+                 [t('date')]: t.date,
+                 [t('description')]: t.description,
+                 [t('party')]: t.party || '',
+                 [t('type')]: t.type,
+                 [t('amount')]: t.amount,
+                 [t('vat')]: t.vatAmount || 0,
+                 [t('category')]: getState().categories.find(c => c.id === t.categoryId)?.name || '',
+                 [t('project')]: getState().allProjects.find(p => p.id === t.projectId)?.name || ''
+             })), 'transactions.csv');
         });
         document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList));
         document.getElementById('category-filter').addEventListener('change', () => applyFiltersAndRender(dataToList));
@@ -95,7 +96,7 @@ function renderTransactionTable(transactions) {
 
     const getCategoryName = (id) => categories.find(c => c.id === id)?.name || '-';
     
-    const head = `<th>Datum</th><th>Beskrivning</th><th>Kategori</th><th class="text-right">Summa (exkl. moms)</th><th class="text-right">Moms</th><th class="text-right">Total Summa</th><th>Åtgärd</th>`;
+    const head = `<th>${t('date')}</th><th>${t('description')}</th><th>${t('category')}</th><th class="text-right">${t('amountExclVat')}</th><th class="text-right">${t('vat')}</th><th class="text-right">${t('totalAmount')}</th><th>${t('actions')}</th>`;
     
     const rows = transactions.map(t => {
         const amountExclVat = t.amountExclVat ?? (t.type === 'income' ? t.amount : (t.amount / (1 + (t.vatRate || 0) / 100)));
@@ -111,14 +112,14 @@ function renderTransactionTable(transactions) {
                 <td class="text-right">${Number(amountExclVat).toFixed(2)} kr</td>
                 <td class="text-right">${Number(vatAmount).toFixed(2)} kr</td>
                 <td class="text-right ${transactionType === 'income' ? 'green' : 'red'}"><strong>${Number(totalAmount).toFixed(2)} kr</strong></td>
-                ${t.isCorrection ? '<td>Rättad</td>' : `<td><button class="btn-correction" data-id="${t.id}" data-type="${transactionType}">Korrigera</button></td>`}
+                ${t.isCorrection ? `<td>${t('corrected')}</td>` : `<td><button class="btn-correction" data-id="${t.id}" data-type="${transactionType}">${t('correct')}</button></td>`}
             </tr>`;
     }).join('');
 
     container.innerHTML = `
         <table class="data-table">
             <thead><tr>${head}</tr></thead>
-            <tbody>${rows.length > 0 ? rows : `<tr><td colspan="7" class="text-center">Inga transaktioner att visa.</td></tr>`}</tbody>
+            <tbody>${rows.length > 0 ? rows : `<tr><td colspan="7" class="text-center">${t('noTransactionsToShow')}</td></tr>`}</tbody>
         </table>`;
         
     container.querySelectorAll('.btn-correction').forEach(btn => {
@@ -133,9 +134,8 @@ function renderTransactionTable(transactions) {
 export function renderTransactionForm(type, originalData = {}, isCorrection = false, originalId = null) {
     const mainView = document.getElementById('main-view');
     const { categories, allProjects, allTemplates } = getState();
-    const title = isCorrection ? 'Korrigera Transaktion' : `Registrera Ny ${type === 'income' ? 'Intäkt' : 'Utgift'}`;
+    const title = isCorrection ? t('correctTransaction') : `${t('registerNew')} ${type === 'income' ? t('income') : t('expense')}`;
     const today = new Date().toISOString().slice(0, 10);
-    const matchedBankTxId = originalData.matchedBankTransactionId || null;
     
     const categoryOptions = categories.map(cat => `<option value="${cat.id}" ${originalData.categoryId === cat.id ? 'selected' : ''}>${cat.name}</option>`).join('');
     const projectOptions = allProjects.map(proj => `<option value="${proj.id}" ${originalData.projectId === proj.id ? 'selected' : ''}>${proj.name}</option>`).join('');
@@ -143,7 +143,7 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
 
     const vatSelectorHTML = type === 'expense' ? `
         <div class="input-group">
-            <label>Moms (VAT)</label>
+            <label>${t('vat')}</label>
             <select id="trans-vat" class="form-input">
                 <option value="0" ${originalData.vatRate === 0 ? 'selected' : ''}>0%</option>
                 <option value="6" ${originalData.vatRate === 6 ? 'selected' : ''}>6%</option>
@@ -155,43 +155,43 @@ export function renderTransactionForm(type, originalData = {}, isCorrection = fa
     mainView.innerHTML = `
         <div class="card" style="max-width: 600px; margin: auto;">
             <h3>${title}</h3>
-            ${isCorrection ? `<p class="correction-notice">Du skapar en rättelsepost. Originalposten markeras som rättad och en omvänd post skapas.</p>` : ''}
+            ${isCorrection ? `<p class="correction-notice">${t('correctionNotice')}</p>` : ''}
             
             <div class="input-group">
-                <label>Använd mall (valfritt)</label>
+                <label>${t('useTemplateOptional')}</label>
                 <select id="trans-template" class="form-input">
-                    <option value="">Ingen mall</option>
+                    <option value="">${t('noTemplate')}</option>
                     ${templateOptions}
                 </select>
             </div>
             <hr>
 
             <div id="transaction-form-fields">
-                <div class="input-group"><label>Datum</label><input id="trans-date" type="date" class="form-input" value="${originalData.date || today}"></div>
-                <div class="input-group"><label>Beskrivning</label><input id="trans-desc" type="text" class="form-input" value="${originalData.description || ''}"></div>
+                <div class="input-group"><label>${t('date')}</label><input id="trans-date" type="date" class="form-input" value="${originalData.date || today}"></div>
+                <div class="input-group"><label>${t('description')}</label><input id="trans-desc" type="text" class="form-input" value="${originalData.description || ''}"></div>
                 <div class="form-grid">
-                     <div class="input-group"><label>Kategori</label><select id="trans-category" class="form-input"><option value="">Välj...</option>${categoryOptions}</select></div>
-                    <div class="input-group"><label>Projekt</label><select id="trans-project" class="form-input"><option value="">Inget</option>${projectOptions}</select></div>
+                     <div class="input-group"><label>${t('category')}</label><select id="trans-category" class="form-input"><option value="">${t('select')}...</option>${categoryOptions}</select></div>
+                    <div class="input-group"><label>${t('project')}</label><select id="trans-project" class="form-input"><option value="">${t('none')}</option>${projectOptions}</select></div>
                 </div>
-                <div class="input-group"><label>Motpart</label><input id="trans-party" type="text" class="form-input" value="${originalData.party || ''}"></div>
-                <div class="input-group"><label>Summa (inkl. moms)</label><input id="trans-amount" type="number" class="form-input" placeholder="0.00" value="${originalData.amount || ''}"></div>
+                <div class="input-group"><label>${t('party')}</label><input id="trans-party" type="text" class="form-input" value="${originalData.party || ''}"></div>
+                <div class="input-group"><label>${t('amountInclVat')}</label><input id="trans-amount" type="number" class="form-input" placeholder="0.00" value="${originalData.amount || ''}"></div>
                 ${vatSelectorHTML}
             </div>
 
             <div id="template-fields" style="display: none;">
-                 <div class="input-group"><label>Datum</label><input id="template-date" type="date" class="form-input" value="${today}"></div>
-                 <div class="input-group"><label>Totalbelopp att fördela</label><input id="template-total-amount" type="number" class="form-input" placeholder="0.00"></div>
+                 <div class="input-group"><label>${t('date')}</label><input id="template-date" type="date" class="form-input" value="${today}"></div>
+                 <div class="input-group"><label>${t('totalAmountToDistribute')}</label><input id="template-total-amount" type="number" class="form-input" placeholder="0.00"></div>
             </div>
 
             <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                <button id="cancel-btn" class="btn btn-secondary">Avbryt</button>
-                <button id="save-btn" class="btn btn-primary">${isCorrection ? 'Spara Rättelse' : 'Spara'}</button>
+                <button id="cancel-btn" class="btn btn-secondary">${t('cancel')}</button>
+                <button id="save-btn" class="btn btn-primary">${isCorrection ? t('saveCorrection') : t('save')}</button>
             </div>
         </div>`;
 
     document.getElementById('trans-template').addEventListener('change', applyTemplate);
     document.getElementById('save-btn').addEventListener('click', (e) => handleSaveClick(e.target, type, isCorrection, originalId, originalData));
-    document.getElementById('cancel-btn').addEventListener('click', () => window.navigateTo(type === 'income' ? 'Intäkter' : 'Utgifter'));
+    document.getElementById('cancel-btn').addEventListener('click', () => window.navigateTo(type === 'income' ? 'income' : 'expenses'));
 }
 
 function applyTemplate(event) {
@@ -214,7 +214,7 @@ async function handleSaveClick(btn, type, isCorrection, originalId, originalData
         const totalAmount = parseFloat(document.getElementById('template-total-amount').value) || 0;
         const date = document.getElementById('template-date').value;
         if (totalAmount <= 0 || !date) {
-            showToast("Ange ett datum och ett giltigt totalbelopp för mallen.", "warning");
+            showToast("fillAllFieldsWarning", "warning");
             return;
         }
         await handleSaveFromTemplate(btn, templateId, totalAmount, date);
@@ -251,7 +251,7 @@ async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
     showConfirmationModal(async () => {
         const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Sparar...';
+        btn.textContent = t('saving');
         try {
             const batch = writeBatch(db);
             
@@ -271,7 +271,7 @@ async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
                 const transactionData = {
                     date: date,
                     description: line.description,
-                    party: "Enligt mall: " + template.name,
+                    party: `${t('fromTemplate')}: ${template.name}`,
                     amount: lineAmount,
                     amountExclVat: lineAmount - vatAmount,
                     vatRate: vatRate,
@@ -291,69 +291,68 @@ async function handleSaveFromTemplate(btn, templateId, totalAmount, date) {
             await batch.commit();
             await fetchAllCompanyData();
             window.navigateTo('summary');
-            showToast(`Transaktioner från mallen "${template.name}" har sparats!`, "success");
+            showToast(t('transactionsFromTemplateSaved').replace('{templateName}', template.name), "success");
         } catch (error) {
-            console.error("Fel vid sparning från mall:", error);
-            showToast("Kunde inte spara från mall.", "error");
+            console.error("Error saving from template:", error);
+            showToast("couldNotSaveFromTemplate", "error");
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
         }
-    }, "Bekräfta Bokföring", `Detta kommer att skapa ${template.lines.length} transaktioner baserat på mallen. Är du säker?`);
+    }, "confirmBookingTitle", t('confirmTemplatePosting').replace('{count}', template.lines.length));
 }
 
 async function handleSave(btn, type, data) {
     if (!data.date || !data.description || data.amount <= 0) {
-        showToast('Fyll i datum, beskrivning och en giltig summa.', 'warning');
+        showToast('fillAllFieldsWarning', 'warning');
         return;
     }
     showConfirmationModal(async () => {
         const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Sparar...';
+        btn.textContent = t('saving');
         try {
             const collectionName = type === 'income' ? 'incomes' : 'expenses';
             await saveDocument(collectionName, { ...data, isCorrection: false });
             await fetchAllCompanyData();
             
-            // Om transaktionen kom från bankavstämning, gå tillbaka dit
             if(data.matchedBankTransactionId) {
                 window.navigateTo('banking');
             } else {
                 window.navigateTo(type === 'income' ? 'income' : 'expenses');
             }
 
-            showToast("Transaktionen har sparats!", "success");
+            showToast("transactionSaved", "success");
         } catch (error) {
-            console.error("Fel vid sparning:", error);
-            showToast("Kunde inte spara.", "error");
+            console.error("Error saving:", error);
+            showToast("couldNotSave", "error");
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
         }
-    }, "Bekräfta Bokföring", "Enligt Bokföringslagen är detta en slutgiltig aktion.");
+    }, "confirmBookingTitle", "confirmBookingBody");
 }
 
 async function handleCorrectionSave(btn, type, originalId, originalData, newData) {
     if (!newData.date || !newData.description || newData.amount <= 0) {
-        showToast('Fyll i alla fält korrekt.', 'warning');
+        showToast('fillAllFieldsWarning', 'warning');
         return;
     }
     showConfirmationModal(async () => {
         const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Sparar...';
+        btn.textContent = t('saving');
         try {
             await performCorrection(type, originalId, originalData, newData);
             await fetchAllCompanyData();
             window.navigateTo(type === 'income' ? 'income' : 'expenses');
-            showToast("Rättelsen har sparats.", "success");
+            showToast("correctionSaved", "success");
         } catch (error) {
-            console.error("Fel vid rättelse:", error);
-            showToast("Kunde inte spara rättelsen.", "error");
+            console.error("Error during correction:", error);
+            showToast("couldNotSaveCorrection", "error");
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
         }
-    }, "Bekräfta Rättelse", "Detta kan inte ångras.");
+    }, "confirmCorrectionTitle", "confirmCorrectionBody");
 }

@@ -5,19 +5,20 @@ import { showToast, closeModal, showConfirmationModal, renderSpinner } from './u
 import { editors } from './editors.js';
 import { writeBatch, doc } from 'https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js';
 import { db } from '../../firebase-config.js';
+import { t } from '../i18n.js';
 
 export function renderContactsPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
         <div class="card">
             <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                 <h3 class="card-title" style="margin: 0;">Kontakter</h3>
+                 <h3 class="card-title" style="margin: 0;">${t('contactsPageTitle')}</h3>
                  <div>
-                    <button id="email-selected-btn" class="btn btn-secondary" style="display: none; margin-right: 10px;">Skicka e-post till valda</button>
-                    <button id="delete-selected-contacts-btn" class="btn btn-danger" style="display: none;">Ta bort valda</button>
+                    <button id="email-selected-btn" class="btn btn-secondary" style="display: none; margin-right: 10px;">${t('sendEmailToSelected')}</button>
+                    <button id="delete-selected-contacts-btn" class="btn btn-danger" style="display: none;">${t('deleteSelected')}</button>
                  </div>
             </div>
-            <p>Hantera dina kunder och leverantörer. Klicka på en kontakt för att se detaljerad historik.</p>
+            <p>${t('manageCustomersAndSuppliers')}</p>
             <div id="contacts-list-container" style="margin-top: 1.5rem;"></div>
         </div>
     `;
@@ -33,7 +34,7 @@ function renderContactsList() {
         <tr data-contact-id="${contact.id}" style="cursor: pointer;">
             <td><input type="checkbox" class="contact-select-checkbox" data-id="${contact.id}" data-email="${contact.email || ''}" onclick="event.stopPropagation();"></td>
             <td><strong>${contact.name}</strong></td>
-            <td>${contact.type === 'customer' ? 'Kund' : 'Leverantör'}</td>
+            <td>${contact.type === 'customer' ? t('customerType') : t('supplierType')}</td>
             <td>${contact.orgNumber || '-'}</td>
             <td>${contact.email || '-'}</td>
         </tr>
@@ -44,21 +45,21 @@ function renderContactsList() {
             <thead>
                 <tr>
                     <th><input type="checkbox" id="select-all-contacts"></th>
-                    <th>Namn</th>
-                    <th>Typ</th>
-                    <th>Org.nr / Personnr.</th>
-                    <th>E-post</th>
+                    <th>${t('name')}</th>
+                    <th>${t('type')}</th>
+                    <th>${t('orgPersonNumber')}</th>
+                    <th>${t('email')}</th>
                 </tr>
             </thead>
             <tbody>
-                ${allContacts.length > 0 ? rows : '<tr><td colspan="5" class="text-center">Du har inte lagt till några kontakter än.</td></tr>'}
+                ${allContacts.length > 0 ? rows : `<tr><td colspan="5" class="text-center">${t('noContactsAdded')}</td></tr>`}
             </tbody>
         </table>
     `;
     
     container.querySelectorAll('tbody tr').forEach(row => {
         row.addEventListener('click', () => {
-            window.navigateTo('Kontakter', row.dataset.contactId);
+            window.navigateTo('contacts', row.dataset.contactId);
         });
     });
 
@@ -72,7 +73,7 @@ function renderContactsList() {
         emailBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
         deleteBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
         if(selected.length > 0) {
-            deleteBtn.textContent = `Ta bort valda (${selected.length})`;
+            deleteBtn.textContent = `${t('deleteSelected')} (${selected.length})`;
         }
     };
 
@@ -94,7 +95,7 @@ function renderContactsList() {
             if (selectedEmails.length > 0) {
                 window.location.href = `mailto:?bcc=${selectedEmails.join(',')}`;
             } else {
-                showToast("Inga kontakter med e-postadresser valda.", "warning");
+                showToast(t('noContactsWithEmail'), "warning");
             }
         });
     }
@@ -111,8 +112,8 @@ function renderContactsList() {
                     await batch.commit();
                     await fetchAllCompanyData();
                     renderContactsList();
-                    showToast(`${selectedIds.length} kontakter har tagits bort!`, 'success');
-                }, "Ta bort kontakter", `Är du säker på att du vill ta bort ${selectedIds.length} kontakter permanent?`);
+                    showToast(t('contactsDeleted').replace('{count}', selectedIds.length), 'success');
+                }, t('deleteContacts'), t('areYouSureDeleteContacts').replace('{count}', selectedIds.length));
             }
         });
     }
@@ -123,7 +124,7 @@ export function renderContactDetailView(contactId) {
     const contact = allContacts.find(c => c.id === contactId);
     
     if (!contact) {
-        window.navigateTo('Kontakter');
+        window.navigateTo('contacts');
         return;
     }
 
@@ -134,33 +135,33 @@ export function renderContactDetailView(contactId) {
     const contactQuotes = allQuotes.filter(q => q.customerName === contact.name);
     const contactTransactions = allTransactions.filter(t => t.party === contact.name);
 
-    const invoiceRows = contactInvoices.map(i => `<li data-id="${i.id}" data-type="invoice"><a href="#">Faktura #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString('sv-SE')} kr (${i.status})</li>`).join('');
-    const quoteRows = contactQuotes.map(q => `<li data-id="${q.id}" data-type="quote"><a href="#">Offert #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString('sv-SE')} kr (${q.status})</li>`).join('');
-    const transactionRows = contactTransactions.map(t => `<li class="${t.type === 'income' ? 'green' : 'red'}">${t.date}: ${t.description} - ${t.amount.toLocaleString('sv-SE')} kr</li>`).join('');
+    const invoiceRows = contactInvoices.map(i => `<li data-id="${i.id}" data-type="invoice"><a href="#">${t('invoice')} #${i.invoiceNumber}</a> - ${i.grandTotal.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})} (${i.status})</li>`).join('');
+    const quoteRows = contactQuotes.map(q => `<li data-id="${q.id}" data-type="quote"><a href="#">${t('quote')} #${q.quoteNumber}</a> - ${q.grandTotal.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})} (${q.status})</li>`).join('');
+    const transactionRows = contactTransactions.map(t => `<li class="${t.type === 'income' ? 'green' : 'red'}">${t.date}: ${t.description} - ${t.amount.toLocaleString(undefined, {style: 'currency', currency: 'SEK'})}</li>`).join('');
 
     const detailHtml = `
         <div class="contact-detail-header" data-contact-id="${contact.id}">
             <div style="margin-bottom: 2rem;">
                 <h2>${contact.name}</h2>
-                <p style="color: var(--text-color-light);">${contact.type === 'customer' ? 'Kund' : 'Leverantör'} | ${contact.email || 'Ingen e-post'} | ${contact.orgNumber || 'Inget org.nr'}</p>
+                <p style="color: var(--text-color-light);">${contact.type === 'customer' ? t('customerType') : t('supplierType')} | ${contact.email || t('noEmail')} | ${contact.orgNumber || t('noOrgNumber')}</p>
             </div>
             <div>
-                <button class="btn btn-secondary btn-edit-contact">Redigera</button>
-                <button class="btn btn-danger btn-delete-contact">Ta bort</button>
+                <button class="btn btn-secondary btn-edit-contact">${t('edit')}</button>
+                <button class="btn btn-danger btn-delete-contact">${t('delete')}</button>
             </div>
         </div>
         <div class="settings-grid">
             <div class="card">
-                <h3 class="card-title">Offerter (${contactQuotes.length})</h3>
-                <ul class="history-list" id="quote-history-list">${quoteRows || '<li>Inga offerter.</li>'}</ul>
+                <h3 class="card-title">${t('quotes')} (${contactQuotes.length})</h3>
+                <ul class="history-list" id="quote-history-list">${quoteRows || `<li>${t('noQuotes')}</li>`}</ul>
             </div>
             <div class="card">
-                <h3 class="card-title">Fakturor (${contactInvoices.length})</h3>
-                <ul class="history-list" id="invoice-history-list">${invoiceRows || '<li>Inga fakturor.</li>'}</ul>
+                <h3 class="card-title">${t('invoices')} (${contactInvoices.length})</h3>
+                <ul class="history-list" id="invoice-history-list">${invoiceRows || `<li>${t('noInvoices')}</li>`}</ul>
             </div>
             <div class="card" style="grid-column: 1 / -1;">
-                <h3 class="card-title">Transaktioner (${contactTransactions.length})</h3>
-                <ul class="history-list">${transactionRows || '<li>Inga transaktioner.</li>'}</ul>
+                <h3 class="card-title">${t('transactions')} (${contactTransactions.length})</h3>
+                <ul class="history-list">${transactionRows || `<li>${t('noTransactions')}</li>`}</ul>
             </div>
         </div>
     `;
@@ -181,7 +182,7 @@ function attachContactDetailEventListeners() {
         if (e.target.matches('.btn-edit-contact')) {
             editors.renderContactForm(contactId);
         } else if (e.target.matches('.btn-delete-contact')) {
-            editors.deleteContact(contactId);
+            deleteContact(contactId);
         }
         
         const historyItem = e.target.closest('li[data-id]');
@@ -207,30 +208,30 @@ export function renderContactForm(contactId = null) {
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content" onclick="event.stopPropagation()">
-                <h3>${isEdit ? 'Redigera Kontakt' : 'Ny Kontakt'}</h3>
+                <h3>${isEdit ? t('editContact') : t('newContact')}</h3>
                 <form id="contact-form">
                     <div class="input-group">
-                        <label>Namn *</label>
+                        <label>${t('name')} *</label>
                         <input class="form-input" id="contact-name" value="${contact?.name || ''}" required>
                     </div>
                     <div class="input-group">
-                        <label>Typ</label>
+                        <label>${t('type')}</label>
                         <select id="contact-type" class="form-input">
-                            <option value="customer" ${contact?.type === 'customer' ? 'selected' : ''}>Kund</option>
-                            <option value="supplier" ${contact?.type === 'supplier' ? 'selected' : ''}>Leverantör</option>
+                            <option value="customer" ${contact?.type === 'customer' ? 'selected' : ''}>${t('customerType')}</option>
+                            <option value="supplier" ${contact?.type === 'supplier' ? 'selected' : ''}>${t('supplierType')}</option>
                         </select>
                     </div>
                     <div class="input-group">
-                        <label>Organisationsnummer / Personnummer</label>
+                        <label>${t('orgNumber')}</label>
                         <input class="form-input" id="contact-org-number" value="${contact?.orgNumber || ''}">
                     </div>
                     <div class="input-group">
-                        <label>E-post</label>
+                        <label>${t('email')}</label>
                         <input class="form-input" id="contact-email" type="email" value="${contact?.email || ''}">
                     </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary" id="modal-cancel">Avbryt</button>
-                        <button type="submit" class="btn btn-primary">${isEdit ? 'Uppdatera' : 'Skapa'}</button>
+                        <button type="button" class="btn btn-secondary" id="modal-cancel">${t('cancel')}</button>
+                        <button type="submit" class="btn btn-primary">${isEdit ? t('update') : t('create')}</button>
                     </div>
                 </form>
             </div>
@@ -253,17 +254,17 @@ async function saveContactHandler(btn, contactId) {
     };
 
     if (!contactData.name) {
-        showToast("Namn är obligatoriskt.", "warning");
+        showToast(t('fillAllFieldsWarning'), "warning");
         return;
     }
 
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Sparar...';
+    btn.textContent = t('saving');
 
     try {
         await saveDocument('contacts', contactData, contactId);
-        showToast(`Kontakten har ${contactId ? 'uppdaterats' : 'skapats'}!`, 'success');
+        showToast(t('contactSaved').replace('{status}', contactId ? t('contactUpdated') : t('contactCreated')), 'success');
         closeModal();
         await fetchAllCompanyData();
         const mainView = document.getElementById('main-view');
@@ -275,8 +276,8 @@ async function saveContactHandler(btn, contactId) {
             renderContactsList();
         }
     } catch (error) {
-        console.error("Kunde inte spara kontakt:", error);
-        showToast('Kunde inte spara kontakten.', 'error');
+        console.error("Could not save contact:", error);
+        showToast(t('couldNotSaveContact'), 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -287,11 +288,11 @@ export function deleteContact(contactId) {
     showConfirmationModal(async () => {
         try {
             await deleteDocument('contacts', contactId);
-            showToast('Kontakten har tagits bort!', 'success');
+            showToast(t('contactDeleted'), 'success');
             await fetchAllCompanyData();
-            window.navigateTo('Kontakter');
+            window.navigateTo('contacts');
         } catch (error) {
-            showToast('Kunde inte ta bort kontakten.', 'error');
+            showToast(t('couldNotDeleteContact'), 'error');
         }
-    }, "Ta bort kontakt", "Är du säker på att du vill ta bort denna kontakt permanent?");
+    }, t('deleteContact'), t('areYouSureDeleteContact'));
 }

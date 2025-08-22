@@ -7,9 +7,7 @@ import { checkNotifications } from './notifications.js';
 import { showToast, closeModal } from './utils.js';
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-functions.js";
 
-// Import command palette functions
 import { initializeCommandPalette, openCommandPalette } from './command-palette.js';
-
 import { renderDashboard, renderAllCompaniesDashboard } from './dashboard.js';
 import { renderProductsPage } from './products.js';
 import { renderTransactionsPage, renderTransactionForm } from './transactions.js';
@@ -89,7 +87,7 @@ function navigateTo(pageKey, id = null) {
     const appContainer = document.getElementById('app-container');
     const header = document.querySelector('.main-header');
     
-    renderSidebarMenu(); // Re-render menu for potential language change
+    renderSidebarMenu(); 
 
     if (pageKey === 'allCompaniesOverview') {
         appContainer.classList.add('portal-view');
@@ -105,14 +103,13 @@ function navigateTo(pageKey, id = null) {
     renderPageContent(pageKey, id);
     document.querySelector('.sidebar')?.classList.remove('open');
     
-    // Apply translations AFTER new content is rendered
     applyTranslations();
 }
 window.navigateTo = navigateTo;
 
 function renderPageContent(pageKey, id = null) {
     const pageTitleEl = document.querySelector('.page-title');
-    if (pageTitleEl) pageTitleEl.dataset.i18nKey = pageKey; // Use data-i18n-key for translation
+    if (pageTitleEl) pageTitleEl.dataset.i18nKey = pageKey;
 
     document.getElementById('main-view').innerHTML = '';
     const newItemBtn = document.getElementById('new-item-btn');
@@ -135,7 +132,6 @@ function renderPageContent(pageKey, id = null) {
     const renderFunction = pageRenderers[pageKey];
     if (renderFunction) renderFunction();
 
-    // Setup "New Item" button based on the page
     const buttonSetup = {
         income: { key: 'newIncome', action: () => renderTransactionForm('income') },
         expenses: { key: 'newExpense', action: () => renderTransactionForm('expense') },
@@ -267,7 +263,7 @@ function handleGlobalSearch() {
 
                 switch (type) {
                     case 'contact':
-                        renderContactDetailView(id); // Now renders the full page view
+                        navigateTo('contacts', id);
                         break;
                     case 'invoice':
                         editors.renderInvoiceEditor(id);
@@ -350,31 +346,31 @@ function showAddCompanyModal() {
     modalContainer.innerHTML = `
         <div class="modal-overlay">
             <div class="modal-content">
-                <h3 data-i18n-key="addOrCreateCompany">Add or Create a Company</h3>
+                <h3 data-i18n-key="addOrCreateCompany"></h3>
                 <div id="create-company-section">
-                    <h4 data-i18n-key="createNewCompany">Create a New Company</h4>
+                    <h4 data-i18n-key="createNewCompany"></h4>
                     <div class="input-group">
-                        <label data-i18n-key="newCompanyName">New Company Name</label>
-                        <input id="new-company-name" class="form-input" data-i18n-placeholder="companyNamePlaceholder" placeholder="e.g., FlowBooks Inc.">
+                        <label data-i18n-key="newCompanyName"></label>
+                        <input id="new-company-name" class="form-input" data-i18n-placeholder="companyNamePlaceholder">
                     </div>
-                    <button id="create-company-btn" class="btn btn-primary" data-i18n-key="create">Create</button>
+                    <button id="create-company-btn" class="btn btn-primary" data-i18n-key="create"></button>
                 </div>
                 <hr style="margin: 2rem 0;">
                 <div id="join-company-section">
-                    <h4 data-i18n-key="joinExistingCompany">Join an Existing Company</h4>
+                    <h4 data-i18n-key="joinExistingCompany"></h4>
                      <div class="input-group">
-                        <label data-i18n-key="companyReferralId">Company Referral ID</label>
-                        <input id="join-company-id" class="form-input" data-i18n-placeholder="referralIdPlaceholder" placeholder="Enter the ID provided to you">
+                        <label data-i18n-key="companyReferralId"></label>
+                        <input id="join-company-id" class="form-input" data-i18n-placeholder="referralIdPlaceholder">
                     </div>
-                    <button id="join-company-btn" class="btn btn-secondary" data-i18n-key="join">Join</button>
+                    <button id="join-company-btn" class="btn btn-secondary" data-i18n-key="join"></button>
                 </div>
                  <div class="modal-actions" style="margin-top: 2rem;">
-                    <button id="modal-cancel" class="btn btn-secondary" data-i18n-key="cancel">Cancel</button>
+                    <button id="modal-cancel" class="btn btn-secondary" data-i18n-key="cancel"></button>
                 </div>
             </div>
         </div>`;
 
-    applyTranslations(); // Translate the modal content
+    applyTranslations();
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('create-company-btn').addEventListener('click', handleCreateCompany);
     document.getElementById('join-company-btn').addEventListener('click', handleJoinCompany);
@@ -384,7 +380,7 @@ async function handleCreateCompany() {
     const btn = document.getElementById('create-company-btn');
     const companyName = document.getElementById('new-company-name').value;
     if (!companyName) {
-        showToast("Please enter a name for the new company.", "warning");
+        showToast("companyNameCannotBeEmpty", "warning");
         return;
     }
 
@@ -395,12 +391,12 @@ async function handleCreateCompany() {
         const createNewCompanyFunc = httpsCallable(getFunctions(), 'createNewCompany');
         await createNewCompanyFunc({ companyName });
         await fetchInitialData(getState().currentUser);
-        showToast("Company created successfully!", "success");
+        showToast("companyCreated", "success");
         closeModal();
         navigateTo('allCompaniesOverview');
     } catch (error) {
         console.error("Failed to create company:", error);
-        showToast("Could not create the company.", "error");
+        showToast("couldNotCreateCompany", "error");
         btn.disabled = false;
         btn.textContent = t('create');
     }
@@ -410,7 +406,7 @@ async function handleJoinCompany() {
     const btn = document.getElementById('join-company-btn');
     const companyId = document.getElementById('join-company-id').value;
     if (!companyId) {
-        showToast("Please enter a Company ID.", "warning");
+        showToast("pleaseEnterCompanyId", "warning");
         return;
     }
 
@@ -421,7 +417,7 @@ async function handleJoinCompany() {
         const joinCompanyFunc = httpsCallable(getFunctions(), 'joinCompany');
         await joinCompanyFunc({ companyId });
         await fetchInitialData(getState().currentUser);
-        showToast("Successfully joined company!", "success");
+        showToast("successfullyJoinedCompany", "success");
         closeModal();
         navigateTo('allCompaniesOverview');
     } catch (error) {

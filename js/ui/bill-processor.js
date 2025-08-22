@@ -3,15 +3,15 @@ import { getState } from '../state.js';
 import { saveDocument, fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, showConfirmationModal } from './utils.js';
 import { db } from '../../firebase-config.js';
-import { writeBatch, doc, collection } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+import { editors } from './editors.js';
+import { t } from '../i18n.js';
 
 let billData = {};
 
 export function renderBillProcessor(aiData) {
-    const { allContacts, allProducts } = getState();
+    const { allContacts } = getState();
     billData = { ...aiData, lineItems: aiData.lineItems || [] };
 
-    // Försök att matcha leverantör
     const supplierMatch = allContacts.find(c => c.type === 'supplier' && c.name.toLowerCase() === billData.supplierName?.toLowerCase());
     billData.supplierId = supplierMatch ? supplierMatch.id : null;
 
@@ -24,25 +24,25 @@ export function renderBillProcessor(aiData) {
     modalContainer.innerHTML = `
         <div class="modal-overlay">
             <div class="modal-content" style="max-width: 1000px; width: 95%;">
-                <h3>Granska och Bekräfta Leverantörsfaktura</h3>
-                <p>AI:n har tolkat din PDF. Vänligen verifiera informationen nedan och koppla produkter innan du bokför.</p>
+                <h3>${t('reviewAndConfirmBill')}</h3>
+                <p>${t('aiInterpretedYourPdf')}</p>
                 <div class="form-grid" style="margin-top: 1.5rem;">
                     <div class="input-group">
-                        <label>Leverantör</label>
+                        <label>${t('supplier')}</label>
                         <select id="bill-supplier" class="form-input">${supplierOptions}</select>
-                        ${!billData.supplierId ? `<button id="create-supplier-btn" class="btn btn-sm btn-secondary" style="margin-top: 5px;">Skapa "${billData.supplierName}" som ny leverantör</button>` : ''}
+                        ${!billData.supplierId ? `<button id="create-supplier-btn" class="btn btn-sm btn-secondary" style="margin-top: 5px;">${t('createSupplier').replace('{supplierName}', billData.supplierName)}</button>` : ''}
                     </div>
-                    <div class="input-group"><label>Fakturanummer</label><input id="bill-number" class="form-input" value="${billData.invoiceNumber || ''}"></div>
-                    <div class="input-group"><label>Fakturadatum</label><input id="bill-date" type="date" class="form-input" value="${billData.invoiceDate || ''}"></div>
-                    <div class="input-group"><label>Förfallodatum</label><input id="bill-due-date" type="date" class="form-input" value="${billData.dueDate || ''}"></div>
-                    <div class="input-group"><label>Totalbelopp (inkl. moms)</label><input id="bill-total" type="number" step="0.01" class="form-input" value="${billData.totalAmount || 0}"></div>
-                    <div class="input-group"><label>Moms</label><input id="bill-vat" type="number" step="0.01" class="form-input" value="${billData.vatAmount || 0}"></div>
+                    <div class="input-group"><label>${t('invoiceId')}</label><input id="bill-number" class="form-input" value="${billData.invoiceNumber || ''}"></div>
+                    <div class="input-group"><label>${t('invoiceDate')}</label><input id="bill-date" type="date" class="form-input" value="${billData.invoiceDate || ''}"></div>
+                    <div class="input-group"><label>${t('dueDate')}</label><input id="bill-due-date" type="date" class="form-input" value="${billData.dueDate || ''}"></div>
+                    <div class="input-group"><label>${t('totalAmountInclVat')}</label><input id="bill-total" type="number" step="0.01" class="form-input" value="${billData.totalAmount || 0}"></div>
+                    <div class="input-group"><label>${t('vat')}</label><input id="bill-vat" type="number" step="0.01" class="form-input" value="${billData.vatAmount || 0}"></div>
                 </div>
-                <h4 style="margin-top: 2rem;">Fakturarader</h4>
+                <h4 style="margin-top: 2rem;">${t('invoiceLines')}</h4>
                 <div id="bill-lines-container" style="max-height: 30vh; overflow-y: auto;"></div>
                 <div class="modal-actions">
-                    <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
-                    <button id="modal-confirm-bill" class="btn btn-primary">Bokför Faktura</button>
+                    <button id="modal-cancel" class="btn btn-secondary">${t('cancel')}</button>
+                    <button id="modal-confirm-bill" class="btn btn-primary">${t('postInvoice')}</button>
                 </div>
             </div>
         </div>`;
@@ -56,18 +56,17 @@ function renderBillLines() {
     const container = document.getElementById('bill-lines-container');
     
     const rows = billData.lineItems.map((item, index) => {
-        // Försök matcha produkt
         const productMatch = allProducts.find(p => p.name.toLowerCase() === item.description?.toLowerCase());
         item.productId = productMatch ? productMatch.id : null;
         
         let productCell = '';
         if (item.productId) {
-            productCell = `<span><i class="fas fa-check-circle green"></i> Kopplad till: ${productMatch.name}</span>`;
+            productCell = `<span><i class="fas fa-check-circle green"></i> ${t('linkedTo')} ${productMatch.name}</span>`;
         } else {
             productCell = `
-                <span class="red">Okänd produkt</span>
-                <button class="btn btn-sm btn-secondary btn-link-product" data-index="${index}">Koppla</button>
-                <button class="btn btn-sm btn-primary btn-create-product" data-index="${index}">Skapa</button>
+                <span class="red">${t('unknownProduct')}</span>
+                <button class="btn btn-sm btn-secondary btn-link-product" data-index="${index}">${t('link')}</button>
+                <button class="btn btn-sm btn-primary btn-create-product" data-index="${index}">${t('create')}</button>
             `;
         }
 
@@ -82,7 +81,7 @@ function renderBillLines() {
 
     container.innerHTML = `
         <table class="data-table">
-            <thead><tr><th>Beskrivning</th><th>Antal</th><th class="text-right">Pris/st (exkl. moms)</th><th>Produktkoppling</th></tr></thead>
+            <thead><tr><th>${t('description')}</th><th>${t('quantity')}</th><th class="text-right">${t('priceExclVat')}</th><th>${t('productLink')}</th></tr></thead>
             <tbody>${rows}</tbody>
         </table>`;
 }
@@ -98,7 +97,6 @@ function attachBillProcessorEventListeners() {
             const newId = await saveDocument('contacts', newSupplier);
             await fetchAllCompanyData();
             billData.supplierId = newId;
-            // Uppdatera UI:t för att reflektera den nya leverantören
             const supplierSelect = document.getElementById('bill-supplier');
             const options = getState().allContacts.filter(c => c.type === 'supplier').map(s => `<option value="${s.id}">${s.name}</option>`).join('');
             supplierSelect.innerHTML = options;
@@ -112,8 +110,7 @@ function attachBillProcessorEventListeners() {
         if (index === undefined) return;
         
         if (e.target.classList.contains('btn-link-product')) {
-            // Logik för att visa en sök/välj-dialog för produkter
-            showToast("Funktion för att koppla till befintlig produkt kommer snart.", "info");
+            showToast(t('featureAvailableSoon'), "info");
         } else if (e.target.classList.contains('btn-create-product')) {
             const item = billData.lineItems[index];
             const productData = {
@@ -122,14 +119,12 @@ function attachBillProcessorEventListeners() {
                 supplierId: billData.supplierId,
                 supplierName: billData.supplierName
             };
-            // Återanvänd produktformuläret
             editors.renderProductForm(null, productData);
         }
     });
 }
 
 async function handleSaveBill() {
-    // 1. Samla in all data från formuläret
     const finalBillData = {
         supplierId: document.getElementById('bill-supplier').value,
         supplierName: document.getElementById('bill-supplier').options[document.getElementById('bill-supplier').selectedIndex].text,
@@ -140,24 +135,21 @@ async function handleSaveBill() {
         vatAmount: parseFloat(document.getElementById('bill-vat').value) || 0,
         status: 'Obetald',
         balance: parseFloat(document.getElementById('bill-total').value) || 0,
-        items: billData.lineItems // Uppdatera med eventuella ändringar
+        items: billData.lineItems
     };
 
-    // 2. Validering
     if (!finalBillData.supplierId || !finalBillData.invoiceNumber || finalBillData.totalAmount <= 0) {
-        showToast("Leverantör, fakturanummer och totalbelopp måste fyllas i.", "warning");
+        showToast(t('supplierAndInvoiceNumberRequired'), "warning");
         return;
     }
     
     showConfirmationModal(async () => {
         try {
-            // 3. Spara som en "bill"
             const billId = await saveDocument('bills', finalBillData);
 
-            // 4. Skapa en utgift
             const expenseData = {
                 date: finalBillData.invoiceDate,
-                description: `Faktura #${finalBillData.invoiceNumber} från ${finalBillData.supplierName}`,
+                description: `${t('invoice')} #${finalBillData.invoiceNumber} from ${finalBillData.supplierName}`,
                 party: finalBillData.supplierName,
                 amount: finalBillData.totalAmount,
                 vatAmount: finalBillData.vatAmount,
@@ -168,13 +160,13 @@ async function handleSaveBill() {
             await saveDocument('expenses', expenseData);
 
             await fetchAllCompanyData();
-            showToast("Leverantörsfakturan har bokförts!", "success");
+            showToast(t('billPosted'), "success");
             closeModal();
-            window.navigateTo('invoices'); // Gå tillbaka till fakturasidan
+            window.navigateTo('invoices');
 
         } catch (error) {
-            console.error("Kunde inte spara leverantörsfaktura:", error);
-            showToast("Ett fel uppstod vid bokföringen.", "error");
+            console.error("Could not save vendor bill:", error);
+            showToast(t('errorPostingBill'), "error");
         }
-    }, "Bokför Leverantörsfaktura", "Detta skapar en utgift och en obetald faktura i systemet. Är du säker?");
+    }, t('postVendorInvoice'), t('thisWillCreateExpense'));
 }

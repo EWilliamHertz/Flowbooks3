@@ -3,10 +3,11 @@ import { getState } from '../state.js';
 import { renderSpinner } from './utils.js';
 import { getDocs, query, collection, where } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 import { db } from '../../firebase-config.js';
+import { t } from '../i18n.js';
 
 let chartInstances = {};
 
-// Huvudfunktion för att rendera hela översikten
+// Main function to render the entire dashboard
 export function renderDashboard() {
     Object.values(chartInstances).forEach(chart => chart?.destroy());
     chartInstances = {};
@@ -21,7 +22,7 @@ export function renderDashboard() {
     };
 
     const container = document.getElementById('dashboard-container');
-    container.innerHTML = ''; // Rensa innan vi bygger upp den
+    container.innerHTML = ''; // Clear before building
 
     if (settings.metrics) {
         container.innerHTML += renderMetricsWidget();
@@ -33,16 +34,16 @@ export function renderDashboard() {
         container.innerHTML += renderTopProductsWidget();
     }
     if (settings.cashFlow) {
-        container.innerHTML += renderChartWidget('cashFlowChart', 'Kassaflödesprognos (Nästa 6 mån)');
+        container.innerHTML += renderChartWidget('cashFlowChart', t('cashFlowForecast6Months'));
     }
     if (settings.categoryExpenses) {
-        container.innerHTML += renderChartWidget('categoryPieChart', 'Utgifter per Kategori');
+        container.innerHTML += renderChartWidget('categoryPieChart', t('expensesByCategory'));
     }
     if (settings.incomeVsExpense) {
-        container.innerHTML += renderChartWidget('monthlyBarChart', 'Intäkter vs Utgifter (Senaste 12 mån)', 'full-width');
+        container.innerHTML += renderChartWidget('monthlyBarChart', t('incomeVsExpenses12Months'), 'full-width');
     }
     
-    // Rendera diagrammen efter att deras canvas-element har lagts till i DOM
+    // Render charts after their canvas elements are in the DOM
     setTimeout(() => {
         if (settings.cashFlow) renderCashFlowChart();
         if (settings.categoryExpenses) renderCategoryPieChart();
@@ -77,26 +78,28 @@ function renderMetricsWidget() {
         calculatedInventoryRevenue += businessValue + privateValue;
     });
     
-    // Uppdaterad beräkning
     const projectedProfit = (totalIncome + calculatedInventoryRevenue + unpaidInvoiceBalance) - (totalExpense + unpaidBillsBalance);
+
+    // Using a generic currency format that adapts to the user's locale
+    const formatCurrency = (amount) => amount.toLocaleString(undefined, { style: 'currency', currency: 'SEK' });
 
     return `
         <div class="dashboard-widget metrics-widget">
             <div class="card text-center">
-                <h3>Totala Intäkter</h3>
-                <p class="metric-value green">${totalIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+                <h3>${t('totalIncome')}</h3>
+                <p class="metric-value green">${formatCurrency(totalIncome)}</p>
             </div>
             <div class="card text-center">
-                <h3>Beräknat Lagervärde</h3>
-                <p class="metric-value green">${calculatedInventoryRevenue.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+                <h3>${t('calculatedInventoryValue')}</h3>
+                <p class="metric-value green">${formatCurrency(calculatedInventoryRevenue)}</p>
             </div>
             <div class="card text-center">
-                <h3>Totala Utgifter</h3>
-                <p class="metric-value red">${totalExpense.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+                <h3>${t('totalExpenses')}</h3>
+                <p class="metric-value red">${formatCurrency(totalExpense)}</p>
             </div>
             <div class="card text-center">
-                <h3>Projicerat Resultat</h3>
-                <p class="metric-value ${projectedProfit >= 0 ? 'blue' : 'red'}">${projectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</p>
+                <h3>${t('projectedProfit')}</h3>
+                <p class="metric-value ${projectedProfit >= 0 ? 'blue' : 'red'}">${formatCurrency(projectedProfit)}</p>
             </div>
         </div>
     `;
@@ -105,21 +108,22 @@ function renderMetricsWidget() {
 function renderUnpaidInvoicesWidget() {
     const { allInvoices } = getState();
     const unpaid = allInvoices.filter(inv => inv.status === 'Skickad' || inv.status === 'Förfallen').sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    const formatCurrency = (amount) => amount.toLocaleString(undefined, { style: 'currency', currency: 'SEK' });
 
     const rows = unpaid.slice(0, 5).map(inv => `
         <div class="list-item">
             <span>#${inv.invoiceNumber} - ${inv.customerName}</span>
             <span class="${new Date(inv.dueDate) < new Date() ? 'red' : ''}">${inv.dueDate}</span>
-            <span class="text-right"><strong>${inv.grandTotal.toLocaleString('sv-SE')} kr</strong></span>
+            <span class="text-right"><strong>${formatCurrency(inv.grandTotal)}</strong></span>
         </div>
     `).join('');
     
     return `
         <div class="dashboard-widget">
             <div class="card">
-                <h3 class="card-title">Obetalda Fakturor</h3>
+                <h3 class="card-title">${t('unpaidInvoices')}</h3>
                 <div class="widget-list">
-                    ${unpaid.length > 0 ? rows : '<p class="text-center">Inga obetalda fakturor! Bra jobbat!</p>'}
+                    ${unpaid.length > 0 ? rows : `<p class="text-center">${t('noUnpaidInvoices')}</p>`}
                 </div>
             </div>
         </div>
@@ -129,6 +133,7 @@ function renderUnpaidInvoicesWidget() {
 function renderTopProductsWidget() {
     const { allInvoices, allProducts } = getState();
     const productSales = {};
+    const formatCurrency = (amount) => amount.toLocaleString(undefined, { style: 'currency', currency: 'SEK' });
 
     allInvoices.forEach(invoice => {
         if (invoice.status === 'Betald') {
@@ -150,7 +155,7 @@ function renderTopProductsWidget() {
         .map(([productId, sales]) => {
             const product = allProducts.find(p => p.id === productId);
             return {
-                name: product ? product.name : 'Okänd Produkt',
+                name: product ? product.name : t('unknownProduct'),
                 ...sales
             };
         });
@@ -159,22 +164,21 @@ function renderTopProductsWidget() {
          <div class="list-item">
             <span>${p.name}</span>
             <span>${p.quantity} st</span>
-            <span class="text-right"><strong>${p.revenue.toLocaleString('sv-SE')} kr</strong></span>
+            <span class="text-right"><strong>${formatCurrency(p.revenue)}</strong></span>
         </div>
     `).join('');
 
     return `
         <div class="dashboard-widget">
             <div class="card">
-                <h3 class="card-title">Toppsäljande Produkter</h3>
+                <h3 class="card-title">${t('topSellingProducts')}</h3>
                 <div class="widget-list">
-                     ${topProducts.length > 0 ? rows : '<p class="text-center">Ingen försäljningsdata från betalda fakturor än.</p>'}
+                     ${topProducts.length > 0 ? rows : `<p class="text-center">${t('noSalesData')}</p>`}
                 </div>
             </div>
         </div>
     `;
 }
-
 
 function renderChartWidget(canvasId, title, extraClass = '') {
     return `
@@ -196,7 +200,7 @@ function prepareChartData() {
     const monthLabels = Array.from({length: 12}, (_, i) => {
         const d = new Date();
         d.setMonth(d.getMonth() - (11 - i));
-        const label = d.toLocaleString('sv-SE', { month: 'short', year: '2-digit' });
+        const label = d.toLocaleString(document.documentElement.lang, { month: 'short', year: '2-digit' });
         const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
         monthlyData[key] = { income: 0, expense: 0 };
         return label;
@@ -217,23 +221,20 @@ function prepareChartData() {
         categoryData[categoryId] = (categoryData[categoryId] || 0) + expense.amount;
     });
     const categoryLabels = Object.keys(categoryData).map(id => 
-        id === 'uncategorized' ? 'Okategoriserat' : categories.find(c => c.id === id)?.name || 'Okänd');
+        id === 'uncategorized' ? t('uncategorized') : categories.find(c => c.id === id)?.name || t('unknown'));
     
-    // *** UPPDATERAD KASSAFLÖDESLOGIK ***
     const cashFlowLabels = [];
     const cashFlowData = { income: [], expense: [] };
     const now = new Date();
 
     for (let i = 0; i < 6; i++) {
         const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-        cashFlowLabels.push(d.toLocaleString('sv-SE', { month: 'short' }));
+        cashFlowLabels.push(d.toLocaleString(document.documentElement.lang, { month: 'short' }));
         const monthKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
 
-        // 1. Starta med återkommande transaktioner
         let monthlyIncome = recurringTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
         let monthlyExpense = recurringTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
-        // 2. Lägg till obetalda utgående fakturor (pengar in)
         allInvoices.forEach(inv => {
             if (inv.status !== 'Betald' && inv.status !== 'Utkast' && inv.dueDate) {
                 const dueDateKey = inv.dueDate.substring(0, 7);
@@ -243,7 +244,6 @@ function prepareChartData() {
             }
         });
 
-        // 3. Lägg till obetalda inkommande fakturor (pengar ut)
         allBills.forEach(bill => {
             if (bill.status !== 'Betald' && bill.dueDate) {
                 const dueDateKey = bill.dueDate.substring(0, 7);
@@ -270,7 +270,7 @@ function renderMonthlyBarChart() {
     if (ctx) {
         chartInstances.monthly = new Chart(ctx, {
             type: 'bar',
-            data: { labels: data.monthly.labels, datasets: [{ label: 'Intäkter', data: data.monthly.incomeData, backgroundColor: 'rgba(46, 204, 113, 0.7)' }, { label: 'Utgifter', data: data.monthly.expenseData, backgroundColor: 'rgba(231, 76, 60, 0.7)' }] },
+            data: { labels: data.monthly.labels, datasets: [{ label: t('income'), data: data.monthly.incomeData, backgroundColor: 'rgba(46, 204, 113, 0.7)' }, { label: t('expenses'), data: data.monthly.expenseData, backgroundColor: 'rgba(231, 76, 60, 0.7)' }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
     }
@@ -282,7 +282,7 @@ function renderCategoryPieChart() {
     if (ctx) {
         chartInstances.category = new Chart(ctx, {
             type: 'pie',
-            data: { labels: data.category.labels, datasets: [{ label: 'Utgifter', data: data.category.data, backgroundColor: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'], hoverOffset: 4 }] },
+            data: { labels: data.category.labels, datasets: [{ label: t('expenses'), data: data.category.data, backgroundColor: ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'], hoverOffset: 4 }] },
             options: { responsive: true, maintainAspectRatio: false }
         });
     }
@@ -297,8 +297,8 @@ function renderCashFlowChart() {
             data: {
                 labels: data.cashFlow.labels,
                 datasets: [
-                    { label: 'Prognostiserade intäkter', data: data.cashFlow.data.income, borderColor: 'rgba(46, 204, 113, 1)', backgroundColor: 'rgba(46, 204, 113, 0.2)', fill: true, tension: 0.3 },
-                    { label: 'Prognostiserade utgifter', data: data.cashFlow.data.expense, borderColor: 'rgba(231, 76, 60, 1)', backgroundColor: 'rgba(231, 76, 60, 0.2)', fill: true, tension: 0.3 }
+                    { label: t('projectedIncome'), data: data.cashFlow.data.income, borderColor: 'rgba(46, 204, 113, 1)', backgroundColor: 'rgba(46, 204, 113, 0.2)', fill: true, tension: 0.3 },
+                    { label: t('projectedExpenses'), data: data.cashFlow.data.expense, borderColor: 'rgba(231, 76, 60, 1)', backgroundColor: 'rgba(231, 76, 60, 0.2)', fill: true, tension: 0.3 }
                 ]
             },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
@@ -306,12 +306,13 @@ function renderCashFlowChart() {
     }
 }
 
-// Denna funktion behövs fortfarande för företagsöversikten
 export async function renderAllCompaniesDashboard() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = renderSpinner();
     try {
         const { userCompanies, userData } = getState();
+        const formatCurrency = (amount) => amount.toLocaleString(undefined, { style: 'currency', currency: 'SEK' });
+        
         const companiesDataPromises = (userCompanies || []).map(async (company) => {
             const companyId = company.id;
             const [incomesSnap, expensesSnap, productsSnap, invoicesSnap, billsSnap] = await Promise.all([
@@ -364,10 +365,10 @@ export async function renderAllCompaniesDashboard() {
         mainView.innerHTML = `
             <div class="portal-header">
                 <h1 class="logo">FlowBooks</h1>
-                <p>Välkommen, ${userData.firstName}. Du har tillgång till ${companiesData.length} företag.</p>
+                <p>${t('welcomeUser').replace('{firstName}', userData.firstName).replace('{companyCount}', companiesData.length)}</p>
                 <div class="portal-total-profit">
-                    <span>Totalt Projicerat Resultat (inkl. lagervärde & obetalda fakturor):</span>
-                    <strong class="${grandTotalProjectedProfit >= 0 ? 'green' : 'red'}">${grandTotalProjectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</strong>
+                    <span>${t('totalProjectedProfit')}</span>
+                    <strong class="${grandTotalProjectedProfit >= 0 ? 'green' : 'red'}">${formatCurrency(grandTotalProjectedProfit)}</strong>
                 </div>
             </div>
             <div class="company-cards-container">
@@ -378,23 +379,23 @@ export async function renderAllCompaniesDashboard() {
                             <span class="badge ${company.role === 'owner' ? 'badge-owner' : 'badge-member'}">${company.role}</span>
                         </div>
                         <div class="company-card-body">
-                            <div class="stat"><span class="label">Projicerat Resultat</span><span class="value ${company.projectedProfit >= 0 ? 'green' : 'red'}">${company.projectedProfit.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
-                            <div class="stat"><span class="label">Intäkter</span><span class="value green">${company.totalIncome.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
-                             <div class="stat"><span class="label">Lagervärde</span><span class="value green">${company.inventoryValue.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
-                            <div class="stat"><span class="label">Utgifter</span><span class="value red">${company.totalExpenses.toLocaleString('sv-SE', { style: 'currency', currency: 'SEK' })}</span></div>
+                            <div class="stat"><span class="label">${t('projectedProfit')}</span><span class="value ${company.projectedProfit >= 0 ? 'green' : 'red'}">${formatCurrency(company.projectedProfit)}</span></div>
+                            <div class="stat"><span class="label">${t('income')}</span><span class="value green">${formatCurrency(company.totalIncome)}</span></div>
+                             <div class="stat"><span class="label">${t('inventoryValue')}</span><span class="value green">${formatCurrency(company.inventoryValue)}</span></div>
+                            <div class="stat"><span class="label">${t('expenses')}</span><span class="value red">${formatCurrency(company.totalExpenses)}</span></div>
                         </div>
                         <div class="company-card-footer">
-                            <span>${company.transactionCount} transaktioner</span>
-                            <span>${company.productCount} produkter</span>
+                            <span>${t('transactionsCount').replace('{count}', company.transactionCount)}</span>
+                            <span>${t('productsCount').replace('{count}', company.productCount)}</span>
                         </div>
                     </div>`).join('')}
                  <div class="company-card add-company-card" id="add-company-btn" style="align-items: center; justify-content: center; text-align: center; cursor: pointer;">
                      <h3 style="font-size: 2.5rem; margin: 0;">+</h3>
-                     <p style="margin-top: 0.5rem;">Add New Company</p>
+                     <p style="margin-top: 0.5rem;">${t('addNewCompany')}</p>
                  </div>
             </div>`;
     } catch (error) {
-        console.error('Fel vid hämtning av företagsdata för portalen:', error);
-        mainView.innerHTML = '<div class="card card-danger"><h3>Kunde inte ladda företagsöversikten</h3></div>';
+        console.error('Error fetching company data for portal:', error);
+        mainView.innerHTML = `<div class="card card-danger"><h3>${t('couldNotLoadCompanyOverview')}</h3></div>`;
     }
 }

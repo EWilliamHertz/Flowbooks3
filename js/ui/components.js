@@ -10,27 +10,20 @@ export function getControlsHTML() {
     return `
         <div class="controls-container">
             <div class="search-container">
-                <input type="text" id="search-input" class="form-input" placeholder="Sök transaktioner...">
+                <input type="text" id="search-input" class="form-input" placeholder="${t('searchPlaceholder')}">
             </div>
             <div class="filter-container">
                 <select id="category-filter" class="form-input">
-                    <option value="all">Alla Kategorier</option>
+                    <option value="all">${t('allCategories')}</option>
                     ${categoryOptions}
                 </select>
-                <button class="btn filter-btn active" data-period="all">Alla</button>
-                <button class="btn filter-btn" data-period="this-month">Denna månad</button>
-                <button class="btn filter-btn" data-period="last-month">Förra månaden</button>
+                <button class="btn filter-btn active" data-period="all">${t('all')}</button>
+                <button class="btn filter-btn" data-period="this-month">${t('thisMonth')}</button>
+                <button class="btn filter-btn" data-period="last-month">${t('lastMonth')}</button>
             </div>
         </div>`;
 }
 
-/**
- * Generates and displays a reusable modal component.
- * @param {string} title The title of the modal.
- * @param {string} content The inner HTML content of the modal.
- * @param {Array<Object>} actions A list of button actions for the modal footer.
- * @param {boolean} hasOverlay If a semi-transparent overlay should be shown behind the modal.
- */
 export function renderModal({ title = '', content = '', actions = [], hasOverlay = true }) {
     const modalContainer = document.getElementById('modal-container');
     
@@ -41,7 +34,7 @@ export function renderModal({ title = '', content = '', actions = [], hasOverlay
     modalContainer.innerHTML = `
         <div class="modal-overlay" ${hasOverlay ? '' : 'style="background:none;"'}>
             <div class="modal-content" onclick="event.stopPropagation()">
-                ${title ? `<h3>${title}</h3>` : ''}
+                ${title ? `<h3>${t(title)}</h3>` : ''}
                 ${content}
                 ${actionsHtml ? `<div class="modal-actions">${actionsHtml}</div>` : ''}
             </div>
@@ -54,7 +47,8 @@ export function renderModal({ title = '', content = '', actions = [], hasOverlay
         }
     });
 
-    document.getElementById('modal-cancel')?.addEventListener('click', () => {
-        closeModal();
-    });
+    const cancelBtn = document.getElementById('modal-cancel');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeModal);
+    }
 }

@@ -5,6 +5,7 @@ import { getState } from '../state.js';
 import { fetchAllCompanyData } from '../services/firestore.js';
 import { showToast, closeModal, renderSpinner } from './utils.js';
 import { getAIProductDetails } from '../services/ai.js';
+import { t } from '../i18n.js';
 
 let parsedCsvData = { headers: [], rows: [] };
 
@@ -12,10 +13,10 @@ export function renderImportPage() {
     const mainView = document.getElementById('main-view');
     mainView.innerHTML = `
         <div class="card" style="max-width: 700px; margin: auto;">
-            <h3>Importera Produkter från CSV</h3>
-            <p>Ladda upp en CSV-fil från din leverantör. I nästa steg får du mappa filens kolumner till FlowBooks produktfält.</p>
+            <h3>${t('importProductsFromCsv')}</h3>
+            <p>${t('importProductsDescription')}</p>
             <hr style="margin: 1rem 0;">
-            <h4>Ladda upp CSV-fil</h4>
+            <h4>${t('uploadCsvFile')}</h4>
             <input type="file" id="product-csv-input" accept=".csv" style="display: block; margin-top: 1rem;">
         </div>`;
     document.getElementById('product-csv-input').addEventListener('change', handleFileSelect, false);
@@ -32,7 +33,7 @@ function handleFileSelect(event) {
 function processFileContent(text) {
     try {
         const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
-        if (lines.length < 2) throw new Error("Filen verkar vara tom eller felaktig. Den måste innehålla minst en rubrikrad och en rad med data.");
+        if (lines.length < 2) throw new Error(t('fileSeemsEmptyOrIncorrect'));
 
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
         const rows = lines.slice(1).map(line => line.split(',').map(cell => cell.trim().replace(/"/g, '')));
@@ -41,16 +42,16 @@ function processFileContent(text) {
         showColumnMappingModal();
 
     } catch (error) {
-        showToast(`Fel vid läsning av fil: ${error.message}`, "error");
+        showToast(t('errorReadingFile').replace('{message}', error.message), "error");
     }
 }
 
 function showColumnMappingModal() {
     const flowbooksFields = [
-        { key: 'name', label: 'Produktnamn', required: true },
-        { key: 'purchasePrice', label: 'Inköpspris (valfritt)' },
-        { key: 'stock', label: 'Lagerantal (valfritt)' },
-        { key: 'imageUrl', label: 'Bild-URL (valfritt)' }
+        { key: 'name', label: t('productName'), required: true },
+        { key: 'purchasePrice', label: t('purchasePriceOptional') },
+        { key: 'stock', label: t('stockOptional') },
+        { key: 'imageUrl', label: t('imageUrlOptional') }
     ];
 
     const optionsHtml = parsedCsvData.headers.map((header, index) => `<option value="${index}">${header}</option>`).join('');
@@ -60,7 +61,7 @@ function showColumnMappingModal() {
             <td>${field.label} ${field.required ? '*' : ''}</td>
             <td>
                 <select id="map-${field.key}" class="form-input">
-                    <option value="-1">Använd inte / Låt AI bestämma</option>
+                    <option value="-1">${t('doNotUseLetAiDecide')}</option>
                     ${optionsHtml}
                 </select>
             </td>
@@ -70,15 +71,15 @@ function showColumnMappingModal() {
     const modalHtml = `
         <div class="modal-overlay">
             <div class="modal-content">
-                <h3>Koppla Kolumner</h3>
-                <p>Välj vilken kolumn från din fil som motsvarar fälten i FlowBooks. Fält du inte mappar kommer AI:n att försöka fylla i.</p>
+                <h3>${t('mapColumns')}</h3>
+                <p>${t('mapColumnsDescription')}</p>
                 <table class="data-table" style="margin-top:1rem;">
-                    <thead><tr><th>FlowBooks Fält</th><th>Din Fils Kolumn</th></tr></thead>
+                    <thead><tr><th>${t('flowbooksField')}</th><th>${t('yourFileColumn')}</th></tr></thead>
                     <tbody>${mappingRows}</tbody>
                 </table>
                 <div class="modal-actions">
-                    <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
-                    <button id="modal-start-ai" class="btn btn-primary">Starta AI-Analys</button>
+                    <button id="modal-cancel" class="btn btn-secondary">${t('cancel')}</button>
+                    <button id="modal-start-ai" class="btn btn-primary">${t('startAiAnalysis')}</button>
                 </div>
             </div>
         </div>
@@ -92,7 +93,7 @@ function showColumnMappingModal() {
 async function handleStartAiAnalysis() {
     const nameIndex = parseInt(document.getElementById('map-name').value);
     if (nameIndex === -1) {
-        showToast("Du måste mappa ett fält till 'Produktnamn'.", "warning");
+        showToast(t('mustMapProductName'), "warning");
         return;
     }
 
@@ -104,22 +105,21 @@ async function handleStartAiAnalysis() {
     };
 
     const productsToAnalyze = parsedCsvData.rows.map(row => {
-        const baseProduct = {
+        return {
             name: row[mapping.name] || '',
             purchasePrice: mapping.purchasePrice !== -1 ? parseFloat(String(row[mapping.purchasePrice]).replace(',','.')) || 0 : undefined,
             stock: mapping.stock !== -1 ? parseInt(row[mapping.stock]) || 0 : undefined,
             imageUrl: mapping.imageUrl !== -1 ? row[mapping.imageUrl] || '' : undefined,
         };
-        return baseProduct;
     }).filter(p => p.name);
 
     if(productsToAnalyze.length === 0) {
-        showToast("Inga produkter med namn kunde hittas baserat på din mappning.", "error");
+        showToast(t('noProductsWithNameFound'), "error");
         closeModal();
         return;
     }
 
-    document.getElementById('modal-container').innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Analyserar ${productsToAnalyze.length} produkter med AI...</h3><p>Detta kan ta en liten stund.</p>${renderSpinner()}</div></div>`;
+    document.getElementById('modal-container').innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>${t('analyzingProductsWithAi').replace('{count}', productsToAnalyze.length)}</h3><p>${t('thisMayTakeAWhile')}</p>${renderSpinner()}</div></div>`;
     
     const productSuggestions = await Promise.all(
         productsToAnalyze.map(async (baseProduct) => {
@@ -156,27 +156,27 @@ function showImportConfirmationModal(products) {
     modalContainer.innerHTML = `
         <div class="modal-overlay">
             <div class="modal-content" style="max-width: 1200px; width: 95%;">
-                <h3>Granska AI-förslag</h3>
-                <p>AI:n har fyllt i produktdata baserat på din mappning. Du kan redigera alla fält nedan innan du importerar.</p>
+                <h3>${t('reviewAiSuggestions')}</h3>
+                <p>${t('reviewAiSuggestionsDescription')}</p>
                 <div style="max-height: 60vh; overflow-y: auto;">
                     <table class="data-table">
                         <thead>
                             <tr>
                                 <th><input type="checkbox" id="select-all-checkbox" checked></th>
-                                <th>Namn</th>
-                                <th>Inköpspris</th>
-                                <th>Lager</th>
-                                <th>Bild-URL</th>
-                                <th>Pris Företag</th>
-                                <th>Pris Privat</th>
+                                <th>${t('name')}</th>
+                                <th>${t('purchasePrice')}</th>
+                                <th>${t('stock')}</th>
+                                <th>${t('imageUrl')}</th>
+                                <th>${t('priceBusiness')}</th>
+                                <th>${t('pricePrivate')}</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
                     </table>
                 </div>
                 <div class="modal-actions">
-                    <button id="modal-cancel" class="btn btn-secondary">Avbryt</button>
-                    <button id="modal-confirm-import" class="btn btn-primary">Importera Valda (${products.length})</button>
+                    <button id="modal-cancel" class="btn btn-secondary">${t('cancel')}</button>
+                    <button id="modal-confirm-import" class="btn btn-primary">${t('importSelected').replace('{count}', products.length)}</button>
                 </div>
             </div>
         </div>`;
@@ -207,13 +207,13 @@ async function handleImportConfirm(btn) {
     });
 
     if (productsToSave.length === 0) {
-        showToast("Inga produkter valda.", "warning");
+        showToast(t('noProductsSelected'), "warning");
         return;
     }
     
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Sparar...';
+    btn.textContent = t('saving');
 
     try {
         const batch = writeBatch(db);
@@ -230,11 +230,11 @@ async function handleImportConfirm(btn) {
 
         await batch.commit();
         await fetchAllCompanyData();
-        showToast(`${productsToSave.length} produkter har importerats!`, 'success');
+        showToast(t('productsImported').replace('{count}', productsToSave.length), 'success');
         closeModal();
-        window.navigateTo('Produkter');
+        window.navigateTo('products');
     } catch (error) {
-        showToast("Ett fel uppstod vid importen.", "error");
+        showToast(t('errorDuringImport'), "error");
         console.error("Import error:", error);
     } finally {
         btn.disabled = false;
