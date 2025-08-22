@@ -9,27 +9,42 @@ import { db } from '../../firebase-config.js';
 import { t } from '../i18n.js';
 
 let currentFilteredList = [];
+let currentTransactionType = 'all';
 
-export function renderTransactionsPage(type) {
+export function renderTransactionsPage() {
     const mainView = document.getElementById('main-view');
-    const { allTransactions, allIncomes, allExpenses } = getState();
-    const title = type === 'income' ? t('income') : (type === 'expense' ? t('expenses') : t('summary'));
-    const dataToList = type === 'income' ? allIncomes : (type === 'expense' ? allExpenses : allTransactions);
-
+    
+    // Vi skapar en gemensam sida med flikar
     mainView.innerHTML = `
         <div class="card">
              <div class="controls-container" style="padding: 0; background: none; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                 <h3 class="card-title" style="margin: 0;">${title}</h3>
+                 <h3 class="card-title" style="margin: 0;">${t('summary')}</h3>
                  <button id="export-transactions-btn" class="btn btn-secondary">${t('exportToCsv')}</button>
             </div>
+
+            <div class="settings-tabs">
+                <button class="tab-link active" data-tab="all">${t('allTransactions')}</button>
+                <button class="tab-link" data-tab="income">${t('income')}</button>
+                <button class="tab-link" data-tab="expense">${t('expenses')}</button>
+            </div>
+            
             ${getControlsHTML()}
             <div id="table-container">${renderSpinner()}</div>
         </div>`;
 
+    // Lägg till event-lyssnare för flikarna
+    document.querySelectorAll('.tab-link').forEach(button => {
+        button.addEventListener('click', (e) => {
+            document.querySelectorAll('.tab-link').forEach(el => el.classList.remove('active'));
+            e.target.classList.add('active');
+            currentTransactionType = e.target.dataset.tab;
+            applyFiltersAndRender();
+        });
+    });
+
     setTimeout(() => {
-        applyFiltersAndRender(dataToList);
+        applyFiltersAndRender();
         document.getElementById('export-transactions-btn').addEventListener('click', () => {
-             // KORRIGERING: Ändrade 't' till 'transaction' i .map() för att undvika namnkollision
              exportToCSV(currentFilteredList.map(transaction => ({
                  [t('date')]: transaction.date,
                  [t('description')]: transaction.description,
@@ -41,19 +56,34 @@ export function renderTransactionsPage(type) {
                  [t('project')]: getState().allProjects.find(p => p.id === transaction.projectId)?.name || ''
              })), 'transactions.csv');
         });
-        document.getElementById('search-input').addEventListener('input', () => applyFiltersAndRender(dataToList));
-        document.getElementById('category-filter').addEventListener('change', () => applyFiltersAndRender(dataToList));
+        document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);
+        document.getElementById('category-filter').addEventListener('change', applyFiltersAndRender);
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelector('.filter-btn.active').classList.remove('active');
                 e.target.classList.add('active');
-                applyFiltersAndRender(dataToList);
+                applyFiltersAndRender();
             });
         });
     }, 10);
 }
 
-function applyFiltersAndRender(list) {
+function applyFiltersAndRender() {
+    const { allTransactions, allIncomes, allExpenses } = getState();
+    let dataToList;
+
+    switch (currentTransactionType) {
+        case 'income':
+            dataToList = allIncomes;
+            break;
+        case 'expense':
+            dataToList = allExpenses;
+            break;
+        default:
+            dataToList = allTransactions;
+            break;
+    }
+
     const searchInput = document.getElementById('search-input');
     const categoryFilter = document.getElementById('category-filter');
     
@@ -62,7 +92,7 @@ function applyFiltersAndRender(list) {
     const activePeriodEl = document.querySelector('.filter-btn.active');
     const activePeriod = activePeriodEl ? activePeriodEl.dataset.period : 'all';
     
-    let filteredList = list;
+    let filteredList = dataToList;
 
     if (searchTerm) {
         filteredList = filteredList.filter(t => 
@@ -99,22 +129,21 @@ function renderTransactionTable(transactions) {
     
     const head = `<th>${t('date')}</th><th>${t('description')}</th><th>${t('category')}</th><th class="text-right">${t('amountExclVat')}</th><th class="text-right">${t('vat')}</th><th class="text-right">${t('totalAmount')}</th><th>${t('actions')}</th>`;
     
-    // KORRIGERING: Ändrade 't' till 'transaction' i .map() för att undvika namnkollision
-    const rows = transactions.map(transaction => {
-        const amountExclVat = transaction.amountExclVat ?? (transaction.type === 'income' ? transaction.amount : (transaction.amount / (1 + (transaction.vatRate || 0) / 100)));
-        const vatAmount = transaction.vatAmount ?? (transaction.amount - amountExclVat);
-        const totalAmount = transaction.amount;
-        const transactionType = transaction.type || (transaction.vatRate !== undefined ? 'expense' : 'income');
+    const rows = transactions.map(t => {
+        const amountExclVat = t.amountExclVat ?? (t.type === 'income' ? t.amount : (t.amount / (1 + (t.vatRate || 0) / 100)));
+        const vatAmount = t.vatAmount ?? (t.amount - amountExclVat);
+        const totalAmount = t.amount;
+        const transactionType = t.type || (t.vatRate !== undefined ? 'expense' : 'income');
 
         return `
-            <tr class="transaction-row ${transactionType} ${transaction.isCorrection ? 'corrected' : ''}">
-                <td>${transaction.date}</td>
-                <td>${transaction.description}</td>
-                <td>${getCategoryName(transaction.categoryId)}</td>
+            <tr class="transaction-row ${transactionType} ${t.isCorrection ? 'corrected' : ''}">
+                <td>${t.date}</td>
+                <td>${t.description}</td>
+                <td>${getCategoryName(t.categoryId)}</td>
                 <td class="text-right">${Number(amountExclVat).toFixed(2)} kr</td>
                 <td class="text-right">${Number(vatAmount).toFixed(2)} kr</td>
                 <td class="text-right ${transactionType === 'income' ? 'green' : 'red'}"><strong>${Number(totalAmount).toFixed(2)} kr</strong></td>
-                ${transaction.isCorrection ? `<td>${t('corrected')}</td>` : `<td><button class="btn-correction" data-id="${transaction.id}" data-type="${transactionType}">${t('correct')}</button></td>`}
+                ${t.isCorrection ? `<td>${t('corrected')}</td>` : `<td><button class="btn-correction" data-id="${t.id}" data-type="${transactionType}">${t('correct')}</button></td>`}
             </tr>`;
     }).join('');
 
