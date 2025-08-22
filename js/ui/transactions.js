@@ -99,21 +99,22 @@ function renderTransactionTable(transactions) {
     
     const head = `<th>${t('date')}</th><th>${t('description')}</th><th>${t('category')}</th><th class="text-right">${t('amountExclVat')}</th><th class="text-right">${t('vat')}</th><th class="text-right">${t('totalAmount')}</th><th>${t('actions')}</th>`;
     
-    const rows = transactions.map(t => {
-        const amountExclVat = t.amountExclVat ?? (t.type === 'income' ? t.amount : (t.amount / (1 + (t.vatRate || 0) / 100)));
-        const vatAmount = t.vatAmount ?? (t.amount - amountExclVat);
-        const totalAmount = t.amount;
-        const transactionType = t.type || (t.vatRate !== undefined ? 'expense' : 'income');
+    // KORRIGERING: Ändrade 't' till 'transaction' i .map() för att undvika namnkollision
+    const rows = transactions.map(transaction => {
+        const amountExclVat = transaction.amountExclVat ?? (transaction.type === 'income' ? transaction.amount : (transaction.amount / (1 + (transaction.vatRate || 0) / 100)));
+        const vatAmount = transaction.vatAmount ?? (transaction.amount - amountExclVat);
+        const totalAmount = transaction.amount;
+        const transactionType = transaction.type || (transaction.vatRate !== undefined ? 'expense' : 'income');
 
         return `
-            <tr class="transaction-row ${transactionType} ${t.isCorrection ? 'corrected' : ''}">
-                <td>${t.date}</td>
-                <td>${t.description}</td>
-                <td>${getCategoryName(t.categoryId)}</td>
+            <tr class="transaction-row ${transactionType} ${transaction.isCorrection ? 'corrected' : ''}">
+                <td>${transaction.date}</td>
+                <td>${transaction.description}</td>
+                <td>${getCategoryName(transaction.categoryId)}</td>
                 <td class="text-right">${Number(amountExclVat).toFixed(2)} kr</td>
                 <td class="text-right">${Number(vatAmount).toFixed(2)} kr</td>
                 <td class="text-right ${transactionType === 'income' ? 'green' : 'red'}"><strong>${Number(totalAmount).toFixed(2)} kr</strong></td>
-                ${t.isCorrection ? `<td>${t('corrected')}</td>` : `<td><button class="btn-correction" data-id="${t.id}" data-type="${transactionType}">${t('correct')}</button></td>`}
+                ${transaction.isCorrection ? `<td>${t('corrected')}</td>` : `<td><button class="btn-correction" data-id="${transaction.id}" data-type="${transactionType}">${t('correct')}</button></td>`}
             </tr>`;
     }).join('');
 
